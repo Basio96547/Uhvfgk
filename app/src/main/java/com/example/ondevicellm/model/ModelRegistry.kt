@@ -1,6 +1,8 @@
 package com.example.ondevicellm.model
 
 import android.content.Context
+import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Severity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,7 +106,15 @@ class ModelRegistry(private val context: Context) {
         val found = mutableListOf<ModelSpec>()
 
         for (dir in SCAN_DIRS.map(::File) + managedDir) {
-            val files = runCatching { dir.listFiles() }.getOrNull() ?: continue
+            val files = try {
+                dir.listFiles()
+            } catch (e: Exception) {
+                // A denied directory is normal; note it rather than hiding it.
+                ErrorLog.report(
+                    "Model scan", "Could not read $dir", e, Severity.INFO,
+                )
+                null
+            } ?: continue
             for (file in files) {
                 if (!file.isFile || file.path in known) continue
                 if (MODEL_EXTENSIONS.none { file.name.endsWith(it, ignoreCase = true) }) continue
@@ -136,13 +146,19 @@ class ModelRegistry(private val context: Context) {
     private fun load() {
         val file = storeFile
         if (!file.exists()) return
-        runCatching {
+        try {
             val root = JSONObject(file.readText())
             val array = root.optJSONArray("models") ?: JSONArray()
             val list = buildList {
                 for (i in 0 until array.length()) {
-                    runCatching { ModelSpec.fromJson(array.getJSONObject(i)) }
-                        .getOrNull()?.let(::add)
+                    try {
+                        add(ModelSpec.fromJson(array.getJSONObject(i)))
+                    } catch (e: Exception) {
+                        // One bad entry must not lose the whole library.
+                        ErrorLog.report(
+                            "Model list", "Skipped an unreadable saved model", e,
+                        )
+                    }
                 }
             }
             _models.value = list
@@ -152,11 +168,13 @@ class ModelRegistry(private val context: Context) {
                 .ifBlank { root.optString("selectedAudioModelId") }
                 .ifBlank { null }
             _selectedTtsModelId.value = root.optString("selectedTtsModelId").ifBlank { null }
+        } catch (e: Exception) {
+            ErrorLog.report("Model list", "Saved model list is unreadable", e)
         }
     }
 
     private fun persist() {
-        runCatching {
+        try {
             val root = JSONObject().apply {
                 put("models", JSONArray().apply {
                     _models.value.forEach { put(it.toJson()) }
@@ -166,6 +184,8 @@ class ModelRegistry(private val context: Context) {
                 put("selectedTtsModelId", _selectedTtsModelId.value ?: "")
             }
             storeFile.writeText(root.toString())
+        } catch (e: Exception) {
+            ErrorLog.report("Model list", "Could not save the model list", e)
         }
     }
 

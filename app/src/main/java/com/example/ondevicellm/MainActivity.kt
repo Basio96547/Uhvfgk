@@ -32,11 +32,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewInAr
@@ -60,7 +63,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ondevicellm.core.ErrorLog
 import com.example.ondevicellm.ui.ChatScreen
+import com.example.ondevicellm.ui.DiagnosticsDialog
 import com.example.ondevicellm.ui.DeviceScreen
 import com.example.ondevicellm.ui.ModelsScreen
 import com.example.ondevicellm.ui.SettingsScreen
@@ -111,6 +116,8 @@ fun App() {
         val viewModel: ChatViewModel = viewModel()
         val state by viewModel.uiState.collectAsStateWithLifecycle()
         var destination by remember { mutableStateOf(Destination.CHAT) }
+        var showDiagnostics by remember { mutableStateOf(false) }
+        val unseenProblems by ErrorLog.unseenCount.collectAsStateWithLifecycle()
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -121,10 +128,17 @@ fun App() {
                 AppHeader(
                     destination = destination,
                     isSpeaking = state.speakingMessageId != null,
+                    isGenerating = state.isBusy,
                     canReset = destination == Destination.CHAT &&
                         state.status == ModelStatus.READY && !state.isBusy,
+                    unseenProblems = unseenProblems,
                     onStopSpeaking = viewModel::stopSpeaking,
+                    onStopGenerating = viewModel::stopGeneration,
                     onReset = viewModel::clearConversation,
+                    onOpenDiagnostics = {
+                        ErrorLog.markSeen()
+                        showDiagnostics = true
+                    },
                 )
 
                 Box(Modifier.weight(1f)) {
@@ -154,6 +168,10 @@ fun App() {
                 )
             }
         }
+
+        if (showDiagnostics) {
+            DiagnosticsDialog(onDismiss = { showDiagnostics = false })
+        }
     }
 }
 
@@ -161,9 +179,13 @@ fun App() {
 private fun AppHeader(
     destination: Destination,
     isSpeaking: Boolean,
+    isGenerating: Boolean,
     canReset: Boolean,
+    unseenProblems: Int,
     onStopSpeaking: () -> Unit,
+    onStopGenerating: () -> Unit,
     onReset: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -184,12 +206,42 @@ private fun AppHeader(
             )
         }
 
+        // Only appears while there is something to interrupt.
+        AnimatedVisibility(
+            visible = isGenerating,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+        ) {
+            HeaderButton(Icons.Filled.Stop, "Stop generating", onStopGenerating, accent = true)
+        }
+
         AnimatedVisibility(
             visible = isSpeaking,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
         ) {
             HeaderButton(Icons.Filled.VolumeOff, "Stop speaking", onStopSpeaking, accent = true)
+        }
+
+        // Badge shows only when something actually failed.
+        if (unseenProblems > 0) {
+            Spacer(Modifier.width(Space.xs))
+            Box {
+                HeaderButton(
+                    Icons.Filled.ReportProblem,
+                    "Diagnostics",
+                    onOpenDiagnostics,
+                    accent = true,
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-4).dp, y = 4.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error)
+                )
+            }
         }
 
         if (destination == Destination.CHAT) {

@@ -16,6 +16,7 @@
 
     <!-- On-device inference is CPU/GPU heavy; request a large heap. -->
     <application
+        android:name=".OnDeviceLlmApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

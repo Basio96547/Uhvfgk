@@ -22,12 +22,16 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
+import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Severity
 import com.example.ondevicellm.core.formatBytes
 import com.example.ondevicellm.ui.theme.Gradients
 import com.example.ondevicellm.ui.theme.Space
@@ -48,6 +54,8 @@ fun DeviceScreen(
 ) {
     val device by viewModel.device.collectAsStateWithLifecycle()
     val memory by viewModel.memory.collectAsStateWithLifecycle()
+    val problems by ErrorLog.entries.collectAsStateWithLifecycle()
+    var showDiagnostics by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -254,7 +262,62 @@ fun DeviceScreen(
             Caption(viewModel.registry.managedDir.absolutePath)
         }
 
+        SectionCard(
+            icon = Icons.Filled.ReportProblem,
+            title = "Diagnostics",
+            subtitle = "What went wrong, if anything",
+            tint = if (problems.any { it.severity >= Severity.ERROR }) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.secondary
+            },
+        ) {
+            val errors = problems.count { it.severity >= Severity.ERROR }
+            val warnings = problems.count { it.severity == Severity.WARNING }
+
+            InfoRow(
+                "Recorded events",
+                if (problems.isEmpty()) "none" else problems.size.toString(),
+            )
+            if (errors > 0) {
+                InfoRow(
+                    "Errors and crashes",
+                    errors.toString(),
+                    valueColor = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (warnings > 0) InfoRow("Warnings", warnings.toString())
+
+            Spacer(Modifier.height(Space.md))
+            Caption(
+                "Failures are recorded here instead of being silently ignored — " +
+                    "including crashes, which survive a restart."
+            )
+            Spacer(Modifier.height(Space.md))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f))
+                    .clickable {
+                        ErrorLog.markSeen()
+                        showDiagnostics = true
+                    }
+                    .padding(horizontal = Space.lg, vertical = Space.sm),
+            ) {
+                Text(
+                    if (problems.isEmpty()) "Open log" else "Review ${problems.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
         Spacer(Modifier.height(Space.xl))
+    }
+
+    if (showDiagnostics) {
+        DiagnosticsDialog(onDismiss = { showDiagnostics = false })
     }
 }
 

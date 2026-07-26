@@ -1,5 +1,7 @@
 package com.example.ondevicellm.audio
 
+import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Severity
 import org.json.JSONObject
 import java.io.File
 
@@ -69,7 +71,7 @@ class CharacterTokenizer(
             val sidecar = sidecarFor(modelPath)
             if (!sidecar.isFile) return null
 
-            return runCatching {
+            return try {
                 val root = JSONObject(sidecar.readText())
                 val vocabJson = root.optJSONObject("vocab") ?: return null
                 val vocab = buildMap {
@@ -86,7 +88,16 @@ class CharacterTokenizer(
                     eosId = root.optIntOrNull("eos"),
                     interleaveId = root.optIntOrNull("pad"),
                 )
-            }.getOrNull()
+            } catch (e: Exception) {
+                ErrorLog.report(
+                    "Voice model",
+                    "Vocabulary file ${sidecar.name} is malformed — falling back " +
+                        "to the built-in table, so pronunciation may be wrong.",
+                    e,
+                    Severity.WARNING,
+                )
+                null
+            }
         }
 
         /**

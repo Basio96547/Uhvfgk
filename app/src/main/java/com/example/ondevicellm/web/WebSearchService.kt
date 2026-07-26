@@ -1,5 +1,7 @@
 package com.example.ondevicellm.web
 
+import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Severity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -38,11 +40,23 @@ class WebSearchService {
         if (query.isBlank()) return@coroutineScope Outcome(emptyList(), "Nothing to search for.")
 
         val duck = async(Dispatchers.IO) {
-            withTimeoutOrNull(REQUEST_TIMEOUT_MS) { runCatching { duckDuckGo(query) }.getOrNull() }
+            withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
+                try {
+                    duckDuckGo(query)
+                } catch (e: Exception) {
+                    ErrorLog.report("Web search", "DuckDuckGo failed", e, Severity.WARNING)
+                    null
+                }
+            }
         }
         val wiki = async(Dispatchers.IO) {
             withTimeoutOrNull(REQUEST_TIMEOUT_MS) {
-                runCatching { wikipedia(query, languageTag) }.getOrNull()
+                try {
+                    wikipedia(query, languageTag)
+                } catch (e: Exception) {
+                    ErrorLog.report("Web search", "Wikipedia failed", e, Severity.WARNING)
+                    null
+                }
             }
         }
 
@@ -113,9 +127,15 @@ class WebSearchService {
 
             // The REST summary gives a clean intro paragraph; the search
             // snippet is HTML-marked and truncated mid-sentence.
-            val summary = runCatching {
+            val summary = try {
                 JSONObject(fetch(SearchQuery.wikipediaSummaryUrl(languageTag, title)))
-            }.getOrNull()
+            } catch (e: Exception) {
+                // Fall back to the search snippet for this one article.
+                ErrorLog.report(
+                    "Web search", "No summary for \"$title\"", e, Severity.INFO,
+                )
+                null
+            }
 
             val extract = summary?.optString("extract").orEmpty()
                 .ifBlank { hit.optString("snippet") }

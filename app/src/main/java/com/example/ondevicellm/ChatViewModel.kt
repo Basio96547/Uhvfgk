@@ -14,6 +14,8 @@ import com.example.ondevicellm.audio.SystemTtsSynthesizer
 import com.example.ondevicellm.audio.WavWriter
 import com.example.ondevicellm.core.AppSettings
 import com.example.ondevicellm.core.DeviceCapabilities
+import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Severity
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.MemorySnapshot
 import com.example.ondevicellm.core.SettingsStore
@@ -161,6 +163,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             } catch (e: Throwable) {
+                ErrorLog.report("Model", "Failed to load \"${spec.displayName}\"", e)
                 _uiState.update {
                     it.copy(
                         status = ModelStatus.ERROR,
@@ -197,6 +200,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     loadModel(spec)
                 }
             } catch (e: Throwable) {
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    ErrorLog.report("Model import", "Import failed", e)
+                }
                 _uiState.update {
                     it.copy(
                         importState = null,
@@ -219,6 +225,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val spec = importer.registerInPlace(path.trim())
                 _uiState.update { it.copy(notice = "Added \"${spec.displayName}\".") }
             } catch (e: Throwable) {
+                ErrorLog.report("Model", "Could not register \"$path\"", e)
                 _uiState.update {
                     it.copy(errorMessage = e.message ?: "Could not register that path.")
                 }
@@ -297,9 +304,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             var grounding = ""
             if (current.webSearchEnabled) {
                 _uiState.update { it.copy(searchStatus = "Searching the web…") }
-                val outcome = runCatching {
+                val outcome = try {
                     webSearch.search(prompt, current.voiceLanguageTag)
-                }.getOrNull()
+                } catch (e: Throwable) {
+                    ErrorLog.report("Web search", "Search failed", e)
+                    null
+                }
 
                 grounding = SearchQuery.buildContext(prompt, outcome?.results.orEmpty())
                 val sources = SearchQuery.toSources(outcome?.results.orEmpty())
@@ -327,6 +337,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     appendDelta(replyId, thinking, answer, done)
                 }
             } catch (e: Throwable) {
+                ErrorLog.report("Generation", "Generation failed", e)
                 appendDelta(replyId, "", "\n[error: ${e.message}]", done = true)
             }
         }
@@ -357,6 +368,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val reply = _uiState.value.messages.firstOrNull { it.id == id }
                 if (reply != null && reply.text.isNotBlank()) speak(id, reply.text)
             }
+        }
+    }
+
+    /** Interrupts the reply being generated and keeps whatever arrived so far. */
+    fun stopGeneration() {
+        if (!_uiState.value.isBusy) return
+        engine?.stop()
+        _uiState.update { state ->
+            state.copy(
+                isBusy = false,
+                messages = state.messages.map {
+                    if (it.isGenerating) it.copy(isGenerating = false) else it
+                },
+            )
         }
     }
 
@@ -468,8 +493,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 is SynthesisResult.PlayedDirectly -> Unit
 
-                is SynthesisResult.Failed -> _uiState.update {
-                    it.copy(notice = result.message)
+                is SynthesisResult.Failed -> {
+                    ErrorLog.report("Speech", result.message, severity = Severity.WARNING)
+                    _uiState.update { it.copy(notice = result.message) }
                 }
             }
 
