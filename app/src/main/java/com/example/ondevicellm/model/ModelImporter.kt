@@ -66,6 +66,13 @@ class ModelImporter(
             throw e
         }
 
+        // Identify the container now that bytes are on disk; a GGUF or a
+        // PyTorch checkpoint is rejected here rather than at first chat.
+        ModelFormat.detect(target).rejectionMessage(name)?.let { message ->
+            target.delete()
+            error(message)
+        }
+
         val spec = ModelSpec(
             id = UUID.randomUUID().toString(),
             displayName = target.nameWithoutExtension,
@@ -88,6 +95,7 @@ class ModelImporter(
         val file = File(path)
         require(file.isFile) { "No file at $path" }
         require(file.canRead()) { "File at $path is not readable by this app." }
+        ModelFormat.detect(file).rejectionMessage(file.name)?.let { error(it) }
 
         val spec = ModelSpec(
             id = UUID.randomUUID().toString(),

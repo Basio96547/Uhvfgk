@@ -4,7 +4,9 @@ import android.content.Context
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.formatBytes
+import com.example.ondevicellm.model.ModelFormat
 import com.example.ondevicellm.model.ModelSpec
+import com.example.ondevicellm.model.rejectionMessage
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import java.io.File
@@ -18,9 +20,9 @@ import java.io.File
  */
 class InferenceEngine private constructor(
     private val llmInference: LlmInference,
-    val spec: ModelSpec,
-    val backend: ResolvedBackend,
-) {
+    override val spec: ModelSpec,
+    override val backend: ResolvedBackend,
+) : TextEngine {
 
     private var session: LlmInferenceSession = newSession()
     private var closed = false
@@ -40,7 +42,7 @@ class InferenceEngine private constructor(
      * [onDelta] receives reasoning and answer text separately — reasoning is
      * extracted from `<think>` blocks when the model emits them.
      */
-    fun generate(
+    override fun generate(
         prompt: String,
         systemPrompt: String?,
         thinkingEnabled: Boolean,
@@ -80,22 +82,25 @@ class InferenceEngine private constructor(
         }
     }
 
+    /**
+     * MediaPipe 0.10.x exposes no cancel on an in-flight generation, so this is
+     * a no-op; the UI stays responsive because decode runs off the main thread.
+     */
+    override fun stop() = Unit
+
     /** Clears conversation history by starting a fresh session. */
-    fun resetSession() {
+    override fun resetSession() {
         if (closed) return
         session.close()
         session = newSession()
     }
 
-    fun close() {
+    override fun close() {
         if (closed) return
         closed = true
         runCatching { session.close() }
         runCatching { llmInference.close() }
     }
-
-    class ModelLoadException(message: String, cause: Throwable? = null) :
-        Exception(message, cause)
 
     companion object {
 
@@ -118,6 +123,12 @@ class InferenceEngine private constructor(
                 )
             }
 
+            // Checked before anything expensive: the runtime's own failure for a
+            // wrong container is an opaque native error, so identify the format
+            // here and say what to download instead.
+            val format = ModelFormat.detect(file)
+            format.rejectionMessage(file.name)?.let { throw ModelLoadException(it) }
+
             assertEnoughMemory(context, file.length())
 
             val backend = BackendResolver.resolve(spec.backend, device)
@@ -125,7 +136,7 @@ class InferenceEngine private constructor(
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(spec.path)
                 .setMaxTokens(spec.maxTokens)
-                .setPreferredBackend(backend.actual)
+                .setPreferredBackend(backend.backend)
                 .build()
 
             val inference = try {
@@ -135,12 +146,13 @@ class InferenceEngine private constructor(
                     "The runtime could not load this model.\n\n" +
                         "${e.message}\n\n" +
                         "Check that it is a MediaPipe-compatible .task bundle and " +
-                        "that the selected backend (${backend.actualLabel}) is supported.",
+                        "that the selected backend " +
+                        "(${backend.resolved.actualLabel}) is supported.",
                     e,
                 )
             }
 
-            return InferenceEngine(inference, spec, backend)
+            return InferenceEngine(inference, spec, backend.resolved)
         }
 
         /**

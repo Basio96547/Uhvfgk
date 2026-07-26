@@ -175,7 +175,7 @@ class ModelRegistry(private val context: Context) {
     private companion object {
         const val STORE_NAME = "models.json"
 
-        val MODEL_EXTENSIONS = listOf(".task", ".bin", ".litertlm", ".tflite")
+        val MODEL_EXTENSIONS = listOf(".task", ".gguf", ".litertlm", ".tflite", ".bin")
 
         /**
          * `/data/local/tmp/llm` is the path used by Google's official MediaPipe

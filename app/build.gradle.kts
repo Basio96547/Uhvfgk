@@ -23,6 +23,18 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        externalNativeBuild {
+            cmake {
+                // Static libc++ keeps everything inside libllamabridge.so, so no
+                // extra runtime library has to be packaged.
+                arguments += listOf(
+                    "-DANDROID_STL=c++_static",
+                    "-DCMAKE_BUILD_TYPE=Release",
+                )
+                cppFlags += listOf("-O3", "-fexceptions")
+            }
+        }
     }
 
     buildTypes {
@@ -46,6 +58,15 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Builds llama.cpp plus the JNI bridge, giving the app GGUF support
+    // alongside MediaPipe's .task format.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     testOptions {

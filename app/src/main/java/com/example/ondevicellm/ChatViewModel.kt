@@ -18,8 +18,9 @@ import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.MemorySnapshot
 import com.example.ondevicellm.core.SettingsStore
 import com.example.ondevicellm.core.TtsEngine
-import com.example.ondevicellm.llm.InferenceEngine
+import com.example.ondevicellm.llm.EngineFactory
 import com.example.ondevicellm.llm.ResolvedBackend
+import com.example.ondevicellm.llm.TextEngine
 import com.example.ondevicellm.model.ModelImporter
 import com.example.ondevicellm.model.ModelRegistry
 import com.example.ondevicellm.model.ModelSpec
@@ -84,7 +85,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _memory = MutableStateFlow(DeviceCapabilities.readMemory(app))
     val memory: StateFlow<MemorySnapshot> = _memory.asStateFlow()
 
-    private var engine: InferenceEngine? = null
+    private var engine: TextEngine? = null
     private var loadJob: Job? = null
     private var importJob: Job? = null
     private var speakJob: Job? = null
@@ -114,7 +115,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             engine = null
 
             try {
-                val loaded = InferenceEngine.load(getApplication<Application>(), spec, _device.value)
+                val loaded = EngineFactory.load(getApplication<Application>(), spec, _device.value)
                 engine = loaded
                 registry.select(spec)
                 _uiState.update {
