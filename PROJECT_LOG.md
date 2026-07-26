@@ -36,6 +36,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Token streaming (UTF-8) | ✅ Crash fixed and covered by 9 native assertions |
 | Arabic localization | ✅ Whole UI + RTL; completeness enforced by the compiler and by `StringsTest` |
 | Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
+| Studio | ✅ Builds and ships; extractor covered by 13 tests — **no page has ever been generated or rendered** |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -63,7 +64,9 @@ tests" but unproven in practice.
 | 16 | `cd1d6cf` | ✅ |
 | 17 | `4d68799` | ✅ the five answer-quality fixes |
 | 18 | `8b9d9b1` | ⏹ cancelled by a newer push |
-| 19 | `881ff16` | ✅ current — house rules + model advisor |
+| 19 | `881ff16` | ✅ house rules + model advisor |
+| 20 | `e7b1dda` | ✅ |
+| 21 | `1fb9bcc` | ✅ current — Studio; APK **38.9 MB** |
 
 Runs 13 and 14 are worth keeping in view: both were caused by the local checks
 being *weaker* than CI, not by the code being wrong in some subtle way. A brace
@@ -121,6 +124,7 @@ app/src/main/
 │   │   ├── LlamaCppEngine      llama.cpp (.gguf) + JNI wrapper
 │   │   ├── BackendResolver     CPU/GPU/NPU resolution + NpuRuntime stub
 │   │   └── ThinkingStreamParser  Splits <think> from the answer
+│   ├── studio/                 Prompt-to-page: extractor, prompt, session, store
 │   ├── audio/                  ASR in, TTS out, PCM/WAV, tokenizer
 │   ├── web/                    DuckDuckGo + Wikipedia grounding
 │   └── ui/                     Compose screens + shared components + theme
