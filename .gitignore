@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local SDK location — generated per-machine, must not be committed
+local.properties
+
+# Keystores / secrets
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+
+# Model files (too large for git — see README)
+*.task
+*.bin
+*.tflite
