@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
@@ -41,6 +42,7 @@ import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.web.SearchDepth
 import com.example.ondevicellm.ui.theme.Space
+import com.example.ondevicellm.ui.theme.panel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -312,6 +314,41 @@ fun SettingsScreen(
                         label = { Text(tag) },
                     )
                 }
+            }
+        }
+
+        SectionCard(
+            icon = Icons.Filled.Rule,
+            title = s.guidanceTitle,
+            subtitle = s.guidanceDescription,
+            tint = MaterialTheme.colorScheme.primary,
+        ) {
+            ToggleRow(
+                label = s.guidanceTitle,
+                description = s.guidanceDescription,
+                checked = settings.guidanceEnabled,
+                onChange = { v -> viewModel.updateSettings { it.copy(guidanceEnabled = v) } },
+            )
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.guidanceNote)
+
+            // Shown in full rather than described: what goes into the model on
+            // your behalf shouldn't be something you have to take on trust.
+            if (settings.guidanceEnabled) {
+                SoftDivider()
+                Text(
+                    s.assistantGuidance,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .panel(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                .copy(alpha = 0.5f),
+                        )
+                        .padding(Space.md),
+                )
             }
         }
 

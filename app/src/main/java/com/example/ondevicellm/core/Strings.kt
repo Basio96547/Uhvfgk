@@ -335,6 +335,20 @@ interface AppStrings {
     /** Prepended to every conversation so the model answers in the user's language. */
     val replyLanguageInstruction: String
 
+    /**
+     * House rules given to the model at the start of every conversation.
+     *
+     * A frontier model works these out on its own; a 4B one does not, and the
+     * difference between a small model that pads, confabulates and drifts and
+     * one that answers the question is largely this text. Kept short and
+     * imperative on purpose — a long system prompt confuses a small model and
+     * eats the context it needs for the actual conversation.
+     */
+    val assistantGuidance: String
+    val guidanceTitle: String
+    val guidanceDescription: String
+    val guidanceNote: String
+
     // -------------------------------------------------------- routing modes
     val modeAuto: String
     val modeAlways: String
@@ -702,6 +716,22 @@ object EnglishStrings : AppStrings {
     override val systemPromptPlaceholder = "e.g. You are a concise assistant."
     override val systemPromptNote = "Prepended to each message. Takes effect on the next message."
     override val replyLanguageInstruction = ""
+    override val assistantGuidance = """
+        You are a careful assistant running on the user's phone.
+
+        - Answer the question that was asked. Do not restate it first.
+        - If you do not know, say so. Never invent a fact, number, date, name or link.
+        - Keep the answer as short as the question allows. Add detail only when asked.
+        - If the request is ambiguous, ask one short question instead of guessing.
+        - Use what was said earlier in this conversation.
+        - Asked for steps, give numbered steps. Asked for a fact, give the fact.
+        - No opening pleasantries, and no closing offer of further help.
+    """.trimIndent()
+    override val guidanceTitle = "House rules"
+    override val guidanceDescription = "Give the model a short set of rules to work by."
+    override val guidanceNote = "A large model works these out on its own; a small one " +
+        "doesn't. This is most of the difference between an assistant that pads and " +
+        "guesses and one that answers. Your own prompt below is added after it."
 
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
@@ -1075,6 +1105,22 @@ object ArabicStrings : AppStrings {
     override val replyLanguageInstruction =
         "أجب دائمًا باللغة العربية الفصحى المبسّطة، بوضوح واختصار، " +
             "ما لم يطلب المستخدم لغة أخرى صراحةً."
+    override val assistantGuidance = """
+        أنت مساعد دقيق يعمل على هاتف المستخدم.
+
+        - أجب عن السؤال المطروح، ولا تُعِد صياغته قبل الإجابة.
+        - إن كنت لا تعرف فقل ذلك. لا تخترع رقمًا ولا تاريخًا ولا اسمًا ولا رابطًا.
+        - اجعل الرد بقدر السؤال. لا تُطِل إلا إذا طُلب منك.
+        - إن كان الطلب غامضًا فاسأل سؤالًا واحدًا قصيرًا بدل التخمين.
+        - استعمل ما قيل سابقًا في هذه المحادثة.
+        - إن طُلبت خطوات فاكتبها مرقّمة، وإن طُلبت معلومة فاذكرها مباشرة.
+        - لا تبدأ بعبارة مجاملة ولا تختم بعرض المساعدة.
+        - افهم اللهجات العربية جميعها، وأجب بالفصحى المبسّطة.
+    """.trimIndent()
+    override val guidanceTitle = "قواعد التعامل"
+    override val guidanceDescription = "امنح النموذج مجموعة قواعد قصيرة يسير عليها."
+    override val guidanceNote = "النموذج الكبير يستنتج هذه القواعد وحده، والصغير لا يفعل. " +
+        "وهي معظم الفرق بين مساعد يُطيل ويخمّن ومساعد يجيب. توجيهك الخاص أدناه يُضاف بعدها."
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

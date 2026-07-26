@@ -26,6 +26,12 @@ enum class TtsEngine {
 data class AppSettings(
     /** Interface language, layout direction, and the language replies come back in. */
     val language: AppLanguage = AppLanguage.SYSTEM,
+    /**
+     * Prepend the built-in house rules. On by default: a small model without
+     * them pads, guesses and drifts, and that is exactly what reads as the
+     * assistant not understanding you.
+     */
+    val guidanceEnabled: Boolean = true,
     val systemPrompt: String = "",
     /**
      * When reasoning runs. AUTO lets the router decide per message — a greeting
@@ -65,6 +71,7 @@ class SettingsStore(context: Context) {
         language = AppLanguage.entries
             .firstOrNull { it.name == prefs.getString(KEY_LANGUAGE, null) }
             ?: AppLanguage.SYSTEM,
+        guidanceEnabled = prefs.getBoolean(KEY_GUIDANCE, true),
         systemPrompt = prefs.getString(KEY_SYSTEM_PROMPT, "").orEmpty(),
         thinkingMode = RoutingMode.entries
             .firstOrNull { it.name == prefs.getString(KEY_THINKING_MODE, null) }
@@ -95,6 +102,7 @@ class SettingsStore(context: Context) {
         _settings.value = updated
         prefs.edit()
             .putString(KEY_LANGUAGE, updated.language.name)
+            .putBoolean(KEY_GUIDANCE, updated.guidanceEnabled)
             .putString(KEY_SYSTEM_PROMPT, updated.systemPrompt)
             .putString(KEY_THINKING_MODE, updated.thinkingMode.name)
             .putBoolean(KEY_SHOW_THINKING, updated.showThinking)
@@ -111,6 +119,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val KEY_LANGUAGE = "language"
+        const val KEY_GUIDANCE = "guidanceEnabled"
         const val KEY_SYSTEM_PROMPT = "systemPrompt"
         const val KEY_THINKING_MODE = "thinkingMode"
         const val KEY_SEARCH_MODE = "searchMode"

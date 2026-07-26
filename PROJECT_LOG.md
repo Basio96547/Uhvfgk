@@ -369,6 +369,19 @@ truncation: comprehension. Five real defects were found, all in the same place
     doubling the parameters is worth far more. It also notes that for Arabic
     the family matters as much as the size. Nine tests.
 
+30. **House rules for the model (`assistantGuidance`).** The remaining lever,
+    and the cheapest one. A frontier model works out how to conduct itself; a
+    4B one does not, and most of the gap between an assistant that pads,
+    confabulates and drifts and one that answers is a short set of imperative
+    rules: answer what was asked, say when you don't know, never invent a
+    fact or a number, keep it as short as the question allows, ask instead of
+    guessing when the request is ambiguous, use what was said earlier, no
+    opening pleasantries. Deliberately short — a long system prompt confuses a
+    small model and eats the context the conversation needs. The Arabic version
+    adds the rule that matters here: read every dialect, answer in simple MSA.
+    On by default, shown in full in Settings rather than described, and four
+    tests hold it to being a short rule list rather than prose.
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads

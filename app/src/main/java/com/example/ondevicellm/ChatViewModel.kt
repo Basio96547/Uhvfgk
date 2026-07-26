@@ -379,6 +379,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // English about as often as not, so that is stated outright.
             val fullSystem = listOf(
                 Localization.strings.replyLanguageInstruction,
+                if (current.guidanceEnabled) Localization.strings.assistantGuidance else "",
                 current.systemPrompt,
             )
                 .filter { it.isNotBlank() }

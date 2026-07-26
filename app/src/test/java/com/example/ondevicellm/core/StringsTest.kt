@@ -116,4 +116,44 @@ class StringsTest {
         Localization.apply(AppLanguage.ENGLISH)
         assertEquals(EnglishStrings, Localization.strings)
     }
+
+    // ---- the house rules the model is given -------------------------------
+
+    @Test
+    fun `the guidance is short enough for a small model to follow`() {
+        // A long system prompt confuses a small model and eats the context it
+        // needs for the conversation itself. Roughly 200 tokens is the ceiling.
+        listOf(EnglishStrings, ArabicStrings).forEach { strings ->
+            assertTrue(strings.assistantGuidance.length in 200..900)
+        }
+    }
+
+    @Test
+    fun `the guidance covers what a small model gets wrong on its own`() {
+        // Each of these is a failure mode a 4B model shows and a large one
+        // doesn't: padding, confabulating, guessing at an ambiguous request,
+        // and ignoring what was already said.
+        val en = EnglishStrings.assistantGuidance.lowercase()
+        listOf("do not know", "invent", "short", "ambiguous", "earlier").forEach {
+            assertTrue("guidance should mention \"$it\"", en.contains(it))
+        }
+    }
+
+    @Test
+    fun `the arabic guidance is written in arabic, not translated word for word`() {
+        val ar = ArabicStrings.assistantGuidance
+        assertTrue(ar.any { it in arabicRange })
+        // It also tells the model to read dialect and answer in MSA, which the
+        // English one has no reason to say.
+        assertTrue(ar.contains("اللهجات"))
+        assertTrue(ar.contains("الفصحى"))
+    }
+
+    @Test
+    fun `both guidance texts are rule lists, not prose`() {
+        listOf(EnglishStrings, ArabicStrings).forEach { strings ->
+            val bullets = strings.assistantGuidance.lines().count { it.trimStart().startsWith("-") }
+            assertTrue("expected a list of rules, got $bullets", bullets >= 6)
+        }
+    }
 }
