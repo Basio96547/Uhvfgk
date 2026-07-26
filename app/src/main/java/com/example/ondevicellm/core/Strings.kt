@@ -373,7 +373,6 @@ interface AppStrings {
     val studioProjects: String
     val studioSave: String
     val studioSaved: String
-    val studioShare: String
     val studioUntitled: String
     val studioBuilding: String
     val studioNoCodeBack: String
@@ -804,7 +803,6 @@ object EnglishStrings : AppStrings {
     override val studioProjects = "Projects"
     override val studioSave = "Save"
     override val studioSaved = "Saved"
-    override val studioShare = "Share"
     override val studioUntitled = "Untitled page"
     override val studioBuilding = "Writing the page…"
     override val studioNoCodeBack = "The model replied without any code. Try describing " +
@@ -1281,7 +1279,6 @@ object ArabicStrings : AppStrings {
     override val studioProjects = "المشاريع"
     override val studioSave = "حفظ"
     override val studioSaved = "حُفظ"
-    override val studioShare = "مشاركة"
     override val studioUntitled = "صفحة بلا عنوان"
     override val studioBuilding = "يكتب الصفحة…"
     override val studioNoCodeBack = "رد النموذج بلا كود. جرّب وصف الصفحة بشكل أوضح — " +

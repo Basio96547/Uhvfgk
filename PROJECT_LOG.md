@@ -497,6 +497,30 @@ layouts should be tuned for that screen.
     custom TTS models (dead code — `compileOnly` means the path is unreachable
     in any shipped build).
 
+### Session 8 — 2026-07-26 · dead-code sweep
+
+42. **Swept the whole tree by analysis, not by memory.** 1426 declarations
+    checked for references; the two that came back unreferenced (`MainActivity`,
+    `OnDeviceLlmApp`) are named in the manifest, so nothing top-level was dead.
+    The rot was in the categories a name-scan misses — fields, config, and one
+    C++ struct member. **Every candidate was verified before deletion, and three
+    were false positives:** `hexagonStubs` is read by `hexagonVersion`,
+    `timeMillis` by `timestamp`, and `sidecarFor` by its own file. Deleting on
+    the strength of the scan alone would have broken all three.
+
+    Actually removed:
+    - `Session::last_error` (C++) — shadowed by the `g_last_error` the code uses.
+    - `ResolvedBackend.requested` — assigned twice, read nowhere.
+    - `MemorySnapshot.isLowMemory` — never read; the budget is what decides.
+    - `AppStrings.studioShare` — a string with no screen behind it.
+    - `Layout.contentMaxWidth` — written for tablets, applied nowhere. Kept
+      `navFitsComfortably` beside it, which is also test-only, because it names
+      the invariant that actually regressed; `contentMaxWidth` solved a problem
+      this app does not have.
+    - `testInstrumentationRunner` and both `androidTestImplementation`
+      dependencies — there is no `androidTest` source set.
+    - Two unused imports; `GPU_MODEL_LIMIT_BYTES` made private.
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads

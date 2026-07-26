@@ -250,7 +250,6 @@ class LlamaCppEngine private constructor(
                 append(".")
             }
             val backend = ResolvedBackend(
-                requested = spec.backend,
                 actualLabel = if (features.contains("i8mm") || features.contains("dotprod")) {
                     "CPU · llama.cpp (accelerated)"
                 } else {

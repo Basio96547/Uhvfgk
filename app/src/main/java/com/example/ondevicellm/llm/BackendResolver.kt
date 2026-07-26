@@ -10,7 +10,6 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
  * really use, plus an explanation of any substitution that happened.
  */
 data class ResolvedBackend(
-    val requested: BackendPref,
     /** What actually runs, e.g. "GPU" or "CPU · llama.cpp". */
     val actualLabel: String,
     /** User-facing explanation. Empty when the request was honoured as-is. */
@@ -72,7 +71,6 @@ object BackendResolver {
         return MediaPipeBackend(
             backend = backend,
             resolved = ResolvedBackend(
-                requested = pref,
                 actualLabel = if (plan.target == ComputeTarget.GPU) "GPU" else "CPU",
                 note = plan.note,
             ),

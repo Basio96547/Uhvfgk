@@ -31,7 +31,7 @@ object BackendPlanner {
      * allocation is one contiguous region, and Adreno rejects or thrashes on
      * bundles this size while the CPU path memory-maps happily.
      */
-    const val GPU_MODEL_LIMIT_BYTES: Long = 2L * 1024 * 1024 * 1024
+    private const val GPU_MODEL_LIMIT_BYTES: Long = 2L * 1024 * 1024 * 1024
 
     /** GPU needs the weights resident, so demand real headroom over the file. */
     private const val GPU_MEMORY_HEADROOM = 1.35

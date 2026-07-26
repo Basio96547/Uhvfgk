@@ -15,8 +15,6 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
         // tasks-genai ships arm64-v8a native libraries only, so the app targets
         // that ABI. Note this means x86_64 emulators are not supported — test
         // on a physical device (which is what you want for LLM timings anyway).
@@ -140,6 +138,4 @@ dependencies {
     // Test-only and version-locked to the Kotlin plugin above: nothing from it
     // reaches the APK, so it can't conflict with anything at runtime.
     testImplementation("org.jetbrains.kotlin:kotlin-reflect:2.0.21")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

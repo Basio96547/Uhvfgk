@@ -69,14 +69,6 @@ object Layout {
     fun bubbleMaxWidth(widthDp: Int): Int = (widthDp * 0.84f).toInt().coerceAtLeast(220)
 
     /**
-     * Widest a column of prose or settings should get.
-     *
-     * Only bites on tablets, foldables and DeX, where a full-width line is
-     * tiring to read. A phone is always narrower than this.
-     */
-    fun contentMaxWidth(widthDp: Int): Int = minOf(widthDp, 640)
-
-    /**
      * True when the window is tall enough that a short empty state floating at
      * the top looks stranded rather than deliberate.
      */

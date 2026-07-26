@@ -20,7 +20,6 @@ data class MemorySnapshot(
     val availableRamBytes: Long,
     val swapTotalBytes: Long,
     val swapFreeBytes: Long,
-    val isLowMemory: Boolean,
 ) {
     /** True when the kernel exposes swap — RAM Plus and/or zram is active. */
     val hasExtendedMemory: Boolean get() = swapTotalBytes > 0
@@ -131,7 +130,6 @@ object DeviceCapabilities {
             availableRamBytes = info.availMem,
             swapTotalBytes = meminfo["SwapTotal"] ?: 0L,
             swapFreeBytes = meminfo["SwapFree"] ?: 0L,
-            isLowMemory = info.lowMemory,
         )
     }
 

@@ -72,7 +72,6 @@ struct Session {
     // Position of the next token in the KV cache, so multi-turn chat continues
     // instead of re-processing the whole conversation each time.
     llama_pos n_past = 0;
-    std::string last_error;
 };
 
 // Kept so the last failure can be reported to Kotlin after a null return.

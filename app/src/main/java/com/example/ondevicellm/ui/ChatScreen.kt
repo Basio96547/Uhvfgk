@@ -86,7 +86,6 @@ import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.ui.theme.Gradients
 import com.example.ondevicellm.ui.theme.Layout
 import com.example.ondevicellm.ui.theme.Space
-import com.example.ondevicellm.ui.theme.hairlineColor
 import com.example.ondevicellm.ui.theme.panel
 
 @Composable

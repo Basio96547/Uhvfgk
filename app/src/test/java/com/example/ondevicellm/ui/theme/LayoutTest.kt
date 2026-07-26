@@ -1,6 +1,5 @@
 package com.example.ondevicellm.ui.theme
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -76,13 +75,6 @@ class LayoutTest {
     @Test
     fun `a bubble never collapses on a very narrow window`() {
         assertTrue(Layout.bubbleMaxWidth(200) >= 220)
-    }
-
-    @Test
-    fun `prose is capped on a tablet but never on a phone`() {
-        assertEquals(s25Ultra.first, Layout.contentMaxWidth(s25Ultra.first))
-        assertEquals(smallPhone.first, Layout.contentMaxWidth(smallPhone.first))
-        assertTrue(Layout.contentMaxWidth(tablet.first) < tablet.first)
     }
 
     // ---- the shape of this particular phone -------------------------------
