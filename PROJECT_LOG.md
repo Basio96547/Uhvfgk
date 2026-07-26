@@ -53,7 +53,19 @@ tests" but unproven in practice.
 | 6–7 | | ⏹ cancelled by newer pushes |
 | 8 | `25e046a` | ✅ |
 | 9 | `de0879c` | ✅ APK **38.7 MB** |
-| 10 | `3220d23` | ✅ current |
+| 10 | `3220d23` | ✅ |
+| 11 | `e3347f9` | ✅ |
+| 12 | `91a0e1e` | ✅ the four device fixes |
+| 13 | `2277bb5` | ❌ scripted edit ate half a string literal |
+| 14 | `f2cccb3` | ❌ StringsTest needs kotlin-reflect, not a declared dep |
+| 15 | `6adce14` | ✅ current — APK **38.8 MB** |
+
+Runs 13 and 14 are worth keeping in view: both were caused by the local checks
+being *weaker* than CI, not by the code being wrong in some subtle way. A brace
+count can't see a half-eaten string literal, and a harness with a jar on its
+classpath that the build doesn't declare will pass anything. `tools/check-syntax.sh`
+and `tools/run-tests.sh` close both gaps, and the second one was verified by
+deleting the dependency and watching it fail the same way CI did.
 
 The APK grew 33.3 → 38.7 MB when GGUF landed. That ~5.4 MB is
 `libllamabridge.so` with llama.cpp statically linked — concrete evidence the
