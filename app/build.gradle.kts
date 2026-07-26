@@ -16,6 +16,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // tasks-genai ships arm64-v8a native libraries only, so the app targets
+        // that ABI. Note this means x86_64 emulators are not supported — test
+        // on a physical device (which is what you want for LLM timings anyway).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -57,6 +64,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
+    // Resolving display names/sizes for models imported through the file picker.
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))

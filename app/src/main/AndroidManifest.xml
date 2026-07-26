@@ -4,6 +4,15 @@
 
     <!-- Optional: only needed if you later add remote model download. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Voice input (speech-to-text). Requested at runtime. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Needed to resolve the on-device speech recognition service on API 30+. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <!-- On-device inference is CPU/GPU heavy; request a large heap. -->
     <application
