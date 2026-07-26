@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The medallion is a circle, so it survives whatever mask a launcher applies.
+  The foreground asset already sits inside the 72dp always-visible zone; the
+  background only shows in the corners of a square or squircle mask, and is the
+  lapis sampled from the logo's own ring so the two read as one object.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

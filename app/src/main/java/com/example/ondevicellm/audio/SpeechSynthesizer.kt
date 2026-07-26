@@ -9,6 +9,12 @@ data class SpeechOptions(
     val pitch: Float = 1.0f,
     /** Multi-speaker models select a voice by index. */
     val speakerId: Int = 0,
+    /**
+     * A specific system voice, by the engine's own name. Null lets
+     * [com.example.ondevicellm.audio.VoicePicker] choose the best installed one
+     * for the language — which is usually not the engine's default.
+     */
+    val voiceName: String? = null,
 )
 
 /** What a synthesizer produced. */

@@ -312,6 +312,12 @@ interface AppStrings {
     val speechOutput: String
     val speechOutputSubtitle: String
     val engine: String
+    val voiceLabel: String
+    val voiceAutoBest: String
+    val voiceNoneInstalled: String
+    val voiceNote: String
+    fun voiceQuality(quality: Int): String
+    val voiceNeedsNetwork: String
     val systemEngineNote: String
     val litertMissingNote: String
     fun usingVoiceModel(name: String, rate: Int): String
@@ -715,6 +721,20 @@ object EnglishStrings : AppStrings {
     override val speechOutput = "Speech output"
     override val speechOutputSubtitle = "Read replies aloud"
     override val engine = "Engine"
+    override val voiceLabel = "Voice"
+    override val voiceAutoBest = "Best available"
+    override val voiceNoneInstalled = "No voice for this language is installed. Add one in " +
+        "system settings under Text-to-speech, then reopen this screen."
+    override val voiceNote = "Android usually defaults to the oldest voice installed for a " +
+        "language. Picking deliberately is often the difference between a robotic voice and " +
+        "a natural one, with nothing to download."
+    override fun voiceQuality(quality: Int) = when {
+        quality >= 500 -> "very high"
+        quality >= 400 -> "high"
+        quality >= 300 -> "normal"
+        else -> "low"
+    }
+    override val voiceNeedsNetwork = "needs internet"
     override val systemEngineNote = "Android's built-in engine. Works out of the box and stays " +
         "offline once a voice pack is installed."
     override val litertMissingNote = "This build doesn't bundle the LiteRT runtime, so custom " +
@@ -789,16 +809,37 @@ object EnglishStrings : AppStrings {
         else -> "A to-do list saved in the browser"
     }
     override val studioSystemPrompt = """
-        You write single-file web pages.
+        You write single-file web pages that actually work.
 
-        - Reply with one complete HTML document and nothing else.
-        - Put it in a ```html fenced block. No text before or after the block.
-        - Everything goes in that one file: CSS in <style>, JavaScript in <script>.
-        - Never link to a CDN, a font service, an image URL or any other network
-          resource. There is no network. Use system fonts, CSS and inline SVG.
-        - Make it work on a phone screen: viewport meta tag, large touch targets.
-        - When given an existing page and a change, return the whole file with the
-          change applied, not a snippet or a description of the edit.
+        Output
+        - One complete HTML document in a ```html block. Nothing before or after it.
+        - Everything in that one file: CSS in <style>, JavaScript in <script>.
+        - Given an existing page and a change, return the whole file with the change
+          applied — never a snippet, never a description of the edit.
+
+        Make it real, not a mock
+        - Every control must do what it looks like it does. A button that does not
+          run its function is worse than no button.
+        - No placeholder handlers, no TODO, no "implement this", no dummy data
+          standing in for a calculation you could just perform.
+        - Handle the empty case and the wrong input, not only the happy path. What
+          does it show before the user types anything, or when they type letters
+          into a number field?
+        - Nothing here can reach the network. No CDN, no font service, no image URL,
+          no fetch. Use system fonts, CSS and inline SVG.
+
+        Build it for a phone held in one hand
+        - Viewport meta tag. Touch targets at least 44px. Text at least 16px.
+        - Layout in flexbox or grid so it survives any screen width. Never a fixed
+          pixel width for the page itself.
+        - Readable contrast, and a dark background unless asked otherwise.
+
+        Restraint
+        - Build exactly what was asked, completely. Do not add features nobody asked
+          for. A tip calculator is a tip calculator, not a budgeting suite.
+        - Name things for what they are: total, not x1.
+        - Comment only where the reason is not obvious from the code. Say *why*,
+          never restate *what*.
     """.trimIndent()
     override fun studioCreateTurn(request: String) =
         "Build this as a single HTML file:\n\n$request"
@@ -1150,6 +1191,19 @@ object ArabicStrings : AppStrings {
     override val speechOutput = "إخراج الصوت"
     override val speechOutputSubtitle = "قراءة الردود بصوت مسموع"
     override val engine = "المحرّك"
+    override val voiceLabel = "الصوت"
+    override val voiceAutoBest = "أفضل المتاح"
+    override val voiceNoneInstalled = "لا يوجد صوت مثبّت لهذه اللغة. أضف واحدًا من إعدادات " +
+        "النظام تحت «تحويل النص إلى كلام»، ثم أعد فتح هذه الشاشة."
+    override val voiceNote = "أندرويد يختار عادةً أقدم صوت مثبّت للغة. والاختيار المتعمّد " +
+        "هو غالبًا الفرق بين صوت آلي وصوت طبيعي، دون تنزيل أي شيء."
+    override fun voiceQuality(quality: Int) = when {
+        quality >= 500 -> "عالية جدًا"
+        quality >= 400 -> "عالية"
+        quality >= 300 -> "متوسطة"
+        else -> "منخفضة"
+    }
+    override val voiceNeedsNetwork = "يحتاج إنترنت"
     override val systemEngineNote = "محرّك أندرويد المدمج. يعمل مباشرة ويبقى دون اتصال " +
         "بعد تثبيت حزمة صوت."
     override val litertMissingNote = "هذه النسخة لا تتضمّن بيئة LiteRT، فلا تعمل نماذج " +
@@ -1225,16 +1279,36 @@ object ArabicStrings : AppStrings {
         else -> "قائمة مهام تُحفظ في المتصفح"
     }
     override val studioSystemPrompt = """
-        تكتب صفحات ويب في ملف واحد.
+        تكتب صفحات ويب في ملف واحد، وتعمل فعلًا.
 
-        - أجب بمستند HTML واحد كامل، ولا شيء غيره.
-        - ضعه داخل كتلة ```html ولا تكتب نصًا قبلها ولا بعدها.
+        المخرجات
+        - مستند HTML واحد كامل داخل كتلة ```html. لا شيء قبلها ولا بعدها.
         - كل شيء في هذا الملف: CSS داخل <style> وJavaScript داخل <script>.
-        - لا تربط بأي CDN ولا خدمة خطوط ولا رابط صورة ولا أي مورد من الشبكة.
-          لا توجد شبكة. استعمل خطوط النظام وCSS وSVG مضمّنًا.
-        - اجعلها تعمل على شاشة هاتف: وسم viewport وأزرار كبيرة للمس.
-        - إذا أُعطيت صفحة قائمة وطُلب تعديل، أعد الملف كاملًا بعد التعديل،
+        - إذا أُعطيت صفحة قائمة وطُلب تعديل، أعد الملف كاملًا بعد التعديل —
           لا مقتطفًا ولا وصفًا للتغيير.
+
+        اجعلها حقيقية لا واجهة وهمية
+        - كل عنصر تحكم يجب أن يفعل ما يبدو أنه يفعله. زر لا يشغّل وظيفته
+          أسوأ من عدم وجوده.
+        - لا معالِجات فارغة، ولا TODO، ولا «أكمل هنا»، ولا بيانات وهمية
+          مكان حساب تستطيع إجراءه.
+        - عالج الحالة الفارغة والمدخل الخاطئ، لا المسار الناجح وحده. ماذا
+          تعرض قبل أن يكتب المستخدم شيئًا، أو حين يكتب حروفًا في حقل أرقام؟
+        - لا شيء هنا يصل إلى الشبكة. لا CDN ولا خدمة خطوط ولا رابط صورة
+          ولا fetch. استعمل خطوط النظام وCSS وSVG مضمّنًا.
+
+        ابنِها لهاتف يُمسك بيد واحدة
+        - وسم viewport. مساحة اللمس 44px على الأقل، وحجم النص 16px فأكثر.
+        - التخطيط بـ flexbox أو grid ليصمد على أي عرض شاشة. ولا تحدد عرضًا
+          ثابتًا بالبكسل للصفحة نفسها.
+        - تباين مقروء، وخلفية داكنة ما لم يُطلب غير ذلك.
+
+        الانضباط
+        - ابنِ ما طُلب بالضبط، كاملًا. ولا تضف ميزات لم يطلبها أحد. حاسبة
+          البقشيش حاسبة بقشيش، لا نظام ميزانية.
+        - سمِّ الأشياء بأسمائها: الإجمالي، لا x1.
+        - علّق فقط حيث لا يكون السبب واضحًا من الكود. اذكر *لماذا*، ولا تُعِد
+          وصف *ماذا*.
     """.trimIndent()
     override fun studioCreateTurn(request: String) =
         "ابنِ هذا كملف HTML واحد:\n\n$request"

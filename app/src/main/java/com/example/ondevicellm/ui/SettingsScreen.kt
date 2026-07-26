@@ -30,12 +30,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
+import com.example.ondevicellm.audio.VoicePicker
 import com.example.ondevicellm.core.AppLanguage
 import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.core.TtsEngine
@@ -223,6 +225,58 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(Space.md))
+
+            if (settings.ttsEngine == TtsEngine.SYSTEM) {
+                SoftDivider()
+                GroupLabel(s.voiceLabel)
+
+                // Read once per composition of this card: enumerating voices
+                // touches the engine, and it cannot change while the screen is
+                // open anyway.
+                val voices = remember(settings.voiceLanguageTag) {
+                    VoicePicker.candidatesFor(viewModel.systemVoices(), settings.voiceLanguageTag)
+                }
+
+                if (voices.isEmpty()) {
+                    Caption(s.voiceNoneInstalled, isWarning = true)
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = settings.systemVoiceName == null,
+                            onClick = {
+                                viewModel.updateSettings { it.copy(systemVoiceName = null) }
+                            },
+                            label = { Text(s.voiceAutoBest) },
+                        )
+                        voices.forEach { voice ->
+                            FilterChip(
+                                selected = settings.systemVoiceName == voice.name,
+                                onClick = {
+                                    viewModel.updateSettings {
+                                        it.copy(systemVoiceName = voice.name)
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        buildString {
+                                            append(voice.languageTag)
+                                            append(" · ")
+                                            append(s.voiceQuality(voice.quality))
+                                            if (voice.needsNetwork) {
+                                                append(" · ")
+                                                append(s.voiceNeedsNetwork)
+                                            }
+                                        }
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(Space.sm))
+                    Caption(s.voiceNote)
+                }
+                SoftDivider()
+            }
 
             when (settings.ttsEngine) {
                 TtsEngine.SYSTEM -> Caption(s.systemEngineNote)

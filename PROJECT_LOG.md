@@ -461,6 +461,42 @@ layouts should be tuned for that screen.
     system bars, and nothing accounted for the IME. One `imePadding()` at the
     root lifts content and navigation together on every screen.
 
+### Session 7 — 2026-07-26 · logo, coding rules, Arabic voice, and a real plan
+
+38. **App icon.** The supplied «ذكاء الأمويين» medallion, cropped to a circle.
+    The disc was found by measurement, not by eye: the source bounding box is
+    670 × 687, and the extra 17 px is a drop shadow, so the crop anchors on the
+    top edge and the measured diameter rather than the box. Supersampled 4× for
+    a clean edge, inset 0.6% to shed the white fringe. Legacy PNGs at five
+    densities plus an adaptive icon whose foreground sits at 70/108 — the
+    masked viewport is 72 dp, and a full 72 puts the gold rim exactly on the
+    boundary. Background is the lapis sampled from the logo's own ring.
+
+39. **The Studio prompt now encodes how to build, not just what to output.**
+    The rule that matters most: *every control must do what it looks like it
+    does*. A model asked for a calculator will cheerfully emit buttons wired to
+    nothing, and that is the single most common way a generated page looks
+    finished and does nothing. Also: no placeholders or dummy data, handle the
+    empty and wrong-input cases, build for a phone (44 px targets, flexbox, no
+    fixed page width), and restraint — exactly what was asked, named for what
+    it is, commented only where the reason isn't obvious. Six tests hold the
+    prompt to it.
+
+40. **Arabic voice.** The app called `setLanguage("ar-SA")` and took whatever
+    fell out — routinely the oldest, most robotic voice installed, while a
+    better one sat on the same phone unused. `VoicePicker` ranks installed
+    voices by quality with a deliberate penalty for network-only ones, and
+    Settings lets the user choose. 14 tests. **This is the immediate half of
+    the answer; the model half is in `PLAN.md`, honestly — good Arabic TTS is
+    Piper, which is ONNX and needs a phonemiser, not a `.tflite` drop-in.**
+
+41. **`PLAN.md`.** An honest inventory of what is real, what is a façade, and
+    what each gap costs. Three things are named as façades: GPU execution
+    (offered, never used — llama.cpp's OpenCL backend is the largest real gain
+    available), NPU (detected, never used, and the UI already says so), and
+    custom TTS models (dead code — `compileOnly` means the path is unreachable
+    in any shipped build).
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads

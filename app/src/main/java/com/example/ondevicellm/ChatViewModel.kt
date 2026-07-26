@@ -512,6 +512,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Installed system voices, for the picker in Settings. */
+    fun systemVoices(): List<com.example.ondevicellm.audio.VoiceOption> =
+        systemTts.availableVoices()
+
     fun studioToggleView() = studio.toggleView()
     fun studioRun() = studio.run()
     fun studioEditCode(code: String) = studio.editCode(code)
@@ -600,6 +604,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 speakingRate = current.speakingRate,
                 pitch = current.pitch,
                 speakerId = registry.selectedTtsModel?.ttsSpeakerId ?: 0,
+                voiceName = current.systemVoiceName,
             )
 
             when (val result = synthesizer.speak(text, options)) {
@@ -653,6 +658,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 speakingRate = current.speakingRate,
                 pitch = current.pitch,
                 speakerId = registry.selectedTtsModel?.ttsSpeakerId ?: 0,
+                voiceName = current.systemVoiceName,
             )
 
             val saved = when (current.ttsEngine) {

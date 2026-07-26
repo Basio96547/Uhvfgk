@@ -41,6 +41,12 @@ data class AppSettings(
     /** Show the reasoning trace in the chat UI. */
     val showThinking: Boolean = true,
     val voiceLanguageTag: String = Locale.getDefault().toLanguageTag(),
+    /**
+     * A specific system voice, by the engine's own name. Null means "let the
+     * app pick the best installed one", which is the right default because the
+     * engine's own default is usually the oldest voice on the device.
+     */
+    val systemVoiceName: String? = null,
     // ---- Speech output ----
     val ttsEngine: TtsEngine = TtsEngine.SYSTEM,
     /** Speak each reply as soon as it finishes generating. */
@@ -79,6 +85,7 @@ class SettingsStore(context: Context) {
         showThinking = prefs.getBoolean(KEY_SHOW_THINKING, true),
         voiceLanguageTag = prefs.getString(KEY_VOICE_LANG, null)
             ?: Locale.getDefault().toLanguageTag(),
+        systemVoiceName = prefs.getString(KEY_SYSTEM_VOICE, null),
         ttsEngine = TtsEngine.entries
             .firstOrNull { it.name == prefs.getString(KEY_TTS_ENGINE, null) }
             ?: TtsEngine.SYSTEM,
@@ -107,6 +114,7 @@ class SettingsStore(context: Context) {
             .putString(KEY_THINKING_MODE, updated.thinkingMode.name)
             .putBoolean(KEY_SHOW_THINKING, updated.showThinking)
             .putString(KEY_VOICE_LANG, updated.voiceLanguageTag)
+            .putString(KEY_SYSTEM_VOICE, updated.systemVoiceName)
             .putString(KEY_TTS_ENGINE, updated.ttsEngine.name)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
@@ -125,6 +133,7 @@ class SettingsStore(context: Context) {
         const val KEY_SEARCH_MODE = "searchMode"
         const val KEY_SHOW_THINKING = "showThinking"
         const val KEY_VOICE_LANG = "voiceLanguageTag"
+        const val KEY_SYSTEM_VOICE = "systemVoiceName"
         const val KEY_TTS_ENGINE = "ttsEngine"
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"

@@ -125,6 +125,19 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
     }
 
 
+    /** Every installed voice, as plain data the picker can rank. */
+    fun availableVoices(): List<VoiceOption> = runCatching {
+        tts?.voices.orEmpty().mapNotNull { voice ->
+            val tag = voice.locale?.toLanguageTag() ?: return@mapNotNull null
+            VoiceOption(
+                name = voice.name,
+                languageTag = tag,
+                quality = voice.quality,
+                needsNetwork = voice.isNetworkConnectionRequired,
+            )
+        }
+    }.getOrDefault(emptyList())
+
     private fun applyVoice(engine: TextToSpeech, options: SpeechOptions) {
         runCatching {
             val locale = Locale.forLanguageTag(options.languageTag)
@@ -133,6 +146,21 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
                 status == TextToSpeech.LANG_NOT_SUPPORTED
             ) {
                 engine.setLanguage(Locale.getDefault())
+            }
+        }
+
+        // setLanguage alone takes the engine's default voice for that locale,
+        // which is routinely the oldest and most robotic one installed. Pick
+        // deliberately: the user's chosen voice if it is still there, else the
+        // best-ranked one for the language.
+        runCatching {
+            val installed = availableVoices()
+            val chosen = options.voiceName
+                ?.let { wanted -> installed.firstOrNull { it.name == wanted } }
+                ?: VoicePicker.best(installed, options.languageTag)
+
+            if (chosen != null) {
+                engine.voices?.firstOrNull { it.name == chosen.name }?.let(engine::setVoice)
             }
         }
         engine.setSpeechRate(options.speakingRate.coerceIn(0.1f, 3.0f))
