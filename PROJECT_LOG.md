@@ -28,7 +28,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Unit tests | ✅ Passing in CI |
 | MediaPipe `.task` path | ✅ Compiles against the real AAR in CI — **never run against a real model** |
 | TTS model path | ⚠️ Tensor handling rewritten for real VITS/Piper layouts — **untested against an actual voice model** |
-| llama.cpp GGUF path | ✅ Bridge compiled, **linked and run against real llama.cpp** (`tools/verify-native.sh`); Android rebuild pending |
+| llama.cpp GGUF path | ✅ Bridge compiled, linked and run against real llama.cpp (`tools/verify-native.sh`); **native lib builds and ships in the APK** — never run against a real model |
 | Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
 | Diagnostics/crash log | ⚠️ Compiles — **never triggered in anger** |
@@ -36,10 +36,21 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 **Nothing has been run on a physical device yet.** Everything below marked ⚠️
 is "correct by construction and unit tests" but unproven in practice.
 
-### Last known CI result
-Run 3 (`857ee6f`) failed: `llama_model_params` no longer has `use_mmap` /
-`use_mlock` — replaced upstream by `load_mode`. Fixed by setting
-`LLAMA_LOAD_MODE_MMAP`. llama.cpp itself compiled fine; only the bridge failed.
+### CI history
+| Run | Commit | Result |
+|---|---|---|
+| 1 | `32d0afd` | ❌ missing Compose imports |
+| 2 | `aaa7d72` | ✅ APK 33.3 MB |
+| 3 | `857ee6f` | ❌ `use_mmap`/`use_mlock` removed upstream |
+| 4–5 | | ❌ |
+| 6–7 | | ⏹ cancelled by newer pushes |
+| 8 | `25e046a` | ✅ |
+| 9 | `de0879c` | ✅ APK **38.7 MB** |
+| 10 | `3220d23` | ✅ current |
+
+The APK grew 33.3 → 38.7 MB when GGUF landed. That ~5.4 MB is
+`libllamabridge.so` with llama.cpp statically linked — concrete evidence the
+native build not only compiled but is packaged and shipping.
 
 ### Native bridge — actually verified, not assumed
 `tools/verify-native.sh` clones the pinned llama.cpp, builds it, then:
@@ -188,8 +199,8 @@ platform APIs, so grounding can't conflict with the inference runtimes.
 ## 6. Known gaps
 
 **Blocking**
-- CI rebuild after the `load_mode` fix is unconfirmed.
-- Nothing has run on a real device.
+- Nothing has run on a real device. The app builds, installs and is packaged
+  correctly; whether a model loads and generates is unknown.
 
 **Cannot be verified from this sandbox** (network policy blocks them; not
 design choices):
