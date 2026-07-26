@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
  * consistent across screens instead of being eyeballed per component.
  */
 object Space {
-    val xxs = 2.dp
     val xs = 4.dp
     val sm = 8.dp
     val md = 12.dp
@@ -53,15 +52,6 @@ object Gradients {
             )
         )
 
-    /** Page backdrop — a barely-there tint so flat screens gain depth. */
-    val page: Brush
-        @Composable @ReadOnlyComposable
-        get() = Brush.verticalGradient(
-            listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.55f),
-            )
-        )
 
     /** Halo behind empty-state icons. */
     @Composable

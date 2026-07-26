@@ -37,24 +37,6 @@ class PcmAudioTest {
         val silent = floatArrayOf(0f, 0f)
         assertSame(silent, PcmAudio.normalize(silent))
     }
-
-    @Test
-    fun `resample changes length proportionally`() {
-        assertEquals(2, PcmAudio.resample(floatArrayOf(1f, 2f, 3f, 4f), 8000, 4000).size)
-        assertEquals(4, PcmAudio.resample(floatArrayOf(1f, 2f), 4000, 8000).size)
-    }
-
-    @Test
-    fun `resample at the same rate is a no-op`() {
-        val source = floatArrayOf(1f, 2f)
-        assertSame(source, PcmAudio.resample(source, 16000, 16000))
-    }
-
-    @Test
-    fun `duration handles a zero sample rate`() {
-        assertEquals(1000L, PcmAudio.durationMs(22050, 22050))
-        assertEquals(0L, PcmAudio.durationMs(100, 0))
-    }
 }
 
 class WavWriterTest {
@@ -101,11 +83,6 @@ class WavWriterTest {
 
         assertEquals(100, le16(bytes, 46))
         assertEquals(32767, le16(bytes, 50))
-    }
-
-    @Test
-    fun `reports the resulting file size`() {
-        assertEquals(44 + 200, WavWriter.fileSizeBytes(100))
     }
 }
 

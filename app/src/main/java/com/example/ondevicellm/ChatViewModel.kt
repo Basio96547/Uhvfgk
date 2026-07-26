@@ -486,13 +486,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** True when speech output can work right now with the current settings. */
-    val canSpeak: Boolean
-        get() = when (settingsStore.settings.value.ttsEngine) {
-            TtsEngine.SYSTEM -> true
-            TtsEngine.MODEL -> ModelTtsSynthesizer.isRuntimeAvailable() &&
-                registry.selectedTtsModel != null
-        }
 
     /** True when custom TTS models can run in this build. See ModelTtsSynthesizer. */
     val ttsRuntimeAvailable: Boolean get() = ModelTtsSynthesizer.isRuntimeAvailable()
@@ -528,7 +521,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissNotice() = _uiState.update { it.copy(notice = null) }
 
-    fun dismissError() = _uiState.update { it.copy(errorMessage = null) }
 
     override fun onCleared() {
         super.onCleared()

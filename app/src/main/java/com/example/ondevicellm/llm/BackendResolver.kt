@@ -14,9 +14,7 @@ data class ResolvedBackend(
     val actualLabel: String,
     /** User-facing explanation. Empty when the request was honoured as-is. */
     val note: String,
-) {
-    val wasSubstituted: Boolean get() = note.isNotEmpty()
-}
+)
 
 /** MediaPipe-specific resolution: the enum it needs, plus what to show the user. */
 data class MediaPipeBackend(

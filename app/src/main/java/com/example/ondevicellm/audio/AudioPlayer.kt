@@ -21,9 +21,6 @@ class AudioPlayer {
     @Volatile
     private var stopped = false
 
-    val isPlaying: Boolean
-        get() = track?.playState == AudioTrack.PLAYSTATE_PLAYING
-
     /** Suspends until playback finishes, is stopped, or the caller is cancelled. */
     suspend fun play(samples: FloatArray, sampleRateHz: Int) = withContext(Dispatchers.IO) {
         if (samples.isEmpty()) return@withContext

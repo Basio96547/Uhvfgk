@@ -27,9 +27,6 @@ data class MemorySnapshot(
 
     /** Headroom the OS can actually give us, counting extended memory. */
     val effectiveAvailableBytes: Long get() = availableRamBytes + swapFreeBytes
-
-    /** Physical + extended capacity. */
-    val effectiveTotalBytes: Long get() = totalRamBytes + swapTotalBytes
 }
 
 /** What kind of accelerator the device can actually offer. */
@@ -74,10 +71,6 @@ data class DeviceSnapshot(
     /** Galaxy S25 Ultra ships as SM-S938x across regions. */
     val isGalaxyS25Ultra: Boolean
         get() = deviceModel.startsWith("SM-S938", ignoreCase = true)
-
-    val isQualcomm: Boolean
-        get() = socManufacturer.contains("Qualcomm", ignoreCase = true) ||
-            socModel.startsWith("SM", ignoreCase = true)
 }
 
 object DeviceCapabilities {

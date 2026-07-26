@@ -41,9 +41,6 @@ class ModelRegistry(private val context: Context) {
     val selectedTextModel: ModelSpec?
         get() = _models.value.firstOrNull { it.id == _selectedTextModelId.value }
 
-    val selectedAsrModel: ModelSpec?
-        get() = _models.value.firstOrNull { it.id == _selectedAsrModelId.value }
-
     val selectedTtsModel: ModelSpec?
         get() = _models.value.firstOrNull { it.id == _selectedTtsModelId.value }
 

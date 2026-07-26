@@ -18,8 +18,6 @@ sealed interface SynthesisResult {
      * with [WavWriter].
      */
     data class Pcm(val samples: FloatArray, val sampleRateHz: Int) : SynthesisResult {
-        val durationMs: Long get() = PcmAudio.durationMs(samples.size, sampleRateHz)
-
         // FloatArray gives identity equals/hashCode by default, which is wrong
         // for a value class that Compose may compare.
         override fun equals(other: Any?): Boolean {
@@ -50,9 +48,6 @@ interface SpeechSynthesizer {
 
     /** Human-readable name shown in settings. */
     val displayName: String
-
-    /** True once the engine is ready to synthesize. */
-    val isReady: Boolean
 
     /** Loads whatever the engine needs. Safe to call more than once. */
     suspend fun prepare(): Boolean

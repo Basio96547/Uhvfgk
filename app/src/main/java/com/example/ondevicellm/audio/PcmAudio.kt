@@ -52,29 +52,6 @@ object PcmAudio {
         val gain = target / peak
         return FloatArray(samples.size) { samples[it] * gain }
     }
-
-    /**
-     * Nearest-neighbour resample. Good enough to reconcile a model's native
-     * rate with an output device that refuses it; not a substitute for a real
-     * resampler when quality matters.
-     */
-    fun resample(samples: FloatArray, fromRateHz: Int, toRateHz: Int): FloatArray {
-        require(fromRateHz > 0 && toRateHz > 0) { "Sample rates must be positive" }
-        if (fromRateHz == toRateHz || samples.isEmpty()) return samples
-
-        val outSize = ((samples.size.toLong() * toRateHz) / fromRateHz).toInt()
-        if (outSize <= 0) return FloatArray(0)
-
-        val ratio = fromRateHz.toDouble() / toRateHz
-        return FloatArray(outSize) { i ->
-            val source = (i * ratio).toInt().coerceAtMost(samples.lastIndex)
-            samples[source]
-        }
-    }
-
-    /** Total duration of [sampleCount] mono samples, in milliseconds. */
-    fun durationMs(sampleCount: Int, sampleRateHz: Int): Long =
-        if (sampleRateHz <= 0) 0L else (sampleCount * 1000L) / sampleRateHz
 }
 
 /**
@@ -83,7 +60,6 @@ object PcmAudio {
  */
 object WavWriter {
 
-    private const val HEADER_BYTES = 44
     private const val PCM_FORMAT = 1
     private const val CHANNELS = 1
     private const val BITS_PER_SAMPLE = 16
@@ -121,9 +97,6 @@ object WavWriter {
             out.writeShortLe(sample.toInt())
         }
     }
-
-    /** Byte size a WAV file with [sampleCount] mono 16-bit samples will occupy. */
-    fun fileSizeBytes(sampleCount: Int): Int = HEADER_BYTES + sampleCount * 2
 
     private fun OutputStream.writeIntLe(value: Int) {
         write(value and 0xFF)

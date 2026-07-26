@@ -25,14 +25,6 @@ class ThinkingStreamParser(
     private val pending = StringBuilder()
     private var inThinking = startInsideThinking
 
-    /** True once a closing tag has been seen — reasoning is complete. */
-    var thinkingFinished: Boolean = false
-        private set
-
-    /** True if any reasoning text was produced at all. */
-    var sawThinking: Boolean = false
-        private set
-
     fun consume(chunk: String): Delta {
         if (chunk.isEmpty()) return Delta("", "")
         pending.append(chunk)
@@ -49,11 +41,6 @@ class ThinkingStreamParser(
                 if (inThinking) thinking.append(before) else answer.append(before)
                 pending.delete(0, index + tag.length)
 
-                if (inThinking) {
-                    thinkingFinished = true
-                } else {
-                    sawThinking = true
-                }
                 inThinking = !inThinking
                 continue
             }
@@ -70,7 +57,6 @@ class ThinkingStreamParser(
             break
         }
 
-        if (thinking.isNotEmpty()) sawThinking = true
         return Delta(thinking.toString(), answer.toString())
     }
 

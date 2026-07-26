@@ -17,7 +17,6 @@ internal class LlamaBridge {
     external fun nativeFree(handle: Long)
     external fun nativeStop(handle: Long)
     external fun nativeResetContext(handle: Long)
-    external fun nativeContextSize(handle: Long): Int
 
     external fun nativeGenerate(
         handle: Long,
@@ -74,9 +73,6 @@ class LlamaCppEngine private constructor(
 
     @Volatile
     private var closed = false
-
-    /** Size of the context window llama.cpp actually allocated. */
-    val contextTokens: Int get() = if (closed) 0 else bridge.nativeContextSize(handle)
 
     override fun generate(
         prompt: String,

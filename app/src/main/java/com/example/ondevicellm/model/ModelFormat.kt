@@ -11,21 +11,21 @@ import java.io.File
  * deep inside native code with "Error building tflite model", which tells the
  * user nothing about what to do next.
  */
-enum class ModelFormat(val label: String, val supported: Boolean) {
+enum class ModelFormat {
     /** MediaPipe task bundle — a zip container. What this app runs. */
-    TASK("MediaPipe .task bundle", true),
+    TASK,
 
     /** Newer LiteRT-LM container. Support depends on the runtime version. */
-    LITERTLM("LiteRT-LM", true),
+    LITERTLM,
 
     /** Bare TFLite flatbuffer — fine for TTS models, not for the LLM engine. */
-    TFLITE("TensorFlow Lite", true),
+    TFLITE,
 
     /** llama.cpp format. Run through the bundled llama.cpp engine. */
-    GGUF("GGUF (llama.cpp)", true),
+    GGUF,
 
     /** PyTorch / safetensors / anything else we can't identify. */
-    UNKNOWN("Unrecognised", false),
+    UNKNOWN,
     ;
 
     companion object {

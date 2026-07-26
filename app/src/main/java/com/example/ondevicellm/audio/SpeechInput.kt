@@ -14,9 +14,7 @@ import java.util.Locale
  *
  * This uses the platform recognizer with `EXTRA_PREFER_OFFLINE`, so with an
  * offline language pack installed transcription stays on the device — matching
- * the app's offline-first goal. For a fully self-contained ASR model instead,
- * register a `.task` ASR bundle on the Models screen and implement
- * [AudioTranscriber]; see the README.
+ * the app's offline-first goal.
  */
 class SpeechInput(private val context: Context) {
 
@@ -126,16 +124,4 @@ class SpeechInput(private val context: Context) {
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected."
         else -> "Speech recognition failed (code $error)."
     }
-}
-
-/**
- * Contract for a bundled, fully self-contained ASR model.
- *
- * The Models screen already lets users register an `AUDIO` model; implement
- * this interface against that file (e.g. a Whisper LiteRT bundle) and swap it
- * in where [SpeechInput] is used to remove the dependency on the platform
- * recognizer entirely.
- */
-interface AudioTranscriber {
-    suspend fun transcribe(pcm16: ShortArray, sampleRateHz: Int): String
 }

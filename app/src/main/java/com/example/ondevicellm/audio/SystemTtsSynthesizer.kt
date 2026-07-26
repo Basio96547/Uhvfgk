@@ -27,8 +27,6 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
     private var ready = false
     private val utteranceCounter = AtomicLong(0)
 
-    override val isReady: Boolean get() = ready
-
     override suspend fun prepare(): Boolean {
         if (ready) return true
         return suspendCancellableCoroutine { continuation ->
@@ -126,15 +124,6 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
         }
     }
 
-    /** Language tags the installed engine can speak without a network. */
-    fun availableLanguages(): List<String> = tts?.let { engine ->
-        runCatching {
-            engine.availableLanguages
-                ?.map { it.toLanguageTag() }
-                ?.sorted()
-                .orEmpty()
-        }.getOrDefault(emptyList())
-    }.orEmpty()
 
     private fun applyVoice(engine: TextToSpeech, options: SpeechOptions) {
         runCatching {

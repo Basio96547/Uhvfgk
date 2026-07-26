@@ -204,12 +204,6 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(JNIEnv *, jobjec
     session->n_past = 0;
 }
 
-JNIEXPORT jint JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeContextSize(JNIEnv *, jobject, jlong handle) {
-    auto *session = reinterpret_cast<Session *>(handle);
-    if (session == nullptr || session->ctx == nullptr) return 0;
-    return static_cast<jint>(llama_n_ctx(session->ctx));
-}
 
 /**
  * Generates a reply, invoking callback.onToken(String) for each piece.

@@ -33,12 +33,6 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
     private var interpreter: Interpreter? = null
     private var tokenizer: TtsTokenizer? = null
 
-    /** True when the vocabulary was guessed rather than supplied by the author. */
-    var usingFallbackVocabulary: Boolean = false
-        private set
-
-    override val isReady: Boolean get() = interpreter != null
-
     override suspend fun prepare(): Boolean = withContext(Dispatchers.IO) {
         if (interpreter != null) return@withContext true
         if (!isRuntimeAvailable()) return@withContext false
@@ -55,9 +49,8 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
         runCatching { Interpreter(file, options) }
             .onSuccess { loaded ->
                 interpreter = loaded
-                val sidecar = CharacterTokenizer.fromSidecar(spec.path)
-                usingFallbackVocabulary = sidecar == null
-                tokenizer = sidecar ?: CharacterTokenizer.fallback()
+                tokenizer = CharacterTokenizer.fromSidecar(spec.path)
+                    ?: CharacterTokenizer.fallback()
             }
             .isSuccess
     }

@@ -1,8 +1,6 @@
 package com.example.ondevicellm.llm
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ThinkingStreamParserTest {
@@ -53,28 +51,31 @@ class ThinkingStreamParserTest {
 
     @Test
     fun `treats plain output with no tags as answer only`() {
-        val parser = ThinkingStreamParser()
-        val (thinking, answer) = collect(parser, listOf("Just ", "a normal ", "reply."))
+        val (thinking, answer) = collect(
+            ThinkingStreamParser(),
+            listOf("Just ", "a normal ", "reply."),
+        )
         assertEquals("", thinking)
         assertEquals("Just a normal reply.", answer)
-        assertFalse(parser.sawThinking)
     }
 
     @Test
     fun `supports templates that start inside the thinking block`() {
-        val parser = ThinkingStreamParser(startInsideThinking = true)
-        val (thinking, answer) = collect(parser, listOf("reasoning here</think>Done"))
+        val (thinking, answer) = collect(
+            ThinkingStreamParser(startInsideThinking = true),
+            listOf("reasoning here</think>Done"),
+        )
         assertEquals("reasoning here", thinking)
         assertEquals("Done", answer)
-        assertTrue(parser.thinkingFinished)
     }
 
     @Test
     fun `flushes unterminated thinking as thinking`() {
-        val parser = ThinkingStreamParser()
-        val (thinking, answer) = collect(parser, listOf("<think>cut off mid-thought"))
+        val (thinking, answer) = collect(
+            ThinkingStreamParser(),
+            listOf("<think>cut off mid-thought"),
+        )
         assertEquals("cut off mid-thought", thinking)
         assertEquals("", answer)
-        assertFalse(parser.thinkingFinished)
     }
 }

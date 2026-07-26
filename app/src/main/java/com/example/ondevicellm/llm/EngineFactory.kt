@@ -36,11 +36,4 @@ object EngineFactory {
         }
     }
 
-    /** Human-readable runtime name for a model, used on the Models screen. */
-    fun runtimeLabel(spec: ModelSpec): String =
-        when (ModelFormat.detect(File(spec.path))) {
-            ModelFormat.GGUF -> "llama.cpp"
-            ModelFormat.TASK, ModelFormat.LITERTLM, ModelFormat.TFLITE -> "MediaPipe"
-            ModelFormat.UNKNOWN -> "unsupported"
-        }
 }
