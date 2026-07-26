@@ -21,6 +21,29 @@ Tuned for high-end Qualcomm devices such as the **Galaxy S25 Ultra
 | ⚙️ **Backend control** | Per-model CPU / GPU / NPU / Auto selection |
 | 📊 **Device screen** | SoC, NPU runtime detection, RAM **and RAM Plus** reporting |
 
+## Design
+
+The interface is built on a small, explicit design system rather than stock
+Material defaults, so every screen looks like part of one product:
+
+- **`ui/theme/Design.kt`** — a 4dp spacing scale (`Space`), brand gradients
+  derived from the active color scheme, and a `Modifier.panel()` that gives
+  every raised surface the same fill, hairline border and radius.
+- **`ui/theme/Theme.kt`** — a hand-tuned indigo→violet palette with a teal
+  accent, full light and dark variants, and Material You dynamic color on
+  Android 12+.
+- **`ui/theme/Type.kt`** — a tightened type scale (denser headings, roomier body
+  line-height for long replies) and softer corner radii.
+- **`ui/Components.kt`** — the shared vocabulary every screen composes from:
+  `SectionCard`, `IconTile`, `StatusPill`, `InfoRow`, `Caption`, `SoftDivider`,
+  `TypingIndicator`, `ProgressBar`.
+
+Details that matter in use: chat bubbles have an asymmetric corner pointing at
+their author, the user bubble is a gradient fill, reasoning collapses behind an
+animated chevron, the active model sits in a floating pill rather than a heavy
+banner, the send button springs between states, and the bottom bar animates its
+own selection pill instead of using the stock indicator.
+
 ## Screens
 
 - **Chat** — conversation, reasoning traces, mic input, per-reply speak/save

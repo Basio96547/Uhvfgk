@@ -1,36 +1,45 @@
 package com.example.ondevicellm.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.core.formatBytes
+import com.example.ondevicellm.ui.theme.Gradients
+import com.example.ondevicellm.ui.theme.Space
+import com.example.ondevicellm.ui.theme.panel
 
 @Composable
 fun DeviceScreen(
@@ -44,90 +53,89 @@ fun DeviceScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = Space.lg),
+        verticalArrangement = Arrangement.spacedBy(Space.md),
     ) {
-        Spacer(Modifier.size(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Device",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 4.dp),
+        if (device.isGalaxyS25Ultra || device.isSnapdragon8Elite) {
+            HeroBanner(
+                title = if (device.isGalaxyS25Ultra) {
+                    "Galaxy S25 Ultra"
+                } else {
+                    "Snapdragon 8 Elite"
+                },
+                subtitle = "High-end Qualcomm silicon detected. GPU backend recommended.",
             )
-            OutlinedButton(onClick = viewModel::refreshDevice) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Refresh")
-            }
         }
 
-        if (device.isGalaxyS25Ultra || device.isSnapdragon8Elite) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Row(
-                    Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        SectionCard(
+            icon = Icons.Filled.DeveloperBoard,
+            title = "Hardware",
+            subtitle = device.socModel.ifBlank { "Unknown SoC" },
+            trailing = {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = viewModel::refreshDevice)
+                        .padding(Space.sm)
                 ) {
                     Icon(
-                        Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp),
+                        Icons.Filled.Refresh,
+                        contentDescription = "Refresh",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.size(11.dp))
-                    Column {
-                        Text(
-                            if (device.isGalaxyS25Ultra) "Galaxy S25 Ultra" else "Snapdragon 8 Elite",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Text(
-                            "High-end Qualcomm hardware — GPU backend recommended.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
                 }
-            }
-        }
-
-        SectionCard(Icons.Filled.Info, "Hardware") {
+            },
+        ) {
             InfoRow("Model", device.deviceModel.ifBlank { "unknown" })
             InfoRow("Manufacturer", device.manufacturer.ifBlank { "unknown" })
-            InfoRow("SoC", device.socModel.ifBlank { "unknown" })
             InfoRow("SoC vendor", device.socManufacturer.ifBlank { "unknown" })
             InfoRow("CPU cores", device.cpuCores.toString())
             InfoRow("ABIs", device.supportedAbis.joinToString(", ").ifBlank { "unknown" })
         }
 
-        SectionCard(Icons.Filled.Memory, "Memory", tint = MaterialTheme.colorScheme.tertiary) {
-            val usedRam = (memory.totalRamBytes - memory.availableRamBytes).coerceAtLeast(0)
-            val ramFraction = if (memory.totalRamBytes > 0) {
-                usedRam.toFloat() / memory.totalRamBytes
+        SectionCard(
+            icon = Icons.Filled.Memory,
+            title = "Memory",
+            subtitle = "Physical and extended",
+            tint = MaterialTheme.colorScheme.tertiary,
+        ) {
+            val used = (memory.totalRamBytes - memory.availableRamBytes).coerceAtLeast(0)
+            val fraction = if (memory.totalRamBytes > 0) {
+                used.toFloat() / memory.totalRamBytes
             } else 0f
 
-            InfoRow("Physical RAM", memory.totalRamBytes.formatBytes())
-            InfoRow("Available", memory.availableRamBytes.formatBytes())
-            Spacer(Modifier.size(8.dp))
-            ProgressBar(ramFraction, color = MaterialTheme.colorScheme.tertiary)
-            Spacer(Modifier.size(4.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    memory.availableRamBytes.formatBytes(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "free of ${memory.totalRamBytes.formatBytes()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
+
+            Spacer(Modifier.height(Space.md))
+            ProgressBar(fraction, color = MaterialTheme.colorScheme.tertiary, height = 8)
+            Spacer(Modifier.height(6.dp))
             Text(
-                "${(ramFraction * 100).toInt()}% in use",
+                "${(fraction * 100).toInt()}% in use",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.size(14.dp))
+            SoftDivider()
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Extended memory (RAM Plus)",
+                    "RAM Plus",
                     style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 StatusPill(
@@ -140,74 +148,79 @@ fun DeviceScreen(
                 )
             }
 
-            Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.height(Space.sm))
 
             if (memory.hasExtendedMemory) {
                 InfoRow("Total", memory.swapTotalBytes.formatBytes())
                 InfoRow("Free", memory.swapFreeBytes.formatBytes())
-                Spacer(Modifier.size(6.dp))
-                Text(
+                Spacer(Modifier.height(Space.sm))
+                Caption(
                     "Model weights are memory-mapped, so pages can spill into " +
-                        "extended memory instead of failing to allocate.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "extended memory instead of failing to allocate."
                 )
             } else {
-                Text(
+                Caption(
                     "Not enabled. Turn it on in Settings › Device care › Memory › " +
-                        "RAM Plus to give large models more headroom.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "RAM Plus to give large models more headroom."
                 )
             }
 
-            Spacer(Modifier.size(14.dp))
+            Spacer(Modifier.height(Space.lg))
 
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f),
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .panel(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.09f),
+                    )
+                    .padding(Space.md)
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    InfoRow(
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
                         "Effective budget",
-                        memory.effectiveAvailableBytes.formatBytes(),
-                        valueColor = MaterialTheme.colorScheme.tertiary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
-                        "Available RAM + free extended memory. Used to decide " +
-                            "whether a model can be loaded.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        memory.effectiveAvailableBytes.formatBytes(),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
+                Spacer(Modifier.height(Space.xs))
+                Caption("Available RAM + free extended memory. Decides what can load.")
             }
         }
 
         SectionCard(
-            Icons.Filled.Bolt,
-            "Accelerators",
+            icon = Icons.Filled.Bolt,
+            title = "Accelerators",
+            subtitle = device.accelerators.hexagonVersion?.let { "Hexagon $it" }
+                ?: "GPU and NPU support",
             tint = MaterialTheme.colorScheme.secondary,
         ) {
             val acc = device.accelerators
-            InfoRow("Vulkan", if (acc.vulkanAvailable) "yes" else "no")
-            InfoRow("OpenCL", if (acc.openClAvailable) "yes" else "no")
-            InfoRow("NNAPI", if (acc.nnapiAvailable) "yes" else "no (deprecated on Android 15+)")
-            InfoRow("Vendor NPU runtime", if (acc.hasNpuRuntime) "detected" else "not found")
-            acc.hexagonVersion?.let { InfoRow("Hexagon arch", it) }
+            CapabilityRow("Vulkan", acc.vulkanAvailable)
+            CapabilityRow("OpenCL", acc.openClAvailable)
+            CapabilityRow("NNAPI", acc.nnapiAvailable, "deprecated on Android 15+")
+            CapabilityRow("Vendor NPU runtime", acc.hasNpuRuntime)
 
             if (acc.hasNpuRuntime) {
-                Spacer(Modifier.size(10.dp))
-                Text("NPU libraries found", style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.size(4.dp))
-                Surface(
-                    shape = MaterialTheme.shapes.extraSmall,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth(),
+                Spacer(Modifier.height(Space.md))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .panel(
+                            shape = MaterialTheme.shapes.extraSmall,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        )
+                        .padding(Space.md)
                 ) {
                     Text(
-                        acc.npuRuntimeLibraries.take(12).joinToString("\n"),
-                        modifier = Modifier.padding(10.dp),
+                        acc.npuRuntimeLibraries.take(10).joinToString("\n"),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -215,38 +228,97 @@ fun DeviceScreen(
                 }
             }
 
-            Spacer(Modifier.size(12.dp))
+            SoftDivider()
 
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(
-                        "How NPU selection behaves",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Spacer(Modifier.size(5.dp))
-                    Text(
-                        "The MediaPipe LLM runtime bundled here exposes CPU and GPU " +
-                            "only. Selecting \"NPU\" for a model runs it on the GPU and " +
-                            "says so on the chat screen — it never silently pretends. " +
-                            "Driving the Hexagon NPU needs Qualcomm's QNN/Genie runtime " +
-                            "plus a model compiled to a QNN context binary; the " +
-                            "integration point is NpuRuntime in BackendResolver.kt.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            Text(
+                "How NPU selection behaves",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(Space.xs))
+            Caption(
+                "The bundled LLM runtime exposes CPU and GPU. Choosing \"NPU\" for a " +
+                    "model runs it on the GPU and says so on the chat screen rather " +
+                    "than pretending. Wiring in Qualcomm's QNN/Genie runtime is done " +
+                    "in BackendResolver.kt."
+            )
         }
 
-        SectionCard(Icons.Filled.Storage, "Storage") {
+        SectionCard(
+            icon = Icons.Filled.Storage,
+            title = "Storage",
+            subtitle = "Where models live",
+        ) {
             InfoRow("Free space", viewModel.registry.managedDir.usableSpace.formatBytes())
-            InfoRow("Managed models", viewModel.registry.managedDir.absolutePath)
+            Spacer(Modifier.height(Space.sm))
+            Caption(viewModel.registry.managedDir.absolutePath)
         }
 
-        Spacer(Modifier.size(16.dp))
+        Spacer(Modifier.height(Space.xl))
+    }
+}
+
+@Composable
+private fun HeroBanner(title: String, subtitle: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .panel(
+                brush = Gradients.accentSoft,
+                borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+            )
+            .padding(Space.lg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(Space.md))
+        Column {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Capability line with a coloured dot — reads faster than yes/no text. */
+@Composable
+private fun CapabilityRow(label: String, available: Boolean, note: String? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(RoundedCornerShape(50))
+                .background(
+                    if (available) MaterialTheme.colorScheme.tertiary
+                    else MaterialTheme.colorScheme.outlineVariant
+                )
+        )
+        Spacer(Modifier.width(Space.md))
+        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text(
+            if (available) "available" else (note ?: "not found"),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = if (available) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
     }
 }
