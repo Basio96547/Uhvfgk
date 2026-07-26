@@ -37,6 +37,48 @@ class PcmAudioTest {
         val silent = floatArrayOf(0f, 0f)
         assertSame(silent, PcmAudio.normalize(silent))
     }
+
+    @Test
+    fun `decodes little-endian 16-bit pcm`() {
+        // 0x0000, 0x7FFF, 0x8000 — zero, full positive, full negative.
+        val bytes = byteArrayOf(0, 0, 0xFF.toByte(), 0x7F, 0, 0x80.toByte())
+        val out = PcmAudio.pcm16ToFloat(bytes)
+        assertEquals(3, out.size)
+        assertEquals(0f, out[0], 1e-6f)
+        assertEquals(0.99997f, out[1], 1e-4f)
+        assertEquals(-1f, out[2], 1e-6f)
+    }
+
+    @Test
+    fun `a truncated pcm stream is shortened, not a crash`() {
+        // A dropped connection leaves an odd byte count; reading past it would
+        // be an out-of-bounds on a response the user has no control over.
+        val out = PcmAudio.pcm16ToFloat(byteArrayOf(0, 0, 1))
+        assertEquals(1, out.size)
+    }
+
+    @Test
+    fun `decoding honours the length argument`() {
+        val bytes = ByteArray(8)
+        assertEquals(2, PcmAudio.pcm16ToFloat(bytes, length = 4).size)
+        // A length past the end is clamped rather than trusted.
+        assertEquals(4, PcmAudio.pcm16ToFloat(bytes, length = 99).size)
+    }
+
+    @Test
+    fun `float and pcm16 round-trip within one step of the scale`() {
+        val original = floatArrayOf(0f, 0.25f, -0.5f, 0.75f)
+        val pcm = PcmAudio.floatToPcm16(original)
+        val bytes = ByteArray(pcm.size * 2)
+        for (i in pcm.indices) {
+            bytes[i * 2] = (pcm[i].toInt() and 0xFF).toByte()
+            bytes[i * 2 + 1] = ((pcm[i].toInt() shr 8) and 0xFF).toByte()
+        }
+        val back = PcmAudio.pcm16ToFloat(bytes)
+        for (i in original.indices) {
+            assertEquals(original[i], back[i], 1e-4f)
+        }
+    }
 }
 
 class WavWriterTest {

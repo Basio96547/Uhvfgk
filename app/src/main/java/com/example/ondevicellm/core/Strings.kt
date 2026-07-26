@@ -303,6 +303,26 @@ interface AppStrings {
     val ttsModelLoadFailed: String
     val ttsRuntimeMissing: String
     val ttsEngineSystem: String
+    val ttsEngineCloud: String
+    val cloudAzure: String
+    val cloudElevenLabs: String
+    val cloudTitle: String
+    val cloudSubtitle: String
+    val cloudPrivacy: String
+    val cloudProvider: String
+    val cloudApiKey: String
+    val cloudRegion: String
+    val cloudVoice: String
+    val cloudVoiceIdHint: String
+    val cloudNeedsKey: String
+    val cloudNeedsRegion: String
+    val cloudNeedsVoiceId: String
+    val cloudEmptyAudio: String
+    val cloudRequestFailed: String
+    fun cloudHttpError(code: Int, detail: String): String
+    val cloudKeyStorageNote: String
+    val cloudShowKey: String
+    val cloudHideKey: String
     val ttsEngineModel: String
     fun ggufLoadFailed(detail: String): String
     fun taskLoadFailed(detail: String, backend: String): String
@@ -709,6 +729,31 @@ object EnglishStrings : AppStrings {
     override val ttsRuntimeMissing = "The speech-model runtime is missing from this build. " +
         "Use the system engine instead."
     override val ttsEngineSystem = "System engine"
+    override val ttsEngineCloud = "Cloud voice"
+    override val cloudAzure = "Azure Neural"
+    override val cloudElevenLabs = "ElevenLabs"
+    override val cloudTitle = "Cloud voice"
+    override val cloudSubtitle = "The most natural Arabic, at a cost"
+    override val cloudPrivacy = "This sends the text of every spoken reply to a third-party " +
+        "server. It is the only feature here that does — the model, the search grounding " +
+        "aside, and everything else stay on your device. Use it deliberately."
+    override val cloudProvider = "Provider"
+    override val cloudApiKey = "API key"
+    override val cloudRegion = "Region"
+    override val cloudVoice = "Voice"
+    override val cloudVoiceIdHint = "Voice ID from your account"
+    override val cloudNeedsKey = "Enter your API key first."
+    override val cloudNeedsRegion = "Enter the region your key belongs to, e.g. westeurope."
+    override val cloudNeedsVoiceId = "Paste a voice ID from your ElevenLabs account."
+    override val cloudEmptyAudio = "The service returned no audio."
+    override val cloudRequestFailed = "The speech request failed."
+    override fun cloudHttpError(code: Int, detail: String) =
+        if (detail.isBlank()) "Speech service returned HTTP $code."
+        else "Speech service returned HTTP $code: $detail"
+    override val cloudKeyStorageNote = "The key is stored in this app's private storage on " +
+        "this device. It is sent only to the provider you chose."
+    override val cloudShowKey = "Show"
+    override val cloudHideKey = "Hide"
     override val ttsEngineModel = "My TTS model"
     override fun ggufLoadFailed(detail: String) = "Could not load this GGUF model.\n\n$detail"
     override fun taskLoadFailed(detail: String, backend: String) =
@@ -1186,6 +1231,31 @@ object ArabicStrings : AppStrings {
     override val ttsRuntimeMissing = "بيئة تشغيل نماذج النطق غير موجودة في هذه النسخة. " +
         "استخدم محرّك النظام بدلًا منها."
     override val ttsEngineSystem = "محرّك النظام"
+    override val ttsEngineCloud = "صوت سحابي"
+    override val cloudAzure = "Azure Neural"
+    override val cloudElevenLabs = "ElevenLabs"
+    override val cloudTitle = "الصوت السحابي"
+    override val cloudSubtitle = "أنضج صوت عربي، بثمن"
+    override val cloudPrivacy = "هذا يرسل نصّ كل رد يُنطق إلى خادم طرف ثالث. وهي الميزة " +
+        "الوحيدة هنا التي تفعل ذلك — النموذج وكل ما عداه، عدا تأريض البحث، يبقى على " +
+        "جهازك. استعملها عن قصد."
+    override val cloudProvider = "المزوّد"
+    override val cloudApiKey = "مفتاح الواجهة"
+    override val cloudRegion = "المنطقة"
+    override val cloudVoice = "الصوت"
+    override val cloudVoiceIdHint = "معرّف الصوت من حسابك"
+    override val cloudNeedsKey = "أدخل مفتاح الواجهة أولًا."
+    override val cloudNeedsRegion = "أدخل المنطقة التي يتبعها مفتاحك، مثل westeurope."
+    override val cloudNeedsVoiceId = "الصق معرّف صوت من حسابك في ElevenLabs."
+    override val cloudEmptyAudio = "لم يُرجع الخادم أي صوت."
+    override val cloudRequestFailed = "أخفق طلب النطق."
+    override fun cloudHttpError(code: Int, detail: String) =
+        if (detail.isBlank()) "أرجع خادم النطق رمز HTTP $code."
+        else "أرجع خادم النطق رمز HTTP $code: $detail"
+    override val cloudKeyStorageNote = "يُحفظ المفتاح في مساحة هذا التطبيق الخاصة على هذا " +
+        "الجهاز، ولا يُرسل إلا إلى المزوّد الذي اخترته."
+    override val cloudShowKey = "إظهار"
+    override val cloudHideKey = "إخفاء"
     override val ttsEngineModel = "نموذج النطق الخاص بي"
     override fun ggufLoadFailed(detail: String) = "تعذّر تحميل نموذج GGUF هذا.\n\n$detail"
     override fun taskLoadFailed(detail: String, backend: String) =

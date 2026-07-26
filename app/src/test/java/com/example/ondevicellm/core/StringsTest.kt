@@ -21,6 +21,18 @@ class StringsTest {
 
     private val arabicRange = '؀'..'ۿ'
 
+    /**
+     * Strings that are the same word in both languages: brand names and
+     * technical identifiers. Transliterating "Azure Neural" into Arabic would
+     * make it harder to match against the provider's own console, not easier.
+     *
+     * One list, used by both checks below — two copies drift.
+     */
+    private val sharedByDesign = setOf(
+        "ramPlus", "vulkan", "openCl", "nnapi", "topK", "defaultVoiceTag",
+        "cloudAzure", "cloudElevenLabs",
+    )
+
     /** Every string property on [AppStrings], read off an instance. */
     private fun stringsOf(instance: AppStrings): Map<String, String> =
         AppStrings::class.declaredMemberProperties
@@ -36,11 +48,6 @@ class StringsTest {
         val arabic = stringsOf(ArabicStrings)
         assertEquals(english.keys, arabic.keys)
 
-        // Untranslated proper nouns: these are the same word in both languages.
-        val sharedByDesign = setOf(
-            "ramPlus", "vulkan", "openCl", "nnapi", "topK", "defaultVoiceTag",
-        )
-
         val untranslated = english.filter { (key, value) ->
             key !in sharedByDesign && value.isNotBlank() && arabic[key] == value
         }
@@ -50,7 +57,7 @@ class StringsTest {
     @Test
     fun `no arabic string is left in latin script`() {
         val offenders = stringsOf(ArabicStrings).filterKeys {
-            it !in setOf("ramPlus", "vulkan", "openCl", "nnapi", "topK", "defaultVoiceTag")
+            it !in sharedByDesign
         }.filter { (_, value) ->
             value.isNotBlank() && value.none { it in arabicRange }
         }

@@ -29,6 +29,27 @@ object PcmAudio {
         return out
     }
 
+    /**
+     * Decodes little-endian signed 16-bit PCM into floats.
+     *
+     * The inverse of [floatToPcm16], for audio that arrives as bytes — a
+     * hosted speech service hands back a raw PCM stream, and this is what
+     * turns it into something the player takes.
+     *
+     * A trailing odd byte is dropped rather than read past the end: a
+     * truncated response should be quieter, not a crash.
+     */
+    fun pcm16ToFloat(bytes: ByteArray, length: Int = bytes.size): FloatArray {
+        val usable = minOf(length, bytes.size)
+        val out = FloatArray(usable / 2)
+        for (i in out.indices) {
+            val lo = bytes[i * 2].toInt() and 0xFF
+            val hi = bytes[i * 2 + 1].toInt()
+            out[i] = ((hi shl 8) or lo).toShort() / 32768f
+        }
+        return out
+    }
+
     /** Peak of the absolute value, or 0 for an empty/silent buffer. */
     fun peak(samples: FloatArray): Float {
         var peak = 0f

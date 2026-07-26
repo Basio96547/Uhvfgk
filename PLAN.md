@@ -25,6 +25,7 @@ producing a real result. Everything else says what is still unproven.
 | **GPU execution** | **Façade.** The Backend picker offers GPU; GGUF ignores it entirely and runs on CPU. |
 | **NPU execution** | **Façade, and honest about it.** Detected, reported, never used. |
 | Custom TTS models | Runtime is packaged now, so the path is reachable. **Never run against a real voice model** — and good Arabic voices are ONNX, not `.tflite` (see 2c). |
+| Cloud voice | Real code, real endpoints, real request format. **Never sent a request** — no key in the sandbox. |
 
 ---
 
@@ -97,9 +98,29 @@ Even with the runtime enabled, good Arabic voices are not `.tflite`:
 - **MMS-TTS Arabic** (Meta) is VITS and covers Arabic, but wants romanised
   input for Arabic script, which is another preprocessing stage.
 
-**So the plan is ordered:** 2a now (real, immediate), 2b next (cheap, one line
-plus a CI answer), 2c as a deliberate project — ONNX Runtime plus a
-phonemiser — not a checkbox.
+### 2d. The hosted voices, which are the actual answer today
+
+Asked to give up the offline promise for a voice that sounds human, the honest
+answer is that Azure Neural and ElevenLabs are markedly better at Arabic than
+anything that runs on the phone, and no amount of work on 2a–2c closes that gap
+this year.
+
+**Done, with the cost stated.** `CloudTts` builds the request, `CloudTtsSynthesizer`
+sends it and plays raw PCM back — no audio decoder, because both services will
+return PCM directly. Six documented Azure Arabic voices (Saudi, Egyptian,
+Emirati) plus any ElevenLabs voice id.
+
+What it costs, said in Settings rather than buried here: **the text of every
+spoken reply leaves the device.** So it is off by default, needs the user's own
+key, and the privacy line sits above the fields rather than under them.
+
+**Still unproven:** no request has ever been sent. The escaping, the URLs, the
+SSML shape and the rate conversion are unit-tested; the account, the key and
+the network are not.
+
+**So the plan is ordered:** 2a done, 2b done, 2d done and honest about its
+price, 2c as a deliberate project — ONNX Runtime plus a phonemiser — not a
+checkbox.
 
 ---
 
@@ -138,13 +159,17 @@ actually in hand.
 
 1. ~~Arabic voice and engine picker~~ — done.
 2. ~~Enable the TTS runtime~~ — done; CI is the referee on the conflict.
-3. **OpenCL for GGUF** — the largest real gain; needs care.
-4. **Instrument the diagnostics** — turn a device session into evidence.
-5. **ONNX + Piper for Arabic speech** — the real answer to "more human", as a project.
-6. **QNN/NPU** — only with the SDK in hand.
+3. ~~Hosted Arabic voice~~ — done; the best voice available today, and the
+   privacy cost is stated where the decision is made.
+4. **OpenCL for GGUF** — the largest real gain; needs care.
+5. **Instrument the diagnostics** — turn a device session into evidence.
+6. **ONNX + Piper for Arabic speech** — a fully on-device answer to "more
+   human", so the cloud stops being the only good option.
+7. **QNN/NPU** — only with the SDK in hand.
 
 ## What will not be claimed
 
 - That anything is fast, until a token rate has been measured on the device.
 - That search works, until it has returned a live result.
 - That a voice is better, until it has been heard.
+- That the cloud voice works, until a real key has returned real audio.

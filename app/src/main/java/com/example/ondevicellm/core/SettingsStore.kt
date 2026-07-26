@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.ondevicellm.audio.CloudTts
+import com.example.ondevicellm.audio.CloudTtsProvider
 import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.web.SearchDepth
 import java.util.Locale
@@ -15,11 +17,18 @@ enum class TtsEngine {
 
     /** A TTS model the user added on the Models screen. */
     MODEL,
+
+    /**
+     * A hosted service. The only option that sends text off the device, and
+     * the only one that currently sounds genuinely human in Arabic.
+     */
+    CLOUD,
     ;
 
     fun label(s: AppStrings): String = when (this) {
         SYSTEM -> s.ttsEngineSystem
         MODEL -> s.ttsEngineModel
+        CLOUD -> s.ttsEngineCloud
     }
 }
 
@@ -53,6 +62,12 @@ data class AppSettings(
      * one already installed alongside it.
      */
     val systemVoiceEngine: String? = null,
+    // ---- Hosted speech ----
+    val cloudProvider: CloudTtsProvider = CloudTtsProvider.AZURE,
+    /** Stored in app-private storage and sent only to the chosen provider. */
+    val cloudApiKey: String = "",
+    val cloudRegion: String = "",
+    val cloudVoice: String = CloudTts.DEFAULT_AZURE_VOICE,
     // ---- Speech output ----
     val ttsEngine: TtsEngine = TtsEngine.SYSTEM,
     /** Speak each reply as soon as it finishes generating. */
@@ -93,6 +108,12 @@ class SettingsStore(context: Context) {
             ?: Locale.getDefault().toLanguageTag(),
         systemVoiceName = prefs.getString(KEY_SYSTEM_VOICE, null),
         systemVoiceEngine = prefs.getString(KEY_SYSTEM_ENGINE, null),
+        cloudProvider = CloudTtsProvider.entries
+            .firstOrNull { it.name == prefs.getString(KEY_CLOUD_PROVIDER, null) }
+            ?: CloudTtsProvider.AZURE,
+        cloudApiKey = prefs.getString(KEY_CLOUD_KEY, "").orEmpty(),
+        cloudRegion = prefs.getString(KEY_CLOUD_REGION, "").orEmpty(),
+        cloudVoice = prefs.getString(KEY_CLOUD_VOICE, null) ?: CloudTts.DEFAULT_AZURE_VOICE,
         ttsEngine = TtsEngine.entries
             .firstOrNull { it.name == prefs.getString(KEY_TTS_ENGINE, null) }
             ?: TtsEngine.SYSTEM,
@@ -123,6 +144,10 @@ class SettingsStore(context: Context) {
             .putString(KEY_VOICE_LANG, updated.voiceLanguageTag)
             .putString(KEY_SYSTEM_VOICE, updated.systemVoiceName)
             .putString(KEY_SYSTEM_ENGINE, updated.systemVoiceEngine)
+            .putString(KEY_CLOUD_PROVIDER, updated.cloudProvider.name)
+            .putString(KEY_CLOUD_KEY, updated.cloudApiKey)
+            .putString(KEY_CLOUD_REGION, updated.cloudRegion)
+            .putString(KEY_CLOUD_VOICE, updated.cloudVoice)
             .putString(KEY_TTS_ENGINE, updated.ttsEngine.name)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
@@ -143,6 +168,10 @@ class SettingsStore(context: Context) {
         const val KEY_VOICE_LANG = "voiceLanguageTag"
         const val KEY_SYSTEM_VOICE = "systemVoiceName"
         const val KEY_SYSTEM_ENGINE = "systemVoiceEngine"
+        const val KEY_CLOUD_PROVIDER = "cloudProvider"
+        const val KEY_CLOUD_KEY = "cloudApiKey"
+        const val KEY_CLOUD_REGION = "cloudRegion"
+        const val KEY_CLOUD_VOICE = "cloudVoice"
         const val KEY_TTS_ENGINE = "ttsEngine"
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"

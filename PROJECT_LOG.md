@@ -37,6 +37,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Arabic localization | ✅ Whole UI + RTL; completeness enforced by the compiler and by `StringsTest` |
 | Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
 | Studio | ✅ Builds and ships; extractor covered by 13 tests — **no page has ever been generated or rendered** |
+| Cloud voice (Azure / ElevenLabs) | ⚠️ Request building covered by 17 tests — **no request has ever been sent; no key exists here** |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -526,6 +527,52 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 9 — 2026-07-26 · the hosted voice, and two bugs it uncovered
+
+43. **A cloud voice, because it is the honest answer.** Asked for the most
+    natural Arabic voice available, and told the offline promise could go, the
+    answer is Azure Neural or ElevenLabs — nothing that runs on the phone is
+    close. `CloudTts` builds the request (pure, unit-tested: SSML escaping, the
+    signed-percentage rate, URL/headers, per-provider pre-flight validation),
+    `CloudTtsSynthesizer` sends it. Both providers are asked for **raw 24 kHz
+    PCM**, so no audio decoder was added to the app for this.
+
+    Six documented Azure Arabic voices — Saudi, Egyptian, Emirati — because
+    "Arabic" as one voice serves nobody. ElevenLabs takes a voice id from the
+    user's own account.
+
+    The cost is stated where the decision is made: **the text of every spoken
+    reply leaves the device.** Off by default, the user's own key, and the
+    privacy line sits above the fields rather than under them. The key field is
+    masked with a reveal, because a key you cannot see is a key you cannot check
+    for a bad paste. Setup mistakes are named — "enter the region", not a 401 —
+    and an HTTP failure carries the provider's own error body, so a wrong key, a
+    wrong region and a voice the account cannot use look different.
+
+    **Never sent a request.** There is no key in the sandbox. The escaping, URL
+    and body shape are tested; the account and the network are not.
+
+44. **The chosen speech engine was never the one that spoke.** `prepare()` with
+    no argument meant "the system default", so every internal call — speaking,
+    saving audio — tore down the engine the user picked in Settings and rebuilt
+    it as the default. The engine picker added last session therefore changed
+    the setting and nothing else. It now remembers what was asked for
+    explicitly, so the no-argument call reuses it.
+
+45. **Settings listed no voices until something had spoken.** Enumerating voices
+    reads a live `TextToSpeech`, and nothing had necessarily started one — so on
+    a fresh launch the picker said "no voices installed" on a phone full of
+    them, and after switching engines it showed the *old* engine's voices. The
+    screen now starts the engine and re-reads when it reports in.
+
+46. **PCM decoding covered.** `pcm16ToFloat` is new and load-bearing for the
+    cloud path: a truncated response drops its odd trailing byte instead of
+    reading past the end, and the round-trip through `floatToPcm16` is tested.
+
+47. **One exemption list, not two.** `StringsTest` kept its "same word in both
+    languages" set copied into two tests; the brand names Azure and ElevenLabs
+    made that drift visible. Hoisted to one property.
+
 ---
 
 ## 6. Known gaps
@@ -569,6 +616,7 @@ design choices):
   and `HtmlExtractTest` will catch a regression once markup samples are updated.
 
 **Not done**
+- The cloud voice has never sent a request — no key exists in the sandbox.
 - GGUF runs CPU-only; no GPU backend compiled into llama.cpp.
 - No conversation persistence — history dies with the process.
 - No multimodal input despite `ModelKind.MULTIMODAL` existing.

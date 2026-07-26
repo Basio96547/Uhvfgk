@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ondevicellm.audio.AudioPlayer
+import com.example.ondevicellm.audio.CloudTts
+import com.example.ondevicellm.audio.CloudTtsSynthesizer
 import com.example.ondevicellm.audio.ModelTtsSynthesizer
 import com.example.ondevicellm.audio.SpeechInput
 import com.example.ondevicellm.audio.SpeechOptions
@@ -512,6 +514,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Bumped once the speech engine has started, and again whenever it is
+     * restarted on a different engine.
+     *
+     * Enumerating voices is a plain read off a live `TextToSpeech`, so before
+     * one exists both lists below are empty — which looked to the user like a
+     * phone with no voices installed. Settings watches this and re-reads.
+     */
+    private val _ttsGeneration = MutableStateFlow(0)
+    val ttsGeneration: StateFlow<Int> = _ttsGeneration.asStateFlow()
+
+    /**
+     * Starts (or restarts) the chosen speech engine so its voices can be
+     * listed. Safe to call repeatedly: unchanged settings are a no-op inside.
+     */
+    fun prepareSystemTts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            systemTts.prepare(settingsStore.settings.value.systemVoiceEngine)
+            // Bumped even on failure, so the screen stops waiting on an engine
+            // that is never going to answer.
+            _ttsGeneration.update { it + 1 }
+        }
+    }
+
     /** Installed system voices, for the picker in Settings. */
     fun systemVoices(): List<com.example.ondevicellm.audio.VoiceOption> =
         systemTts.availableVoices()
@@ -666,8 +692,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
 
             val saved = when (current.ttsEngine) {
-                TtsEngine.SYSTEM -> systemTts.synthesizeToFile(text, options, target)
-                TtsEngine.MODEL -> {
+                // The system engine writes its own WAV; everything else hands
+                // back samples, which is the same file one step later.
+                TtsEngine.SYSTEM ->
+                    systemTts.prepare(current.systemVoiceEngine) &&
+                        systemTts.synthesizeToFile(text, options, target)
+
+                TtsEngine.MODEL, TtsEngine.CLOUD -> {
                     when (val result = resolveSynthesizer()?.speak(text, options)) {
                         is SynthesisResult.Pcm -> {
                             WavWriter.write(target, result.samples, result.sampleRateHz)
@@ -695,10 +726,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * model on demand. Null when MODEL is selected but no TTS model is set.
      */
     private suspend fun resolveSynthesizer(): SpeechSynthesizer? {
-        return when (settingsStore.settings.value.ttsEngine) {
+        val current = settingsStore.settings.value
+        return when (current.ttsEngine) {
             TtsEngine.SYSTEM -> systemTts.takeIf {
-                it.prepare(settingsStore.settings.value.systemVoiceEngine)
+                it.prepare(current.systemVoiceEngine)
             }
+
+            // Stateless — the service is the runtime — so it is rebuilt from
+            // settings each time rather than cached and invalidated.
+            TtsEngine.CLOUD -> CloudTtsSynthesizer(
+                provider = current.cloudProvider,
+                apiKey = current.cloudApiKey,
+                region = current.cloudRegion,
+                voice = current.cloudVoice,
+            ).takeIf { it.prepare() }
 
             TtsEngine.MODEL -> {
                 if (!ModelTtsSynthesizer.isRuntimeAvailable()) return null
@@ -725,6 +766,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun speechUnavailableReason(): String = when {
         settingsStore.settings.value.ttsEngine == TtsEngine.SYSTEM ->
             Localization.strings.ttsSystemUnavailable
+
+        // The cloud voice only fails this early when it has not been set up,
+        // so say which field is missing rather than "unavailable".
+        settingsStore.settings.value.ttsEngine == TtsEngine.CLOUD ->
+            settingsStore.settings.value.let { current ->
+                CloudTts.missingSetting(
+                    provider = current.cloudProvider,
+                    apiKey = current.cloudApiKey,
+                    region = current.cloudRegion,
+                    voice = current.cloudVoice,
+                    s = Localization.strings,
+                ) ?: Localization.strings.cloudRequestFailed
+            }
 
         !ModelTtsSynthesizer.isRuntimeAvailable() ->
             ModelTtsSynthesizer.RUNTIME_MISSING_MESSAGE

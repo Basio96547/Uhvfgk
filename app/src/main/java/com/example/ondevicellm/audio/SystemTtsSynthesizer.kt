@@ -28,9 +28,19 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
     /** Which engine package the live instance was created with, if any. */
     @Volatile
     private var activeEngine: String? = null
+    /**
+     * The engine the caller last asked for explicitly.
+     *
+     * Without this, the no-argument [prepare] means "the system default", so
+     * every internal call — speaking, saving to a file — would tear down the
+     * engine the user chose in Settings and rebuild it as the default. The
+     * chosen engine would then never actually be the one that speaks.
+     */
+    @Volatile
+    private var preferredEngine: String? = null
     private val utteranceCounter = AtomicLong(0)
 
-    override suspend fun prepare(): Boolean = prepare(null)
+    override suspend fun prepare(): Boolean = prepare(preferredEngine)
 
     /**
      * Starts the engine, optionally a specific one by package name.
@@ -41,6 +51,7 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
      * only ever a default.
      */
     suspend fun prepare(enginePackage: String?): Boolean {
+        preferredEngine = enginePackage
         if (ready && activeEngine == enginePackage) return true
         // Switching engines means a new instance; the old one holds the audio.
         if (ready) release()

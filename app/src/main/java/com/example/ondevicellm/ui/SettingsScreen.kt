@@ -28,17 +28,27 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
+import com.example.ondevicellm.audio.CloudTts
+import com.example.ondevicellm.audio.CloudTtsProvider
 import com.example.ondevicellm.audio.VoicePicker
 import com.example.ondevicellm.core.AppLanguage
+import com.example.ondevicellm.core.AppSettings
 import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.RoutingMode
@@ -230,7 +240,14 @@ fun SettingsScreen(
                 SoftDivider()
                 GroupLabel(s.speechEngineLabel)
 
-                val engines = remember { viewModel.systemVoiceEngines() }
+                // Listing voices reads a live TextToSpeech instance. Nothing
+                // has necessarily started one yet — and after the user picks a
+                // different engine the old one is still what would be read —
+                // so start it here and re-read when it reports in.
+                val generation by viewModel.ttsGeneration.collectAsStateWithLifecycle()
+                LaunchedEffect(settings.systemVoiceEngine) { viewModel.prepareSystemTts() }
+
+                val engines = remember(generation) { viewModel.systemVoiceEngines() }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
                         selected = settings.systemVoiceEngine == null,
@@ -266,7 +283,7 @@ fun SettingsScreen(
                 // Read once per composition of this card: enumerating voices
                 // touches the engine, and it cannot change while the screen is
                 // open anyway.
-                val voices = remember(settings.voiceLanguageTag, settings.systemVoiceEngine) {
+                val voices = remember(settings.voiceLanguageTag, generation) {
                     VoicePicker.candidatesFor(viewModel.systemVoices(), settings.voiceLanguageTag)
                 }
 
@@ -311,6 +328,11 @@ fun SettingsScreen(
                 SoftDivider()
             }
 
+            if (settings.ttsEngine == TtsEngine.CLOUD) {
+                CloudVoiceSettings(viewModel, settings, s)
+                SoftDivider()
+            }
+
             when (settings.ttsEngine) {
                 TtsEngine.SYSTEM -> Caption(s.systemEngineNote)
 
@@ -323,6 +345,10 @@ fun SettingsScreen(
 
                     else -> Caption(s.noVoiceModelNote, isWarning = true)
                 }
+
+                // Everything the cloud voice has to say is above, next to the
+                // fields it is about.
+                TtsEngine.CLOUD -> Unit
             }
 
             SoftDivider()
@@ -534,4 +560,143 @@ private fun SliderRow(
         }
         Slider(value = value, onValueChange = onChange, valueRange = range)
     }
+}
+
+/**
+ * The hosted-voice fields.
+ *
+ * Split out because this is the one section that sends anything off the
+ * device, and it should read as its own decision rather than as another row of
+ * chips: what it costs in privacy is stated first, above the fields, not in a
+ * footnote under them.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CloudVoiceSettings(
+    viewModel: ChatViewModel,
+    settings: AppSettings,
+    s: AppStrings,
+) {
+    SoftDivider()
+    GroupLabel(s.cloudTitle)
+    Caption(s.cloudPrivacy, isWarning = true)
+    Spacer(Modifier.height(Space.sm))
+
+    GroupLabel(s.cloudProvider)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        CloudTtsProvider.entries.forEach { provider ->
+            FilterChip(
+                selected = settings.cloudProvider == provider,
+                onClick = {
+                    viewModel.updateSettings {
+                        // The voice field means different things per provider —
+                        // a documented name for Azure, an account id for
+                        // ElevenLabs — so carrying one across is nonsense.
+                        it.copy(
+                            cloudProvider = provider,
+                            cloudVoice = if (provider == CloudTtsProvider.AZURE) {
+                                CloudTts.DEFAULT_AZURE_VOICE
+                            } else {
+                                ""
+                            },
+                        )
+                    }
+                },
+                label = { Text(provider.label(s)) },
+            )
+        }
+    }
+
+    Spacer(Modifier.height(Space.sm))
+
+    var keyVisible by rememberSaveable { mutableStateOf(false) }
+    OutlinedTextField(
+        value = settings.cloudApiKey,
+        onValueChange = { v -> viewModel.updateSettings { it.copy(cloudApiKey = v.trim()) } },
+        label = { Text(s.cloudApiKey) },
+        singleLine = true,
+        shape = MaterialTheme.shapes.small,
+        // Hidden by default because it is a secret on a screen anyone nearby
+        // can read, revealable because a key you cannot see is a key you
+        // cannot check for a bad paste.
+        visualTransformation = if (keyVisible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        trailingIcon = {
+            TextButton(onClick = { keyVisible = !keyVisible }) {
+                Text(if (keyVisible) s.cloudHideKey else s.cloudShowKey)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(Space.xs))
+    Caption(s.cloudKeyStorageNote)
+
+    Spacer(Modifier.height(Space.sm))
+
+    when (settings.cloudProvider) {
+        CloudTtsProvider.AZURE -> {
+            OutlinedTextField(
+                value = settings.cloudRegion,
+                onValueChange = { v ->
+                    viewModel.updateSettings { it.copy(cloudRegion = v.trim()) }
+                },
+                label = { Text(s.cloudRegion) },
+                placeholder = { Text("westeurope, eastus, …") },
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(Space.sm))
+            GroupLabel(s.cloudVoice)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CloudTts.AZURE_ARABIC_VOICES.forEach { voice ->
+                    FilterChip(
+                        selected = settings.cloudVoice == voice,
+                        onClick = { viewModel.updateSettings { it.copy(cloudVoice = voice) } },
+                        // The full name is noise; the dialect and the given
+                        // name are what anyone actually chooses between.
+                        label = { Text(azureVoiceLabel(voice)) },
+                    )
+                }
+            }
+        }
+
+        CloudTtsProvider.ELEVENLABS -> {
+            OutlinedTextField(
+                value = settings.cloudVoice,
+                onValueChange = { v ->
+                    viewModel.updateSettings { it.copy(cloudVoice = v.trim()) }
+                },
+                label = { Text(s.cloudVoice) },
+                placeholder = { Text(s.cloudVoiceIdHint) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    val missing = CloudTts.missingSetting(
+        provider = settings.cloudProvider,
+        apiKey = settings.cloudApiKey,
+        region = settings.cloudRegion,
+        voice = settings.cloudVoice,
+        s = s,
+    )
+    if (missing != null) {
+        Spacer(Modifier.height(Space.xs))
+        Caption(missing, isWarning = true)
+    }
+}
+
+/** `ar-SA-HamedNeural` → `ar-SA · Hamed`. */
+private fun azureVoiceLabel(voice: String): String {
+    val parts = voice.split('-')
+    if (parts.size < 3) return voice
+    val given = parts[2].removeSuffix("Neural")
+    return "${parts[0]}-${parts[1]} · $given"
 }
