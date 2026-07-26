@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.core.TtsEngine
+import com.example.ondevicellm.web.SearchDepth
 import com.example.ondevicellm.ui.theme.Space
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -104,6 +105,33 @@ fun SettingsScreen(
                 },
                 isWarning = settings.webSearchEnabled,
             )
+
+            if (settings.webSearchEnabled) {
+                SoftDivider()
+                GroupLabel("Depth")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SearchDepth.entries.forEach { depth ->
+                        FilterChip(
+                            selected = settings.searchDepth == depth,
+                            onClick = {
+                                viewModel.updateSettings { it.copy(searchDepth = depth) }
+                            },
+                            label = { Text(depth.label) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(Space.sm))
+                Caption(
+                    when (settings.searchDepth) {
+                        SearchDepth.QUICK ->
+                            "Uses result snippets. One round of requests, fastest."
+                        SearchDepth.DEEP ->
+                            "Opens the top three results and reads them, so answers " +
+                                "come from page content rather than a two-line " +
+                                "snippet. Slower and uses more data."
+                    }
+                )
+            }
         }
 
         SectionCard(

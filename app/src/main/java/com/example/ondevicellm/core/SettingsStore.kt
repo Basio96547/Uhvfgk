@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.ondevicellm.web.SearchDepth
 import java.util.Locale
 
 /** Which engine turns replies into speech. */
@@ -41,6 +42,8 @@ data class AppSettings(
      * question to third-party servers. The user opts in explicitly.
      */
     val webSearchEnabled: Boolean = false,
+    /** Snippets only, or open the top pages and read them. */
+    val searchDepth: SearchDepth = SearchDepth.QUICK,
 )
 
 /** Small SharedPreferences-backed settings store exposed as a StateFlow. */
@@ -64,6 +67,9 @@ class SettingsStore(context: Context) {
         speakingRate = prefs.getFloat(KEY_SPEAKING_RATE, 1.0f),
         pitch = prefs.getFloat(KEY_PITCH, 1.0f),
         webSearchEnabled = prefs.getBoolean(KEY_WEB_SEARCH, false),
+        searchDepth = SearchDepth.entries
+            .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) }
+            ?: SearchDepth.QUICK,
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -79,6 +85,7 @@ class SettingsStore(context: Context) {
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
             .putFloat(KEY_PITCH, updated.pitch)
             .putBoolean(KEY_WEB_SEARCH, updated.webSearchEnabled)
+            .putString(KEY_SEARCH_DEPTH, updated.searchDepth.name)
             .apply()
     }
 
@@ -92,5 +99,6 @@ class SettingsStore(context: Context) {
         const val KEY_SPEAKING_RATE = "speakingRate"
         const val KEY_PITCH = "pitch"
         const val KEY_WEB_SEARCH = "webSearchEnabled"
+        const val KEY_SEARCH_DEPTH = "searchDepth"
     }
 }

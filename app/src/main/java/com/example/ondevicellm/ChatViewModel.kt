@@ -31,6 +31,7 @@ import com.example.ondevicellm.model.ModelRegistry
 import com.example.ondevicellm.model.ModelSpec
 import com.example.ondevicellm.web.SearchQuery
 import com.example.ondevicellm.web.SearchSource
+import com.example.ondevicellm.web.SearchDepth
 import com.example.ondevicellm.web.WebSearchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -303,9 +304,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
             var grounding = ""
             if (current.webSearchEnabled) {
-                _uiState.update { it.copy(searchStatus = "Searching the web…") }
+                _uiState.update {
+                    it.copy(
+                        searchStatus = if (current.searchDepth == SearchDepth.DEEP) {
+                            "Searching and reading pages…"
+                        } else {
+                            "Searching the web…"
+                        }
+                    )
+                }
                 val outcome = try {
-                    webSearch.search(prompt, current.voiceLanguageTag)
+                    webSearch.search(prompt, current.voiceLanguageTag, current.searchDepth)
                 } catch (e: Throwable) {
                     ErrorLog.report("Web search", "Search failed", e)
                     null

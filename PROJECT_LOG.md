@@ -28,7 +28,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Unit tests | ✅ Passing in CI |
 | MediaPipe `.task` path | ✅ Builds — **never run against a real model** |
 | llama.cpp GGUF path | ⚠️ Native build fixed, **rebuild not yet confirmed green** |
-| Web search | ⚠️ Compiles, logic tested — **never hit a live endpoint** |
+| Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
 | Diagnostics/crash log | ⚠️ Compiles — **never triggered in anger** |
 
@@ -156,6 +156,12 @@ platform APIs, so grounding can't conflict with the inference runtimes.
     dialog, header badge; replaced silent catches. Added a **stop-generation**
     control that was missing entirely.
 12. **This log.**
+13. **Real web search**: the Instant Answer API returns definitions only, so
+    most questions got nothing. Added `HtmlExtract` — a tested parser for
+    DuckDuckGo's HTML endpoint (organic results, click-redirect unwrapping, ad
+    filtering, entity decoding) plus readable-text extraction so `SearchDepth.DEEP`
+    can open the top three pages and ground answers in real content. Globe
+    toggle moved into the input bar; depth chips in Settings.
 
 ---
 
@@ -172,6 +178,11 @@ platform APIs, so grounding can't conflict with the inference runtimes.
   compiles, but no model has been loaded through it.
 - `ModelTtsSynthesizer` assumes a VITS/Piper tensor layout; other exports are
   reported, not adapted.
+
+**Fragile (continued)**
+- Search scrapes HTML. DuckDuckGo can change its markup at any time; the parser
+  accepts two class-name shapes and fails to zero results rather than crashing,
+  and `HtmlExtractTest` will catch a regression once markup samples are updated.
 
 **Not done**
 - GGUF runs CPU-only; no GPU backend compiled into llama.cpp.
@@ -201,4 +212,4 @@ a harness. This caught the `PcmAudio` brace bug that review missed.
 **Current unit test coverage**: thinking-tag streaming, PCM conversion, WAV
 header (byte-exact vs RIFF), tokenizer, model-kind guessing, format detection
 (including a file that only *claims* to be GGUF), thermal thread budgets,
-search URL/context building.
+search URL/context building, and DuckDuckGo HTML parsing.

@@ -251,6 +251,10 @@ fun ChatScreen(
             enabled = state.status == ModelStatus.READY && !state.isBusy,
             isListening = state.isListening,
             voiceDraft = state.voiceDraft,
+            searchEnabled = settings.webSearchEnabled,
+            onToggleSearch = {
+                viewModel.updateSettings { it.copy(webSearchEnabled = !it.webSearchEnabled) }
+            },
         )
     }
 }
@@ -619,6 +623,8 @@ private fun MessageInput(
     enabled: Boolean,
     isListening: Boolean,
     voiceDraft: String,
+    searchEnabled: Boolean,
+    onToggleSearch: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -648,6 +654,10 @@ private fun MessageInput(
                 .padding(Space.xs),
             verticalAlignment = Alignment.Bottom,
         ) {
+            // Web grounding is a per-question decision, so it belongs next to
+            // the question rather than buried in settings.
+            SearchToggle(enabled = searchEnabled, onClick = onToggleSearch)
+
             if (viewModel.speechAvailable) {
                 MicButton(
                     isListening = isListening,
@@ -716,6 +726,32 @@ private fun BareTextField(
             ),
             cursorBrush = Gradients.accent,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun SearchToggle(enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(
+                if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.Language,
+            contentDescription = if (enabled) "Web search on" else "Web search off",
+            modifier = Modifier.size(20.dp),
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
     }
 }
