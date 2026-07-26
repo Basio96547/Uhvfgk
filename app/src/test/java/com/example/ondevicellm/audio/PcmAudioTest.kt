@@ -1,0 +1,166 @@
+package com.example.ondevicellm.audio
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.ByteArrayOutputStream
+
+class PcmAudioTest {
+
+    @Test
+    fun `converts float samples to 16-bit PCM`() {
+        val pcm = PcmAudio.floatToPcm16(floatArrayOf(0f, 1f, -1f, 0.5f))
+        assertEquals(0.toShort(), pcm[0])
+        assertEquals(Short.MAX_VALUE, pcm[1])
+        assertEquals((-32767).toShort(), pcm[2])
+        assertEquals(16383.toShort(), pcm[3])
+    }
+
+    @Test
+    fun `clips out-of-range samples instead of wrapping`() {
+        // Wrapping would flip the sign and produce a loud click.
+        val pcm = PcmAudio.floatToPcm16(floatArrayOf(5f, -5f))
+        assertEquals(Short.MAX_VALUE, pcm[0])
+        assertEquals((-32767).toShort(), pcm[1])
+    }
+
+    @Test
+    fun `normalize scales the peak to the target and preserves ratios`() {
+        val out = PcmAudio.normalize(floatArrayOf(0.1f, -0.05f), target = 1.0f)
+        assertEquals(1.0f, out[0], 1e-5f)
+        assertEquals(-0.5f, out[1], 1e-5f)
+    }
+
+    @Test
+    fun `normalize leaves silence untouched`() {
+        val silent = floatArrayOf(0f, 0f)
+        assertSame(silent, PcmAudio.normalize(silent))
+    }
+
+    @Test
+    fun `resample changes length proportionally`() {
+        assertEquals(2, PcmAudio.resample(floatArrayOf(1f, 2f, 3f, 4f), 8000, 4000).size)
+        assertEquals(4, PcmAudio.resample(floatArrayOf(1f, 2f), 4000, 8000).size)
+    }
+
+    @Test
+    fun `resample at the same rate is a no-op`() {
+        val source = floatArrayOf(1f, 2f)
+        assertSame(source, PcmAudio.resample(source, 16000, 16000))
+    }
+
+    @Test
+    fun `duration handles a zero sample rate`() {
+        assertEquals(1000L, PcmAudio.durationMs(22050, 22050))
+        assertEquals(0L, PcmAudio.durationMs(100, 0))
+    }
+}
+
+class WavWriterTest {
+
+    private fun le16(bytes: ByteArray, offset: Int) =
+        (bytes[offset].toInt() and 0xFF) or ((bytes[offset + 1].toInt() and 0xFF) shl 8)
+
+    private fun le32(bytes: ByteArray, offset: Int) =
+        (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 3].toInt() and 0xFF) shl 24)
+
+    private fun ascii(bytes: ByteArray, offset: Int, length: Int) =
+        String(bytes, offset, length, Charsets.US_ASCII)
+
+    @Test
+    fun `writes a well-formed mono 16-bit RIFF header`() {
+        val out = ByteArrayOutputStream()
+        WavWriter.write(out, shortArrayOf(0, 100, -100, 32767), 22050)
+        val bytes = out.toByteArray()
+
+        assertEquals(44 + 8, bytes.size)
+        assertEquals("RIFF", ascii(bytes, 0, 4))
+        assertEquals(36 + 8, le32(bytes, 4))
+        assertEquals("WAVE", ascii(bytes, 8, 4))
+        assertEquals("fmt ", ascii(bytes, 12, 4))
+        assertEquals(16, le32(bytes, 16))
+        assertEquals(1, le16(bytes, 20))          // PCM
+        assertEquals(1, le16(bytes, 22))          // mono
+        assertEquals(22050, le32(bytes, 24))
+        assertEquals(22050 * 2, le32(bytes, 28))  // byte rate
+        assertEquals(2, le16(bytes, 32))          // block align
+        assertEquals(16, le16(bytes, 34))         // bits per sample
+        assertEquals("data", ascii(bytes, 36, 4))
+        assertEquals(8, le32(bytes, 40))
+    }
+
+    @Test
+    fun `writes samples little-endian`() {
+        val out = ByteArrayOutputStream()
+        WavWriter.write(out, shortArrayOf(0, 100, -100, 32767), 22050)
+        val bytes = out.toByteArray()
+
+        assertEquals(100, le16(bytes, 46))
+        assertEquals(32767, le16(bytes, 50))
+    }
+
+    @Test
+    fun `reports the resulting file size`() {
+        assertEquals(44 + 200, WavWriter.fileSizeBytes(100))
+    }
+}
+
+class CharacterTokenizerTest {
+
+    @Test
+    fun `maps characters to ids`() {
+        val tokenizer = CharacterTokenizer(mapOf('a' to 5, 'b' to 6, ' ' to 7))
+        assertEquals(listOf(5, 7, 6), tokenizer.encode("a b").toList())
+    }
+
+    @Test
+    fun `drops characters outside the vocabulary`() {
+        // Mapping to a wrong id would make the model mispronounce; skipping is safer.
+        val tokenizer = CharacterTokenizer(mapOf('a' to 5, 'b' to 6))
+        assertEquals(listOf(5, 6), tokenizer.encode("a@#b").toList())
+    }
+
+    @Test
+    fun `falls back to the lowercase form`() {
+        val tokenizer = CharacterTokenizer(mapOf('a' to 5))
+        assertEquals(listOf(5), tokenizer.encode("A").toList())
+    }
+
+    @Test
+    fun `wraps output in bos and eos when configured`() {
+        val tokenizer = CharacterTokenizer(mapOf('a' to 5, 'b' to 6), bosId = 1, eosId = 2)
+        assertEquals(listOf(1, 5, 6, 2), tokenizer.encode("ab").toList())
+    }
+
+    @Test
+    fun `interleaves the pad id between characters`() {
+        val tokenizer = CharacterTokenizer(mapOf('a' to 5, 'b' to 6), interleaveId = 0)
+        assertEquals(listOf(5, 0, 6), tokenizer.encode("ab").toList())
+    }
+
+    @Test
+    fun `fallback vocabulary covers latin and arabic`() {
+        val tokenizer = CharacterTokenizer.fallback()
+        assertEquals(5, tokenizer.encode("hello").size)
+        assertTrue(tokenizer.encode("مرحبا").isNotEmpty())
+    }
+
+    @Test
+    fun `derives the sidecar path next to the model`() {
+        val sidecar = CharacterTokenizer.sidecarFor("/models/voice.tflite")
+        assertEquals("voice.tokens.json", sidecar.name)
+        assertEquals("/models", sidecar.parent)
+    }
+
+    @Test
+    fun `sidecar strips only the final extension`() {
+        assertEquals(
+            "my.voice.v2.tokens.json",
+            CharacterTokenizer.sidecarFor("/models/my.voice.v2.tflite").name,
+        )
+    }
+}

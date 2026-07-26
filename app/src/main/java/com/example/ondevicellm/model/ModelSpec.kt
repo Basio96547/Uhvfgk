@@ -7,8 +7,11 @@ enum class ModelKind {
     /** Text generation / chat. */
     TEXT,
 
-    /** Speech-to-text (ASR). Used to transcribe voice input. */
-    AUDIO,
+    /** Speech-to-text. Transcribes voice input. */
+    ASR,
+
+    /** Text-to-speech. Generates spoken audio from replies. */
+    TTS,
 
     /** Text + image (and, for some builds, audio) in one model. */
     MULTIMODAL,
@@ -17,9 +20,13 @@ enum class ModelKind {
     val label: String
         get() = when (this) {
             TEXT -> "Text"
-            AUDIO -> "Audio / ASR"
+            ASR -> "Speech → Text"
+            TTS -> "Text → Speech"
             MULTIMODAL -> "Multimodal"
         }
+
+    /** Kinds that produce chat replies, as opposed to handling audio. */
+    val isConversational: Boolean get() = this == TEXT || this == MULTIMODAL
 }
 
 /** Which accelerator the user wants this model to run on. */
@@ -66,6 +73,11 @@ data class ModelSpec(
     /** True when the file lives in app-private storage and we may delete it. */
     val managed: Boolean = false,
     val sizeBytes: Long = 0L,
+    // ---- Text-to-speech settings (ModelKind.TTS only) ----
+    /** Native output rate of the TTS model. Common: 16000, 22050, 24000. */
+    val ttsSampleRateHz: Int = 22_050,
+    /** Voice index for multi-speaker TTS models. */
+    val ttsSpeakerId: Int = 0,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -81,6 +93,8 @@ data class ModelSpec(
         put("thinkingBudgetChars", thinkingBudgetChars)
         put("managed", managed)
         put("sizeBytes", sizeBytes)
+        put("ttsSampleRateHz", ttsSampleRateHz)
+        put("ttsSpeakerId", ttsSpeakerId)
     }
 
     companion object {
@@ -88,7 +102,7 @@ data class ModelSpec(
             id = json.getString("id"),
             displayName = json.optString("displayName", "Model"),
             path = json.getString("path"),
-            kind = enumOrDefault(json.optString("kind"), ModelKind.TEXT),
+            kind = parseKind(json.optString("kind")),
             backend = enumOrDefault(json.optString("backend"), BackendPref.AUTO),
             maxTokens = json.optInt("maxTokens", 1024),
             topK = json.optInt("topK", 40),
@@ -98,7 +112,18 @@ data class ModelSpec(
             thinkingBudgetChars = json.optInt("thinkingBudgetChars", 0),
             managed = json.optBoolean("managed", false),
             sizeBytes = json.optLong("sizeBytes", 0L),
+            ttsSampleRateHz = json.optInt("ttsSampleRateHz", 22_050),
+            ttsSpeakerId = json.optInt("ttsSpeakerId", 0),
         )
+
+        /**
+         * Older builds stored speech-to-text models as `AUDIO`; map that onto
+         * [ModelKind.ASR] so existing registries keep working.
+         */
+        private fun parseKind(name: String?): ModelKind = when (name) {
+            "AUDIO" -> ModelKind.ASR
+            else -> enumOrDefault(name, ModelKind.TEXT)
+        }
 
         private inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default

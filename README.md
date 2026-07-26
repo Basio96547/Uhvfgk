@@ -4,7 +4,7 @@ An Android app that runs language models **fully on-device** — no internet, no
 API keys, no data leaving the phone. Built around Google's
 [MediaPipe LLM Inference API](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android),
 with a model manager, hardware-aware backend selection, reasoning ("thinking")
-support, and voice input.
+support, and both voice input and voice output.
 
 Tuned for high-end Qualcomm devices such as the **Galaxy S25 Ultra
 (Snapdragon 8 Elite)**, but runs on any arm64 Android 7.0+ device.
@@ -16,17 +16,20 @@ Tuned for high-end Qualcomm devices such as the **Galaxy S25 Ultra
 | 💬 **Chat** | Streaming responses, fully offline |
 | 🧠 **Thinking** | Detects `<think>…</think>` reasoning and shows it in a collapsible block |
 | 🎙️ **Voice input** | On-device speech-to-text, editable before sending |
+| 🔊 **Voice output** | Speak replies with the system engine **or your own TTS model**; save as WAV |
 | 📦 **Model manager** | Add, configure, switch and delete models at runtime |
 | ⚙️ **Backend control** | Per-model CPU / GPU / NPU / Auto selection |
 | 📊 **Device screen** | SoC, NPU runtime detection, RAM **and RAM Plus** reporting |
 
 ## Screens
 
-- **Chat** — conversation, reasoning traces, mic input, active-backend banner.
+- **Chat** — conversation, reasoning traces, mic input, per-reply speak/save
+  buttons, active-backend banner.
 - **Models** — add models (file picker, path, or folder scan), edit per-model
-  settings, load/delete.
+  settings, load/delete. Chat, ASR and TTS models each get their own slot.
 - **Device** — hardware, accelerators, and live memory including extended memory.
-- **Settings** — system prompt, thinking toggles, voice language.
+- **Settings** — reasoning, speech output engine/speed/pitch, voice language,
+  system prompt.
 
 ---
 
@@ -108,21 +111,71 @@ Three ways, all on the **Models** screen:
    ```
 3. **Scan** — auto-discovers bundles in `/data/local/tmp/llm` and `Downloads`.
 
-Per model you can set: type (Text / Audio / Multimodal), backend, max tokens,
-temperature, top-K, and whether it emits reasoning.
+Per model you can set its type (Text / Speech → Text / Text → Speech /
+Multimodal). Chat models add backend, max tokens, temperature, top-K and a
+reasoning flag; TTS models add sample rate and speaker id.
+
+The type is guessed from the filename when a model is added (`whisper-*` → ASR,
+`kokoro-*`/`piper-*`/`vits-*` → TTS, `*-3n`/`*-vl` → multimodal) and is always
+editable.
 
 ---
 
-## Voice input
+## Voice input (speech → text)
 
 Uses Android's speech recognizer with `EXTRA_PREFER_OFFLINE`, so with an offline
 language pack installed transcription stays on-device. Results land in the text
 field so you can edit before sending. Set the language tag (`ar-SA`, `en-US`, …)
 in Settings.
 
-For a fully self-contained ASR model instead, register an **Audio** model on the
-Models screen and implement the `AudioTranscriber` interface in
+For a fully self-contained ASR model instead, register a **Speech → Text** model
+on the Models screen and implement the `AudioTranscriber` interface in
 `audio/SpeechInput.kt`.
+
+---
+
+## Voice output (text → speech)
+
+Every reply gets a 🔊 button; there is also **Speak replies automatically** in
+Settings. Two engines:
+
+**System engine (default).** Android's built-in TTS. Works with no extra setup
+and stays offline once a voice pack is installed. Honours speed and pitch.
+
+**Your own TTS model.** Add a model on the Models screen, set its type to
+**Text → Speech**, then pick *My TTS model* in Settings. Audio is generated with
+LiteRT, normalized, and played through `AudioTrack`.
+
+### What a TTS model must look like
+
+`ModelTtsSynthesizer` expects the common VITS/Piper-style export:
+
+| Tensor | Type | Shape | Meaning |
+|---|---|---|---|
+| input 0 | `int32` | `[1, T]` | token ids |
+| input 1..n *(optional)* | `int32` / `float32` | 1 element | speaker id / speaking rate |
+| output 0 | `float32` | `[1, N]` or `[N]` | mono waveform in ~[-1, 1] |
+
+Two per-model settings matter:
+
+- **Sample rate** — must match what the model was trained to output, or speech
+  plays too fast or too slow. Guessed from the filename for known families
+  (Kokoro 24 kHz, Piper/VITS 22.05 kHz, SpeechT5 16 kHz); editable under *Tune*.
+- **Vocabulary** — put a sidecar JSON next to the model
+  (`voice.tflite` → `voice.tokens.json`):
+  ```json
+  { "pad": 0, "bos": 1, "eos": 2, "vocab": { "a": 3, "b": 4, " ": 5 } }
+  ```
+  Without it the app falls back to a generated Latin+Arabic vocabulary, which
+  only sounds right if it happens to match the model.
+
+If a model's signature doesn't match, the app says so and dumps the actual
+tensor layout instead of playing noise.
+
+### Saving audio
+
+The ⬇ button next to a reply renders it to a WAV file in the app's external
+files directory and shows the path.
 
 ---
 
@@ -154,8 +207,15 @@ app/src/main/java/com/example/ondevicellm/
 │   ├── InferenceEngine.kt    MediaPipe wrapper, memory guard, streaming
 │   ├── BackendResolver.kt    CPU/GPU/NPU resolution + NpuRuntime hook
 │   └── ThinkingStreamParser.kt  Splits <think> reasoning from the answer
-├── audio/SpeechInput.kt      On-device speech-to-text + AudioTranscriber hook
-└── ui/                       Compose screens
+├── audio/
+│   ├── SpeechInput.kt        Speech-to-text + AudioTranscriber hook
+│   ├── SpeechSynthesizer.kt  Text-to-speech contract (options, results)
+│   ├── SystemTtsSynthesizer.kt  Android TTS engine
+│   ├── ModelTtsSynthesizer.kt   LiteRT-backed TTS model runner
+│   ├── TtsTokenizer.kt       Vocabulary handling + sidecar loading
+│   ├── AudioPlayer.kt        AudioTrack PCM playback
+│   └── PcmAudio.kt           PCM conversion, normalize, resample, WAV writer
+└── ui/                       Compose screens + shared components
 ```
 
 ## Troubleshooting
@@ -168,12 +228,24 @@ app/src/main/java/com/example/ondevicellm/
 | Runtime rejects the model | Ensure it's a MediaPipe `.task` bundle, and try the CPU backend |
 | Very slow generation | Expected for larger models; try a 1B int4 build on GPU |
 | No reasoning shown | Enable *Emits reasoning* for that model, and *Show reasoning* in Settings |
+| Speech plays too fast/slow | The model's **sample rate** is wrong — fix it under *Tune* |
+| TTS output is gibberish | Supply a `<name>.tokens.json` vocabulary next to the model |
+| "signature doesn't match" | The model isn't a VITS/Piper-style export; adapt `ModelTtsSynthesizer` |
+| No sound at all | Check the engine in Settings; *My TTS model* needs a TTS model selected |
 
 ## Notes on verification
 
-The `ThinkingStreamParser` (the trickiest logic — tags split across streaming
-chunks) is covered by unit tests in
-`app/src/test/java/com/example/ondevicellm/llm/ThinkingStreamParserTest.kt`.
+The logic that is easiest to get subtly wrong is covered by unit tests:
+
+- `ThinkingStreamParserTest` — `<think>` tags split across streaming chunks.
+- `PcmAudioTest` / `WavWriterTest` — PCM clipping and a byte-exact RIFF header.
+- `CharacterTokenizerTest` — vocabulary mapping and sidecar path derivation.
+- `ModelHeuristicsTest` — model-type guessing, including names that match both
+  the ASR and TTS families.
+
+```bash
+./gradlew testDebugUnitTest
+```
 
 ## License
 

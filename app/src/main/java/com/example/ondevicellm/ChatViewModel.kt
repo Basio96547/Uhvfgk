@@ -4,12 +4,20 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ondevicellm.audio.AudioPlayer
+import com.example.ondevicellm.audio.ModelTtsSynthesizer
 import com.example.ondevicellm.audio.SpeechInput
+import com.example.ondevicellm.audio.SpeechOptions
+import com.example.ondevicellm.audio.SpeechSynthesizer
+import com.example.ondevicellm.audio.SynthesisResult
+import com.example.ondevicellm.audio.SystemTtsSynthesizer
+import com.example.ondevicellm.audio.WavWriter
 import com.example.ondevicellm.core.AppSettings
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.MemorySnapshot
 import com.example.ondevicellm.core.SettingsStore
+import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.InferenceEngine
 import com.example.ondevicellm.llm.ResolvedBackend
 import com.example.ondevicellm.model.ModelImporter
@@ -48,6 +56,9 @@ data class ChatUiState(
     val backend: ResolvedBackend? = null,
     val isListening: Boolean = false,
     val voiceDraft: String = "",
+    /** Id of the message currently being spoken, if any. */
+    val speakingMessageId: Long? = null,
+    val isSynthesizing: Boolean = false,
     val importState: ImportState? = null,
     val notice: String? = null,
 )
@@ -58,6 +69,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val importer = ModelImporter(app, registry)
     private val settingsStore = SettingsStore(app)
     private val speech = SpeechInput(app)
+    private val audioPlayer = AudioPlayer()
+    private val systemTts = SystemTtsSynthesizer(app)
+    private var modelTts: ModelTtsSynthesizer? = null
 
     val settings: StateFlow<AppSettings> = settingsStore.settings
     val models: StateFlow<List<ModelSpec>> = registry.models
@@ -74,6 +88,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var engine: InferenceEngine? = null
     private var loadJob: Job? = null
     private var importJob: Job? = null
+    private var speakJob: Job? = null
     private var nextId = 0L
 
     val speechAvailable: Boolean get() = speech.isAvailable
@@ -145,7 +160,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.update {
                     it.copy(importState = null, notice = "Added \"${spec.displayName}\".")
                 }
-                if (spec.kind != ModelKind.AUDIO && registry.selectedTextModel?.id == spec.id) {
+                if (spec.kind.isConversational && registry.selectedTextModel?.id == spec.id) {
                     loadModel(spec)
                 }
             } catch (e: Throwable) {
@@ -266,7 +281,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             state.copy(messages = messages, isBusy = if (done) false else state.isBusy)
         }
-        if (done) refreshMemory()
+        if (done) {
+            refreshMemory()
+            if (settingsStore.settings.value.autoSpeakReplies) {
+                val reply = _uiState.value.messages.firstOrNull { it.id == id }
+                if (reply != null && reply.text.isNotBlank()) speak(id, reply.text)
+            }
+        }
     }
 
     fun toggleThinkingExpanded(id: Long) {
@@ -317,6 +338,161 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.update { it.copy(isListening = false) }
     }
 
+    // --------------------------------------------------------- speech output
+
+    /**
+     * Speaks [message]'s text. Tapping the same message again stops playback.
+     */
+    fun toggleSpeak(messageId: Long) {
+        if (_uiState.value.speakingMessageId == messageId) {
+            stopSpeaking()
+            return
+        }
+
+        val text = _uiState.value.messages
+            .firstOrNull { it.id == messageId }
+            ?.text
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+
+        speak(messageId, text)
+    }
+
+    private fun speak(messageId: Long, text: String) {
+        speakJob?.cancel()
+        stopSpeaking()
+
+        speakJob = viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update {
+                it.copy(speakingMessageId = messageId, isSynthesizing = true)
+            }
+
+            val synthesizer = resolveSynthesizer()
+            if (synthesizer == null) {
+                _uiState.update {
+                    it.copy(
+                        speakingMessageId = null,
+                        isSynthesizing = false,
+                        notice = "No TTS model selected. Add one on the Models screen, " +
+                            "or switch to the system engine in Settings.",
+                    )
+                }
+                return@launch
+            }
+
+            val current = settingsStore.settings.value
+            val options = SpeechOptions(
+                languageTag = current.voiceLanguageTag,
+                speakingRate = current.speakingRate,
+                pitch = current.pitch,
+                speakerId = registry.selectedTtsModel?.ttsSpeakerId ?: 0,
+            )
+
+            when (val result = synthesizer.speak(text, options)) {
+                is SynthesisResult.Pcm -> {
+                    _uiState.update { it.copy(isSynthesizing = false) }
+                    runCatching { audioPlayer.play(result.samples, result.sampleRateHz) }
+                        .onFailure { error ->
+                            _uiState.update { it.copy(notice = error.message) }
+                        }
+                }
+
+                is SynthesisResult.PlayedDirectly -> Unit
+
+                is SynthesisResult.Failed -> _uiState.update {
+                    it.copy(notice = result.message)
+                }
+            }
+
+            _uiState.update { it.copy(speakingMessageId = null, isSynthesizing = false) }
+        }
+    }
+
+    fun stopSpeaking() {
+        speakJob?.cancel()
+        audioPlayer.stop()
+        systemTts.stop()
+        modelTts?.stop()
+        _uiState.update { it.copy(speakingMessageId = null, isSynthesizing = false) }
+    }
+
+    /**
+     * Renders a reply to a WAV file in the app's external files dir so it can be
+     * shared or inspected.
+     */
+    fun saveMessageAudio(messageId: Long) {
+        val text = _uiState.value.messages
+            .firstOrNull { it.id == messageId }
+            ?.text
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val dir = java.io.File(app.getExternalFilesDir(null), "speech").apply { mkdirs() }
+            val target = java.io.File(dir, "reply-$messageId.wav")
+
+            val current = settingsStore.settings.value
+            val options = SpeechOptions(
+                languageTag = current.voiceLanguageTag,
+                speakingRate = current.speakingRate,
+                pitch = current.pitch,
+                speakerId = registry.selectedTtsModel?.ttsSpeakerId ?: 0,
+            )
+
+            val saved = when (current.ttsEngine) {
+                TtsEngine.SYSTEM -> systemTts.synthesizeToFile(text, options, target)
+                TtsEngine.MODEL -> {
+                    when (val result = resolveSynthesizer()?.speak(text, options)) {
+                        is SynthesisResult.Pcm -> {
+                            WavWriter.write(target, result.samples, result.sampleRateHz)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    notice = if (saved) "Saved to ${target.absolutePath}"
+                    else "Could not save audio."
+                )
+            }
+        }
+    }
+
+    /**
+     * Returns the synthesizer for the current settings, loading the user's TTS
+     * model on demand. Null when MODEL is selected but no TTS model is set.
+     */
+    private suspend fun resolveSynthesizer(): SpeechSynthesizer? {
+        return when (settingsStore.settings.value.ttsEngine) {
+            TtsEngine.SYSTEM -> systemTts.takeIf { it.prepare() }
+
+            TtsEngine.MODEL -> {
+                val spec = registry.selectedTtsModel ?: return null
+                // Reuse the loaded interpreter unless the user switched models
+                // or changed settings that affect synthesis.
+                val existing = modelTts
+                if (existing != null && existing.spec == spec) {
+                    return existing.takeIf { it.prepare() }
+                }
+                existing?.release()
+                val created = ModelTtsSynthesizer(spec)
+                modelTts = created
+                if (created.prepare()) created else null
+            }
+        }
+    }
+
+    /** True when speech output can work right now with the current settings. */
+    val canSpeak: Boolean
+        get() = when (settingsStore.settings.value.ttsEngine) {
+            TtsEngine.SYSTEM -> true
+            TtsEngine.MODEL -> registry.selectedTtsModel != null
+        }
+
     // -------------------------------------------------------------- settings
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = settingsStore.update(transform)
@@ -337,6 +513,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         super.onCleared()
         speech.release()
+        audioPlayer.release()
+        systemTts.release()
+        modelTts?.release()
+        modelTts = null
         engine?.close()
         engine = null
     }

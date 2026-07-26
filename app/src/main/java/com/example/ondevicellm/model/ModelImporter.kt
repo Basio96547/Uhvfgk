@@ -74,6 +74,7 @@ class ModelImporter(
             supportsThinking = guessThinkingFrom(name),
             managed = true,
             sizeBytes = target.length(),
+            ttsSampleRateHz = ModelHeuristics.guessTtsSampleRate(name),
         )
         registry.add(spec)
         spec
@@ -96,6 +97,7 @@ class ModelImporter(
             supportsThinking = guessThinkingFrom(file.name),
             managed = false,
             sizeBytes = file.length(),
+            ttsSampleRateHz = ModelHeuristics.guessTtsSampleRate(file.name),
         )
         registry.add(spec)
         return spec
@@ -136,23 +138,8 @@ class ModelImporter(
     private fun freeSpaceBytes(): Long = registry.managedDir.usableSpace
 
     private companion object {
-        fun guessKindFrom(name: String): ModelKind {
-            val n = name.lowercase()
-            return when {
-                listOf("whisper", "asr", "speech", "wav2vec", "moonshine")
-                    .any { n.contains(it) } -> ModelKind.AUDIO
+        fun guessKindFrom(name: String) = ModelHeuristics.guessKind(name)
 
-                listOf("3n", "vision", "vl", "omni", "multimodal")
-                    .any { n.contains(it) } -> ModelKind.MULTIMODAL
-
-                else -> ModelKind.TEXT
-            }
-        }
-
-        fun guessThinkingFrom(name: String): Boolean {
-            val n = name.lowercase()
-            return listOf("qwen3", "r1", "deepseek", "think", "reason", "cot")
-                .any { n.contains(it) }
-        }
+        fun guessThinkingFrom(name: String) = ModelHeuristics.guessThinking(name)
     }
 }

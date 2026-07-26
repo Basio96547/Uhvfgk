@@ -48,9 +48,25 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Lets unit tests touch classes that reference android.jar stubs
+            // (e.g. org.json) without pulling in Robolectric.
+            isReturnDefaultValues = true
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // MediaPipe and TensorFlow Lite both ship a TFLite JNI library.
+            // Take the first rather than failing the build on a duplicate.
+            pickFirsts += listOf(
+                "**/libtensorflowlite_jni.so",
+                "**/libtensorflowlite_gpu_jni.so",
+            )
         }
     }
 }
@@ -81,6 +97,10 @@ dependencies {
 
     // MediaPipe LLM Inference (on-device GenAI)
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
+
+    // LiteRT / TensorFlow Lite — runs user-supplied text-to-speech models.
+    // Drop this (and ModelTtsSynthesizer) if you only need the system TTS engine.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")

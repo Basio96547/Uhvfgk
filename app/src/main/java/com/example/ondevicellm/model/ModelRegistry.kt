@@ -28,8 +28,11 @@ class ModelRegistry(private val context: Context) {
     private val _selectedTextModelId = MutableStateFlow<String?>(null)
     val selectedTextModelId: StateFlow<String?> = _selectedTextModelId.asStateFlow()
 
-    private val _selectedAudioModelId = MutableStateFlow<String?>(null)
-    val selectedAudioModelId: StateFlow<String?> = _selectedAudioModelId.asStateFlow()
+    private val _selectedAsrModelId = MutableStateFlow<String?>(null)
+    val selectedAsrModelId: StateFlow<String?> = _selectedAsrModelId.asStateFlow()
+
+    private val _selectedTtsModelId = MutableStateFlow<String?>(null)
+    val selectedTtsModelId: StateFlow<String?> = _selectedTtsModelId.asStateFlow()
 
     init {
         load()
@@ -38,8 +41,11 @@ class ModelRegistry(private val context: Context) {
     val selectedTextModel: ModelSpec?
         get() = _models.value.firstOrNull { it.id == _selectedTextModelId.value }
 
-    val selectedAudioModel: ModelSpec?
-        get() = _models.value.firstOrNull { it.id == _selectedAudioModelId.value }
+    val selectedAsrModel: ModelSpec?
+        get() = _models.value.firstOrNull { it.id == _selectedAsrModelId.value }
+
+    val selectedTtsModel: ModelSpec?
+        get() = _models.value.firstOrNull { it.id == _selectedTtsModelId.value }
 
     fun add(spec: ModelSpec) {
         _models.value = _models.value.filterNot { it.path == spec.path } + spec
@@ -60,17 +66,17 @@ class ModelRegistry(private val context: Context) {
         _models.value = _models.value.filterNot { it.id == spec.id }
         if (_selectedTextModelId.value == spec.id) {
             _selectedTextModelId.value = _models.value
-                .firstOrNull { it.kind != ModelKind.AUDIO }?.id
+                .firstOrNull { it.kind.isConversational }?.id
         }
-        if (_selectedAudioModelId.value == spec.id) {
-            _selectedAudioModelId.value = null
-        }
+        if (_selectedAsrModelId.value == spec.id) _selectedAsrModelId.value = null
+        if (_selectedTtsModelId.value == spec.id) _selectedTtsModelId.value = null
         persist()
     }
 
     fun select(spec: ModelSpec) {
         when (spec.kind) {
-            ModelKind.AUDIO -> _selectedAudioModelId.value = spec.id
+            ModelKind.ASR -> _selectedAsrModelId.value = spec.id
+            ModelKind.TTS -> _selectedTtsModelId.value = spec.id
             else -> _selectedTextModelId.value = spec.id
         }
         persist()
@@ -78,8 +84,11 @@ class ModelRegistry(private val context: Context) {
 
     private fun autoSelect(spec: ModelSpec) {
         when (spec.kind) {
-            ModelKind.AUDIO -> if (_selectedAudioModelId.value == null) {
-                _selectedAudioModelId.value = spec.id
+            ModelKind.ASR -> if (_selectedAsrModelId.value == null) {
+                _selectedAsrModelId.value = spec.id
+            }
+            ModelKind.TTS -> if (_selectedTtsModelId.value == null) {
+                _selectedTtsModelId.value = spec.id
             }
             else -> if (_selectedTextModelId.value == null) {
                 _selectedTextModelId.value = spec.id
@@ -141,7 +150,11 @@ class ModelRegistry(private val context: Context) {
             }
             _models.value = list
             _selectedTextModelId.value = root.optString("selectedTextModelId").ifBlank { null }
-            _selectedAudioModelId.value = root.optString("selectedAudioModelId").ifBlank { null }
+            // "selectedAudioModelId" is the pre-TTS key name for the ASR slot.
+            _selectedAsrModelId.value = root.optString("selectedAsrModelId")
+                .ifBlank { root.optString("selectedAudioModelId") }
+                .ifBlank { null }
+            _selectedTtsModelId.value = root.optString("selectedTtsModelId").ifBlank { null }
         }
     }
 
@@ -152,7 +165,8 @@ class ModelRegistry(private val context: Context) {
                     _models.value.forEach { put(it.toJson()) }
                 })
                 put("selectedTextModelId", _selectedTextModelId.value ?: "")
-                put("selectedAudioModelId", _selectedAudioModelId.value ?: "")
+                put("selectedAsrModelId", _selectedAsrModelId.value ?: "")
+                put("selectedTtsModelId", _selectedTtsModelId.value ?: "")
             }
             storeFile.writeText(root.toString())
         }
@@ -173,23 +187,8 @@ class ModelRegistry(private val context: Context) {
             "/storage/emulated/0/Download",
         )
 
-        fun guessKind(name: String): ModelKind {
-            val n = name.lowercase()
-            return when {
-                listOf("whisper", "asr", "speech", "wav2vec", "moonshine")
-                    .any { n.contains(it) } -> ModelKind.AUDIO
+        fun guessKind(name: String) = ModelHeuristics.guessKind(name)
 
-                listOf("3n", "vision", "vl", "omni", "multimodal")
-                    .any { n.contains(it) } -> ModelKind.MULTIMODAL
-
-                else -> ModelKind.TEXT
-            }
-        }
-
-        fun guessThinking(name: String): Boolean {
-            val n = name.lowercase()
-            return listOf("qwen3", "r1", "deepseek", "think", "reason", "cot")
-                .any { n.contains(it) }
-        }
+        fun guessThinking(name: String) = ModelHeuristics.guessThinking(name)
     }
 }
