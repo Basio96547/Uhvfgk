@@ -176,6 +176,16 @@ interface AppStrings {
     val whereModelsLive: String
     val freeSpace: String
     val refresh: String
+    // ---- what this device can run ----
+    val whatFits: String
+    val whatFitsSubtitle: String
+    fun advisorHeadline(best: String): String
+    val advisorNothingFits: String
+    val advisorQuantAdvice: String
+    val advisorArabicNote: String
+    val fitComfortable: String
+    val fitTight: String
+    val fitTooBig: String
     val off: String
     val unknown: String
     fun freeOf(total: String): String
@@ -477,6 +487,25 @@ object EnglishStrings : AppStrings {
     override val whereModelsLive = "Where models live"
     override val freeSpace = "Free space"
     override val refresh = "Refresh"
+    override val whatFits = "What this phone can run"
+    override val whatFitsSubtitle = "Weights are the ceiling, not the app"
+    override fun advisorHeadline(best: String) =
+        "With the memory free right now, the largest model that fits comfortably " +
+            "is around $best."
+    override val advisorNothingFits = "Not enough free memory for even a small model " +
+        "right now. Close background apps, or enable RAM Plus."
+    override val advisorQuantAdvice = "A bigger model at Q4_K_M understands more than a " +
+        "smaller one at Q8_0 for the same memory. Dropping from 8-bit to 4-bit costs a " +
+        "few percent; doubling the parameters is worth far more than that. If you are " +
+        "running a 4B at Q8_0, an 8B at Q4_K_M is the same size and a real step up."
+    override val advisorArabicNote = "For Arabic specifically, model choice matters more " +
+        "than size alone — some families are trained on very little Arabic and stay weak " +
+        "at it however large they are. Qwen3 and Gemma 3 both handle Arabic well; there " +
+        "are also models built for Arabic first, such as ALLaM. Check that a GGUF build " +
+        "exists before downloading."
+    override val fitComfortable = "fits"
+    override val fitTight = "tight"
+    override val fitTooBig = "too big"
     override val off = "Off"
     override val unknown = "unknown"
     override fun freeOf(total: String) = "free of $total"
@@ -825,6 +854,23 @@ object ArabicStrings : AppStrings {
     override val whereModelsLive = "أين تُحفظ النماذج"
     override val freeSpace = "المساحة الحرة"
     override val refresh = "تحديث"
+    override val whatFits = "ما الذي يستطيع هذا الجهاز تشغيله"
+    override val whatFitsSubtitle = "الأوزان هي السقف، لا التطبيق"
+    override fun advisorHeadline(best: String) =
+        "بالذاكرة المتاحة الآن، أكبر نموذج يعمل بأريحية هو نحو $best."
+    override val advisorNothingFits = "الذاكرة الحرة لا تكفي حتى لنموذج صغير الآن. " +
+        "أغلق التطبيقات في الخلفية، أو فعّل RAM Plus."
+    override val advisorQuantAdvice = "النموذج الأكبر بتكميم Q4_K_M يفهم أكثر من الأصغر " +
+        "بتكميم Q8_0 عند نفس الحجم. النزول من ٨ بت إلى ٤ بت يكلّف نسبة ضئيلة، أما مضاعفة " +
+        "عدد المعاملات فتساوي أضعاف ذلك. إن كنت تشغّل 4B بتكميم Q8_0 فإن 8B بتكميم " +
+        "Q4_K_M بنفس الحجم تقريبًا وهي نقلة حقيقية."
+    override val advisorArabicNote = "في العربية تحديدًا، اختيار النموذج أهم من الحجم وحده — " +
+        "بعض العائلات دُرّبت على عربية قليلة فتبقى ضعيفة فيها مهما كبرت. Qwen3 وGemma 3 " +
+        "تتعاملان مع العربية جيدًا، وهناك نماذج بُنيت للعربية أولًا مثل ALLaM. تأكد من " +
+        "وجود نسخة GGUF قبل التنزيل."
+    override val fitComfortable = "مناسب"
+    override val fitTight = "على الحافة"
+    override val fitTooBig = "أكبر من اللازم"
     override val off = "معطّلة"
     override val unknown = "غير معروف"
     override fun freeOf(total: String) = "متاحة من أصل $total"

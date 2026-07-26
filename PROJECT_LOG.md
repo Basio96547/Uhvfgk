@@ -333,6 +333,42 @@ sandbox.
     the system prompt when Arabic is selected. Empty for English: telling a
     model to use its default wastes context.
 
+### Session 4 — 2026-07-26 · answer quality
+
+Device report: "it improved, but there's abnormal stupidity" — and, when
+pressed, "it feels like it doesn't understand me". Not a crash, not a
+truncation: comprehension. Five real defects were found, all in the same place
+— what actually reaches the model.
+
+24. **The assistant's turn was never closed.** Generation breaks on the
+    end-of-turn token *without decoding it*, so the reply ran straight into the
+    next user turn with no `<|im_end|>` between them. From turn two onward the
+    model was reading a malformed transcript.
+25. **The system block was re-emitted every turn.** The KV cache already held
+    the conversation, so turn three read as a transcript that restarted twice
+    in the middle. It goes in on the first turn only now — and again after a
+    context-full restart, the only other time the cache is empty.
+26. **Search results lived in the system prompt**, so they persisted for the
+    rest of the conversation: turn three was still answering with turn one's
+    pages. They ride with the user turn they belong to.
+27. **No repetition penalty in the sampler chain at all** — llama.cpp's most
+    common cause of a model looping or padding an answer with restatements.
+28. **Thinking turns were capped at a plain turn's budget**, so the model could
+    deliberate carefully and be cut off before saying anything. Thinking gets
+    its own budget, the GGUF context floor went to 6144, and a reply truncated
+    by the cap now says so rather than just ending — a silent truncation is
+    indistinguishable from a stupid answer.
+
+29. **`ModelAdvisor` — the honest answer to "it doesn't understand me".** Four
+    billion parameters at Q8_0 is the ceiling, and no prompt work moves it. The
+    one lever the user actually has is which weights they load, and the app
+    never said so. The Device screen now computes, from the memory really free
+    on that phone, which weight classes fit — and states the thing that matters
+    most: **a bigger model at Q4_K_M understands more than a smaller one at
+    Q8_0 for the same memory.** Going 8-bit → 4-bit costs a few percent;
+    doubling the parameters is worth far more. It also notes that for Arabic
+    the family matters as much as the size. Nine tests.
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,8 @@ import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.core.ErrorLog
 import com.example.ondevicellm.core.Severity
 import com.example.ondevicellm.core.formatBytes
+import com.example.ondevicellm.model.Fit
+import com.example.ondevicellm.model.ModelAdvisor
 import com.example.ondevicellm.ui.theme.Gradients
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.panel
@@ -246,6 +249,65 @@ fun DeviceScreen(
             Caption(
                 s.npuExplanation
             )
+        }
+
+        // Placed right under Memory: the numbers above are what this card
+        // reasons from, and "which model" is the one lever that actually
+        // changes how well the assistant understands you.
+        SectionCard(
+            icon = Icons.Filled.Scale,
+            title = s.whatFits,
+            subtitle = s.whatFitsSubtitle,
+            tint = MaterialTheme.colorScheme.primary,
+        ) {
+            val budget = memory.effectiveAvailableBytes
+            Text(
+                ModelAdvisor.headline(budget, s),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(Space.md))
+
+            ModelAdvisor.optionsFor(budget).forEach { option ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${option.parameters} · ${option.quantisation}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                        color = if (option.fit == Fit.TOO_BIG) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    Text(
+                        option.approxBytes.formatBytes(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(Space.sm))
+                    StatusPill(
+                        when (option.fit) {
+                            Fit.COMFORTABLE -> s.fitComfortable
+                            Fit.TIGHT -> s.fitTight
+                            Fit.TOO_BIG -> s.fitTooBig
+                        },
+                        color = when (option.fit) {
+                            Fit.COMFORTABLE -> MaterialTheme.colorScheme.primary
+                            Fit.TIGHT -> MaterialTheme.colorScheme.tertiary
+                            Fit.TOO_BIG -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+
+            SoftDivider()
+            Caption(s.advisorQuantAdvice)
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.advisorArabicNote)
         }
 
         SectionCard(

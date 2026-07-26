@@ -47,12 +47,14 @@ SOURCES=(
     app/src/main/java/com/example/ondevicellm/llm/ThinkingStreamParser.kt
     app/src/main/java/com/example/ondevicellm/web/SearchModels.kt
     app/src/main/java/com/example/ondevicellm/web/HtmlExtract.kt
+    app/src/main/java/com/example/ondevicellm/model/ModelAdvisor.kt
     app/src/test/java/com/example/ondevicellm/core/StringsTest.kt
     app/src/test/java/com/example/ondevicellm/llm/QueryRouterTest.kt
     app/src/test/java/com/example/ondevicellm/llm/BackendPlannerTest.kt
     app/src/test/java/com/example/ondevicellm/llm/ThinkingStreamParserTest.kt
     app/src/test/java/com/example/ondevicellm/web/SearchQueryTest.kt
     app/src/test/java/com/example/ondevicellm/web/HtmlExtractTest.kt
+    app/src/test/java/com/example/ondevicellm/model/ModelAdvisorTest.kt
 )
 CLASSES=(
     com.example.ondevicellm.core.StringsTest
@@ -61,6 +63,7 @@ CLASSES=(
     com.example.ondevicellm.llm.ThinkingStreamParserTest
     com.example.ondevicellm.web.SearchQueryTest
     com.example.ondevicellm.web.HtmlExtractTest
+    com.example.ondevicellm.model.ModelAdvisorTest
 )
 
 # BackendPlanner references BackendPref, which lives in a file that imports
