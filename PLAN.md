@@ -21,9 +21,10 @@ producing a real result. Everything else says what is still unproven.
 | Web search | Real scraper, tested parser. **Never hit a live endpoint** — the sandbox blocks DuckDuckGo and Wikipedia. |
 | Studio | Real. Never generated a page. |
 | Thermal management | Real API calls. Never observed throttling. |
+| System speech | Engine and voice are chosen deliberately now. **Never heard by me.** |
 | **GPU execution** | **Façade.** The Backend picker offers GPU; GGUF ignores it entirely and runs on CPU. |
 | **NPU execution** | **Façade, and honest about it.** Detected, reported, never used. |
-| **Custom TTS models** | **Dead code.** LiteRT is `compileOnly`, so `ttsRuntimeAvailable` is always false and the whole path is unreachable in any build that ships. |
+| Custom TTS models | Runtime is packaged now, so the path is reachable. **Never run against a real voice model** — and good Arabic voices are ONNX, not `.tflite` (see 2c). |
 
 ---
 
