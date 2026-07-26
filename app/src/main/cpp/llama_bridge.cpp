@@ -143,11 +143,13 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
 
     llama_model_params mparams = llama_model_default_params();
     // No GPU offload: Android GPU backends aren't built here, so all layers
-    // stay on the CPU. mmap keeps resident memory down and lets the kernel
-    // page weights in and out, which matters on a phone.
+    // stay on the CPU.
     mparams.n_gpu_layers = 0;
-    mparams.use_mmap = true;
-    mparams.use_mlock = false;
+    // Memory-map rather than mlock: keeps resident memory down and lets the
+    // kernel page weights in and out, which is what makes a multi-gigabyte
+    // model usable on a phone — and is why free RAM Plus counts toward the
+    // load budget in LlamaCppEngine.
+    mparams.load_mode = LLAMA_LOAD_MODE_MMAP;
 
     llama_model *model = llama_model_load_from_file(path.c_str(), mparams);
     if (model == nullptr) {
