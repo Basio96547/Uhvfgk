@@ -148,8 +148,38 @@ class QueryRouterTest {
     }
 
     @Test
-    fun `reasoning gets the full token budget`() {
-        assertEquals(2048, route("explain step by step how a CPU cache works").maxTokens)
+    fun `a thinking turn gets room for the thinking and the answer`() {
+        // The chain of thought eats most of the budget. Capping a thinking turn
+        // at a plain turn's number is how a model deliberates carefully and is
+        // then cut off before it says anything.
+        val d = QueryRouter.route(
+            message = "explain step by step how a CPU cache works",
+            modelSupportsThinking = true,
+            defaultMaxTokens = 1024,
+        )
+        assertTrue(d.think)
+        assertTrue("thinking needs more than the plain budget", d.maxTokens > 1024)
+    }
+
+    @Test
+    fun `a model that cannot think keeps the plain budget`() {
+        val d = QueryRouter.route(
+            message = "explain step by step how a CPU cache works",
+            modelSupportsThinking = false,
+            defaultMaxTokens = 1024,
+        )
+        assertFalse(d.think)
+        assertEquals(1024, d.maxTokens)
+    }
+
+    @Test
+    fun `a generous model budget is never lowered for a thinking turn`() {
+        val d = QueryRouter.route(
+            message = "احسب 25 * 17",
+            modelSupportsThinking = true,
+            defaultMaxTokens = 4096,
+        )
+        assertEquals(4096, d.maxTokens)
     }
 
     // ---- overrides --------------------------------------------------------

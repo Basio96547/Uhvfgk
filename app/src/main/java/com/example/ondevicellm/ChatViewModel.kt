@@ -116,6 +116,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var speakJob: Job? = null
     private var nextId = 0L
 
+    /**
+     * The system prompt the current conversation was started with.
+     *
+     * The engines inject it once, on the first turn, so editing it mid-chat
+     * would otherwise do nothing at all. Changing it restarts the session,
+     * which is what "takes effect on the next message" has to mean.
+     */
+    private var activeSystemPrompt: String? = null
+
     val speechAvailable: Boolean get() = speech.isAvailable
     val speechOnDevice: Boolean get() = speech.supportsOnDevice
 
@@ -157,6 +166,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             engine?.close()
             engine = null
+            activeSystemPrompt = null
 
             try {
                 val loaded = EngineFactory.load(getApplication<Application>(), spec, _device.value)
@@ -363,21 +373,34 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            // Language instruction first, then the user's own prompt, then the
-            // search context. A multilingual model left to itself answers an
-            // Arabic question in English about as often as not, and grounding
-            // in English pages makes that worse — so it is stated outright.
+            // The system prompt is the part that holds for the whole
+            // conversation: the language instruction and whatever the user set.
+            // A multilingual model left to itself answers an Arabic question in
+            // English about as often as not, so that is stated outright.
             val fullSystem = listOf(
                 Localization.strings.replyLanguageInstruction,
                 current.systemPrompt,
-                grounding,
             )
                 .filter { it.isNotBlank() }
                 .joinToString("\n\n")
 
+            // Search results belong to *this* question, not to the conversation,
+            // so they ride with the user turn. Putting them in the system prompt
+            // meant turn three was still answering with turn one's pages.
+            val groundedPrompt = if (grounding.isBlank()) {
+                prompt
+            } else {
+                "$grounding\n\n$prompt"
+            }
+
+            if (activeSystemPrompt != null && activeSystemPrompt != fullSystem) {
+                active.resetSession()
+            }
+            activeSystemPrompt = fullSystem
+
             try {
                 active.generate(
-                    prompt = prompt,
+                    prompt = groundedPrompt,
                     systemPrompt = fullSystem,
                     thinkingEnabled = decision.think,
                     maxTokens = decision.maxTokens,
@@ -446,6 +469,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clearConversation() {
         if (_uiState.value.isBusy) return
         engine?.resetSession()
+        activeSystemPrompt = null
         _uiState.update { it.copy(messages = emptyList()) }
     }
 

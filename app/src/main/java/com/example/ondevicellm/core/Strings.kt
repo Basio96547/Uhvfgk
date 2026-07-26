@@ -243,6 +243,7 @@ interface AppStrings {
     val ramPlusNotEnabled: String
     val notEnoughMemoryAdvice: String
     val ggufRuntimeMissing: String
+    val replyTruncated: String
     fun ggufBackendIgnored(pref: String): String
     fun threadsOfCores(threads: Int, cores: Int): String
     fun cpuAsRequested(soc: String): String
@@ -604,6 +605,8 @@ object EnglishStrings : AppStrings {
     override val ggufRuntimeMissing = "The GGUF runtime isn't available in this build.\n\n" +
         "Use a MediaPipe .task model instead, or rebuild the app with the native " +
         "component enabled."
+    override val replyTruncated =
+        "cut off at the token limit — raise Max tokens for this model to get more"
     override val thermalPaused = "Paused: the phone is getting hot. " +
         "Generation will be slower until it cools down."
     override val thermalTooHot = "The phone is too hot to run the model right now. " +
@@ -953,6 +956,8 @@ object ArabicStrings : AppStrings {
     override fun speechErrorOther(code: Int) = "أخفق التعرّف على الكلام (رمز $code)."
     override val ggufRuntimeMissing = "بيئة تشغيل GGUF غير متوفّرة في هذه النسخة.\n\n" +
         "استخدم نموذج ‎.task من MediaPipe، أو أعد بناء التطبيق مع تفعيل المكوّن الأصلي."
+    override val replyTruncated =
+        "انقطع الرد عند حدّ التوكنات — ارفع «أقصى عدد توكنات» لهذا النموذج"
     override val thermalPaused = "توقّف مؤقت: الجهاز يسخن. " +
         "سيبقى التوليد أبطأ حتى يبرد."
     override val thermalTooHot = "الجهاز أسخن من أن يشغّل النموذج الآن. " +

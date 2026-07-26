@@ -78,6 +78,12 @@ struct Session {
 // Kept so the last failure can be reported to Kotlin after a null return.
 std::string g_last_error;
 
+// Why the last generation ended. A reply cut off by the token cap looks
+// identical to a short answer from the outside, which is precisely the kind of
+// silent failure that reads as the model being stupid.
+enum StopReason { STOP_END_OF_TURN = 0, STOP_TOKEN_CAP = 1, STOP_CANCELLED = 2 };
+std::atomic<int> g_stop_reason{STOP_END_OF_TURN};
+
 std::string jstring_to_utf8(JNIEnv *env, jstring value) {
     if (value == nullptr) return {};
     const char *chars = env->GetStringUTFChars(value, nullptr);
@@ -123,17 +129,24 @@ std::vector<llama_token> tokenize(
 
 /// Formats a turn with the model's own chat template when it has one, so
 /// instruction-tuned models (Qwen, Llama, Gemma…) behave as intended.
+///
+/// [include_system] is false for every turn after the first. The KV cache
+/// already holds the whole conversation, so re-emitting the system block each
+/// turn stacked a second and third copy of it into the context behind the
+/// replies already there — the model was reading a transcript that restarted
+/// mid-conversation, and answered accordingly.
 std::string apply_chat_template(
-    llama_model *model, const std::string &system_prompt, const std::string &user) {
+    llama_model *model, const std::string &system_prompt, const std::string &user,
+    bool include_system) {
     const char *tmpl = llama_model_chat_template(model, nullptr);
     if (tmpl == nullptr) {
         // Base model with no template: fall back to the raw prompt.
-        if (system_prompt.empty()) return user;
+        if (system_prompt.empty() || !include_system) return user;
         return system_prompt + "\n\n" + user;
     }
 
     std::vector<llama_chat_message> messages;
-    if (!system_prompt.empty()) {
+    if (include_system && !system_prompt.empty()) {
         messages.push_back({"system", system_prompt.c_str()});
     }
     messages.push_back({"user", user.c_str()});
@@ -150,7 +163,8 @@ std::string apply_chat_template(
             buf.data(), static_cast<int32_t>(buf.size()));
     }
     if (n <= 0) {
-        return system_prompt.empty() ? user : system_prompt + "\n\n" + user;
+        if (system_prompt.empty() || !include_system) return user;
+        return system_prompt + "\n\n" + user;
     }
     return std::string(buf.data(), n);
 }
@@ -182,6 +196,12 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv *env, jobjec
 /// Compile-time *and* runtime: ggml only reports a feature when the kernels
 /// were built for it and the CPU advertises it. So this is what the model is
 /// really running on, not what the phone could theoretically do.
+/// 0 = the model finished its turn, 1 = cut off by the token cap, 2 = stopped.
+JNIEXPORT jint JNICALL
+Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastStopReason(JNIEnv *, jobject) {
+    return static_cast<jint>(g_stop_reason.load());
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobject) {
     std::string features;
@@ -302,6 +322,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
 
     session->stop.store(false);
     g_last_error.clear();
+    g_stop_reason.store(STOP_TOKEN_CAP);
 
     jclass callback_class = env->GetObjectClass(callback);
     // Bytes, not String: the JVM decodes them as real UTF-8, which handles
@@ -314,10 +335,13 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
 
     const std::string user = jstring_to_utf8(env, prompt_);
     const std::string system_prompt = jstring_to_utf8(env, system_);
-    const std::string formatted = apply_chat_template(session->model, system_prompt, user);
 
-    // Only the first turn carries BOS; later turns continue the same sequence.
+    // Only the first turn carries BOS and the system block; later turns append
+    // to a cache that already holds both.
     const bool first_turn = session->n_past == 0;
+    const std::string formatted =
+        apply_chat_template(session->model, system_prompt, user, first_turn);
+
     std::vector<llama_token> tokens = tokenize(session->vocab, formatted, first_turn);
     if (tokens.empty()) {
         g_last_error = "The prompt produced no tokens.";
@@ -331,7 +355,10 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
         // mid-conversation and confusing the model.
         llama_memory_clear(llama_get_memory(session->ctx), true);
         session->n_past = 0;
-        tokens = tokenize(session->vocab, formatted, true);
+        // Starting over means the system block has to go back in.
+        const std::string restart =
+            apply_chat_template(session->model, system_prompt, user, true);
+        tokens = tokenize(session->vocab, restart, true);
     }
 
     // Prompt ingestion, in n_batch-sized chunks. A single decode larger than
@@ -349,9 +376,17 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
         session->n_past += chunk;
     }
 
-    // Sampler chain: top-k -> top-p -> temperature -> distribution.
+    // Sampler chain: penalties -> top-k -> top-p -> temperature -> distribution.
     llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
     llama_sampler *sampler = llama_sampler_chain_init(sparams);
+    // There was no repetition penalty at all, which is llama.cpp's single most
+    // common cause of a model looping a phrase or padding an answer with
+    // restatements. These are llama-cli's own defaults.
+    llama_sampler_chain_add(
+        sampler,
+        llama_sampler_init_penalties(
+            /*penalty_last_n=*/64, /*penalty_repeat=*/1.1f,
+            /*penalty_freq=*/0.0f, /*penalty_present=*/0.0f));
     if (top_k > 0) llama_sampler_chain_add(sampler, llama_sampler_init_top_k(top_k));
     if (top_p > 0.0f && top_p < 1.0f) {
         llama_sampler_chain_add(sampler, llama_sampler_init_top_p(top_p, 1));
@@ -366,12 +401,22 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
     bool ok = true;
     // Holds the tail of a multi-byte character split across two tokens.
     std::string pending;
+    // The token that ends the assistant's turn, so the transcript in the cache
+    // stays well-formed for the next one.
+    llama_token closing_token = LLAMA_TOKEN_NULL;
 
     for (int32_t generated = 0; generated < max_tokens; ++generated) {
-        if (session->stop.load()) break;
+        if (session->stop.load()) {
+            g_stop_reason.store(STOP_CANCELLED);
+            break;
+        }
 
         const llama_token token = llama_sampler_sample(sampler, session->ctx, -1);
-        if (llama_vocab_is_eog(session->vocab, token)) break;
+        if (llama_vocab_is_eog(session->vocab, token)) {
+            closing_token = token;
+            g_stop_reason.store(STOP_END_OF_TURN);
+            break;
+        }
 
         pending += token_to_text(session->vocab, token);
         const size_t emit = utf8_complete_prefix(pending);
@@ -394,7 +439,10 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
                 ok = false;
                 break;
             }
-            if (keep_going == JNI_FALSE) break;
+            if (keep_going == JNI_FALSE) {
+                g_stop_reason.store(STOP_CANCELLED);
+                break;
+            }
         }
 
         llama_sampler_accept(sampler, token);
@@ -407,6 +455,24 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
             break;
         }
         session->n_past += 1;
+    }
+
+    // Close the assistant turn in the KV cache. Without this the reply ran
+    // straight into the next user turn with no <|im_end|> between them, and the
+    // model spent every turn after the first reading a malformed transcript.
+    if (closing_token == LLAMA_TOKEN_NULL) {
+        // Stopped on the token cap or by the user, so the model never emitted
+        // an end marker; supply the vocabulary's own.
+        closing_token = llama_vocab_eot(session->vocab);
+        if (closing_token == LLAMA_TOKEN_NULL) {
+            closing_token = llama_vocab_eos(session->vocab);
+        }
+    }
+    if (closing_token != LLAMA_TOKEN_NULL) {
+        llama_batch closing = llama_batch_get_one(&closing_token, 1);
+        if (llama_decode(session->ctx, closing) == 0) {
+            session->n_past += 1;
+        }
     }
 
     llama_sampler_free(sampler);

@@ -20,6 +20,9 @@ internal class LlamaBridge {
     /** SIMD extensions the compiled kernels are really using on this CPU. */
     external fun nativeCpuFeatures(): String
 
+    /** 0 = finished the turn, 1 = hit the token cap, 2 = stopped. */
+    external fun nativeLastStopReason(): Int
+
     external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int): Long
     external fun nativeFree(handle: Long)
     external fun nativeStop(handle: Long)
@@ -161,14 +164,17 @@ class LlamaCppEngine private constructor(
         }
 
         val tail = parser.flush()
-        val failureNote = if (!ok) {
-            bridge.nativeLastError().takeIf { it.isNotBlank() }?.let { "\n[$it]" }.orEmpty()
-        } else {
-            ""
+        val note = when {
+            !ok -> bridge.nativeLastError().takeIf { it.isNotBlank() }?.let { "\n[$it]" }.orEmpty()
+            // A reply chopped off by the cap is indistinguishable from a short
+            // answer, which is exactly how a truncation reads as stupidity.
+            bridge.nativeLastStopReason() == STOP_TOKEN_CAP ->
+                "\n\n[${Localization.strings.replyTruncated}]"
+            else -> ""
         }
         onDelta(
             if (keepThinking) tail.thinking else "",
-            tail.answer + failureNote,
+            tail.answer + note,
             true,
         )
     }
@@ -190,8 +196,18 @@ class LlamaCppEngine private constructor(
 
     companion object {
 
-        /** Context window used when a model doesn't warrant a larger one. */
-        private const val DEFAULT_CONTEXT_TOKENS = 4096
+        /** Native stop reason meaning the token cap was reached. */
+        private const val STOP_TOKEN_CAP = 1
+
+        /**
+         * Context window used when a model doesn't warrant a larger one.
+         *
+         * Raised from 4096: a reasoning turn spends most of its budget inside
+         * <think>, and once the window fills the session restarts and the
+         * conversation is silently forgotten. The KV cache for a 4B model at
+         * this size is a few hundred MB more, which is what RAM Plus is for.
+         */
+        private const val DEFAULT_CONTEXT_TOKENS = 6144
 
         fun load(context: Context, spec: ModelSpec, device: DeviceSnapshot): LlamaCppEngine {
             if (!LlamaBridge.isAvailable()) {

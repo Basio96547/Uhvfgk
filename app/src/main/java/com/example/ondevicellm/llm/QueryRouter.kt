@@ -223,6 +223,7 @@ object QueryRouter {
 
     private const val TRIVIAL_TOKENS = 200
     private const val SIMPLE_TOKENS = 700
+    private const val THINKING_TOKENS = 2048
 
     /**
      * Routes [message].
@@ -274,10 +275,15 @@ object QueryRouter {
             RoutingMode.AUTO -> autoThink
         }
 
-        val maxTokens = when (kind) {
+        val maxTokens = when {
             // A greeting that runs to a thousand tokens is a bug, not an answer.
-            QueryKind.SOCIAL -> TRIVIAL_TOKENS
-            QueryKind.SIMPLE -> minOf(defaultMaxTokens, SIMPLE_TOKENS)
+            kind == QueryKind.SOCIAL -> TRIVIAL_TOKENS
+            kind == QueryKind.SIMPLE -> minOf(defaultMaxTokens, SIMPLE_TOKENS)
+            // Reasoning spends most of its budget inside <think>. Capping a
+            // thinking turn at the same number as a plain one is how a model
+            // ends up deliberating carefully and then being cut off before it
+            // says anything.
+            think -> maxOf(defaultMaxTokens, THINKING_TOKENS)
             else -> defaultMaxTokens
         }
 
