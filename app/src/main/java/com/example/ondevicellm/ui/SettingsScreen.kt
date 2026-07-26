@@ -228,12 +228,45 @@ fun SettingsScreen(
 
             if (settings.ttsEngine == TtsEngine.SYSTEM) {
                 SoftDivider()
+                GroupLabel(s.speechEngineLabel)
+
+                val engines = remember { viewModel.systemVoiceEngines() }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = settings.systemVoiceEngine == null,
+                        onClick = {
+                            viewModel.updateSettings {
+                                // The voice belongs to the old engine.
+                                it.copy(systemVoiceEngine = null, systemVoiceName = null)
+                            }
+                        },
+                        label = { Text(s.speechEngineDefault) },
+                    )
+                    engines.forEach { engine ->
+                        FilterChip(
+                            selected = settings.systemVoiceEngine == engine.packageName,
+                            onClick = {
+                                viewModel.updateSettings {
+                                    it.copy(
+                                        systemVoiceEngine = engine.packageName,
+                                        systemVoiceName = null,
+                                    )
+                                }
+                            },
+                            label = { Text(engine.label) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(Space.sm))
+                Caption(s.speechEngineNote)
+
+                SoftDivider()
                 GroupLabel(s.voiceLabel)
 
                 // Read once per composition of this card: enumerating voices
                 // touches the engine, and it cannot change while the screen is
                 // open anyway.
-                val voices = remember(settings.voiceLanguageTag) {
+                val voices = remember(settings.voiceLanguageTag, settings.systemVoiceEngine) {
                     VoicePicker.candidatesFor(viewModel.systemVoices(), settings.voiceLanguageTag)
                 }
 

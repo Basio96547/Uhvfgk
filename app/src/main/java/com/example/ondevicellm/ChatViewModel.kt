@@ -516,6 +516,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun systemVoices(): List<com.example.ondevicellm.audio.VoiceOption> =
         systemTts.availableVoices()
 
+    /** Installed speech engines, for the picker in Settings. */
+    fun systemVoiceEngines(): List<com.example.ondevicellm.audio.TtsEngineOption> =
+        systemTts.availableEngines()
+
     fun studioToggleView() = studio.toggleView()
     fun studioRun() = studio.run()
     fun studioEditCode(code: String) = studio.editCode(code)
@@ -692,7 +696,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun resolveSynthesizer(): SpeechSynthesizer? {
         return when (settingsStore.settings.value.ttsEngine) {
-            TtsEngine.SYSTEM -> systemTts.takeIf { it.prepare() }
+            TtsEngine.SYSTEM -> systemTts.takeIf {
+                it.prepare(settingsStore.settings.value.systemVoiceEngine)
+            }
 
             TtsEngine.MODEL -> {
                 if (!ModelTtsSynthesizer.isRuntimeAvailable()) return null

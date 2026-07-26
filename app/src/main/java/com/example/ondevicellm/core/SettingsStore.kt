@@ -47,6 +47,12 @@ data class AppSettings(
      * engine's own default is usually the oldest voice on the device.
      */
     val systemVoiceName: String? = null,
+    /**
+     * A specific speech engine, by package name. Null uses the system default —
+     * which on many phones is a vendor engine with a weaker Arabic voice than
+     * one already installed alongside it.
+     */
+    val systemVoiceEngine: String? = null,
     // ---- Speech output ----
     val ttsEngine: TtsEngine = TtsEngine.SYSTEM,
     /** Speak each reply as soon as it finishes generating. */
@@ -86,6 +92,7 @@ class SettingsStore(context: Context) {
         voiceLanguageTag = prefs.getString(KEY_VOICE_LANG, null)
             ?: Locale.getDefault().toLanguageTag(),
         systemVoiceName = prefs.getString(KEY_SYSTEM_VOICE, null),
+        systemVoiceEngine = prefs.getString(KEY_SYSTEM_ENGINE, null),
         ttsEngine = TtsEngine.entries
             .firstOrNull { it.name == prefs.getString(KEY_TTS_ENGINE, null) }
             ?: TtsEngine.SYSTEM,
@@ -115,6 +122,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_SHOW_THINKING, updated.showThinking)
             .putString(KEY_VOICE_LANG, updated.voiceLanguageTag)
             .putString(KEY_SYSTEM_VOICE, updated.systemVoiceName)
+            .putString(KEY_SYSTEM_ENGINE, updated.systemVoiceEngine)
             .putString(KEY_TTS_ENGINE, updated.ttsEngine.name)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
@@ -134,6 +142,7 @@ class SettingsStore(context: Context) {
         const val KEY_SHOW_THINKING = "showThinking"
         const val KEY_VOICE_LANG = "voiceLanguageTag"
         const val KEY_SYSTEM_VOICE = "systemVoiceName"
+        const val KEY_SYSTEM_ENGINE = "systemVoiceEngine"
         const val KEY_TTS_ENGINE = "ttsEngine"
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"

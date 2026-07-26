@@ -67,10 +67,10 @@ network-only. The app calls `setLanguage(ar-SA)` and takes whatever default
 falls out — which on most phones is the oldest, most robotic Arabic voice
 installed.
 
-**Fix:** enumerate `TextToSpeech.voices`, rank Arabic voices by quality tier
-and whether they need the network, prefer the best offline one, and let the
-user choose explicitly. No new dependency, works today, and on most devices
-this alone is an audible improvement.
+**Done.** `VoicePicker` ranks installed voices by quality with a deliberate
+penalty for network-only ones, and Settings exposes both the **engine** and the
+**voice**. The engine matters more: phones ship a vendor engine as the default
+while a better one sits installed beside it, and the app was never choosing.
 
 ### 2b. The custom-model path cannot run at all
 
@@ -79,11 +79,11 @@ this alone is an audible improvement.
 forever. The app tells the user to edit `build.gradle.kts` — which is not a
 feature, it is a note to a developer left in a shipped product.
 
-**Fix:** flip to `implementation` and let CI answer the question the
-`compileOnly` was avoiding: does it actually clash with the TFLite MediaPipe
-links internally? The packaging block already handles duplicate `.so` files.
-If duplicate classes appear, exclude them; if they don't, the caution cost us
-the feature for nothing.
+**Done.** Flipped to `implementation`. The caution had cost the whole feature:
+a precaution that silently removes something the user asked for on day one is
+worse than the conflict it guards against. The packaging rule handles the
+duplicate `.so`; if duplicate *classes* appear, exclude them rather than going
+back. CI is the referee.
 
 ### 2c. The honest problem with Arabic TTS models
 
@@ -135,8 +135,8 @@ actually in hand.
 
 ## Order of work
 
-1. **Arabic voice picker** — real, immediate, no dependency.
-2. **Enable the TTS runtime** — one line, then let CI answer the conflict question.
+1. ~~Arabic voice and engine picker~~ — done.
+2. ~~Enable the TTS runtime~~ — done; CI is the referee on the conflict.
 3. **OpenCL for GGUF** — the largest real gain; needs care.
 4. **Instrument the diagnostics** — turn a device session into evidence.
 5. **ONNX + Piper for Arabic speech** — the real answer to "more human", as a project.

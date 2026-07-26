@@ -14,6 +14,14 @@ data class VoiceOption(
     val needsNetwork: Boolean,
 )
 
+/** One speech engine installed on the device. */
+data class TtsEngineOption(
+    /** Package name, e.g. com.google.android.tts. */
+    val packageName: String,
+    /** The engine's own display label. */
+    val label: String,
+)
+
 /**
  * Chooses which installed voice to speak Arabic with.
  *

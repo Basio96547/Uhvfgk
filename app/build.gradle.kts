@@ -82,9 +82,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
         jniLibs {
-            // Harmless by default (nothing duplicate is packaged). Kept so that
-            // switching the LiteRT dependency to `implementation` cannot fail
-            // the build on a duplicate native library.
+            // LiteRT and MediaPipe both carry a TFLite native library. Now
+            // that LiteRT is actually packaged, this is what keeps the two
+            // copies from failing the build.
             pickFirsts += listOf(
                 "**/libtensorflowlite_jni.so",
                 "**/libtensorflowlite_gpu_jni.so",
@@ -120,18 +120,18 @@ dependencies {
     // MediaPipe LLM Inference (on-device GenAI)
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
-    // LiteRT / TensorFlow Lite — used only by ModelTtsSynthesizer to run a
-    // user-supplied text-to-speech model.
+    // LiteRT / TensorFlow Lite — runs a user-supplied text-to-speech model in
+    // ModelTtsSynthesizer.
     //
-    // compileOnly on purpose: nothing from this artifact is packaged, so it can
-    // never clash with the TFLite runtime that MediaPipe links internally. The
-    // app builds and runs with zero conflicts out of the box, and speech output
-    // works through the system TTS engine.
-    //
-    // To run your own TTS model files, change this one word to `implementation`
-    // and rebuild. The app detects the runtime at startup and tells you if it
-    // is missing instead of crashing.
-    compileOnly("org.tensorflow:tensorflow-lite:2.16.1")
+    // This was compileOnly as a precaution against clashing with the TFLite
+    // that MediaPipe links internally. The cost of that caution was the whole
+    // feature: nothing was packaged, so isRuntimeAvailable() returned false in
+    // every build that shipped and "add a voice model" could not work at all.
+    // A precaution that silently removes a feature is worse than the conflict
+    // it guards against, so it is now packaged and the duplicate-native-library
+    // rule below handles the overlap. If duplicate *classes* appear, exclude
+    // them here rather than going back to compileOnly.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")

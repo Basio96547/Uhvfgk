@@ -301,6 +301,7 @@ interface AppStrings {
     val ttsSystemUnavailable: String
     val ttsNoModelSelected: String
     val ttsModelLoadFailed: String
+    val ttsRuntimeMissing: String
     val ttsEngineSystem: String
     val ttsEngineModel: String
     fun ggufLoadFailed(detail: String): String
@@ -312,6 +313,9 @@ interface AppStrings {
     val speechOutput: String
     val speechOutputSubtitle: String
     val engine: String
+    val speechEngineLabel: String
+    val speechEngineDefault: String
+    val speechEngineNote: String
     val voiceLabel: String
     val voiceAutoBest: String
     val voiceNoneInstalled: String
@@ -703,6 +707,8 @@ object EnglishStrings : AppStrings {
     override val ttsNoModelSelected = "No text-to-speech model selected. Add one on the " +
         "Models screen and set its type to \"Text → Speech\"."
     override val ttsModelLoadFailed = "Could not load the selected text-to-speech model."
+    override val ttsRuntimeMissing = "The speech-model runtime is missing from this build. " +
+        "Use the system engine instead."
     override val ttsEngineSystem = "System engine"
     override val ttsEngineModel = "My TTS model"
     override fun ggufLoadFailed(detail: String) = "Could not load this GGUF model.\n\n$detail"
@@ -721,6 +727,12 @@ object EnglishStrings : AppStrings {
     override val speechOutput = "Speech output"
     override val speechOutputSubtitle = "Read replies aloud"
     override val engine = "Engine"
+    override val speechEngineLabel = "Speech engine"
+    override val speechEngineDefault = "System default"
+    override val speechEngineNote = "Which engine matters more for Arabic than which voice. " +
+        "Phones often ship a vendor engine as the default while a better one sits installed " +
+        "beside it. If only one is listed, installing \"Speech Services by Google\" from the " +
+        "Play Store adds neural Arabic voices, free and offline once downloaded."
     override val voiceLabel = "Voice"
     override val voiceAutoBest = "Best available"
     override val voiceNoneInstalled = "No voice for this language is installed. Add one in " +
@@ -737,9 +749,8 @@ object EnglishStrings : AppStrings {
     override val voiceNeedsNetwork = "needs internet"
     override val systemEngineNote = "Android's built-in engine. Works out of the box and stays " +
         "offline once a voice pack is installed."
-    override val litertMissingNote = "This build doesn't bundle the LiteRT runtime, so custom " +
-        "TTS models can't run. Use the system engine, or switch compileOnly(…tensorflow-lite…) " +
-        "to implementation(…) in app/build.gradle.kts and rebuild."
+    override val litertMissingNote = "The speech-model runtime is missing from this build, " +
+        "so custom voice models can't run. Use the system engine instead."
     override fun usingVoiceModel(name: String, rate: Int) = "Using \"$name\" at $rate Hz."
     override val noVoiceModelNote = "No voice model selected. Add one on the Models screen and " +
         "set its type to \"Text → Speech\"."
@@ -1174,6 +1185,8 @@ object ArabicStrings : AppStrings {
     override val ttsNoModelSelected = "لم يُختر نموذج نطق. أضف واحدًا من شاشة النماذج " +
         "واضبط نوعه على «نص ← صوت»."
     override val ttsModelLoadFailed = "تعذّر تحميل نموذج النطق المختار."
+    override val ttsRuntimeMissing = "بيئة تشغيل نماذج النطق غير موجودة في هذه النسخة. " +
+        "استخدم محرّك النظام بدلًا منها."
     override val ttsEngineSystem = "محرّك النظام"
     override val ttsEngineModel = "نموذج النطق الخاص بي"
     override fun ggufLoadFailed(detail: String) = "تعذّر تحميل نموذج GGUF هذا.\n\n$detail"
@@ -1191,6 +1204,12 @@ object ArabicStrings : AppStrings {
     override val speechOutput = "إخراج الصوت"
     override val speechOutputSubtitle = "قراءة الردود بصوت مسموع"
     override val engine = "المحرّك"
+    override val speechEngineLabel = "محرّك النطق"
+    override val speechEngineDefault = "افتراضي النظام"
+    override val speechEngineNote = "المحرّك أهم للعربية من الصوت. الهواتف تشحن غالبًا " +
+        "بمحرّك الشركة كافتراضي بينما محرّك أفضل مثبّت بجواره. وإن لم تجد سوى واحد، " +
+        "فتثبيت «Speech Services by Google» من متجر Play يضيف أصواتًا عربية عصبية، " +
+        "مجانًا وتعمل دون اتصال بعد تنزيلها."
     override val voiceLabel = "الصوت"
     override val voiceAutoBest = "أفضل المتاح"
     override val voiceNoneInstalled = "لا يوجد صوت مثبّت لهذه اللغة. أضف واحدًا من إعدادات " +
@@ -1206,9 +1225,8 @@ object ArabicStrings : AppStrings {
     override val voiceNeedsNetwork = "يحتاج إنترنت"
     override val systemEngineNote = "محرّك أندرويد المدمج. يعمل مباشرة ويبقى دون اتصال " +
         "بعد تثبيت حزمة صوت."
-    override val litertMissingNote = "هذه النسخة لا تتضمّن بيئة LiteRT، فلا تعمل نماذج " +
-        "النطق المخصّصة. استخدم محرّك النظام، أو غيّر compileOnly(…tensorflow-lite…) " +
-        "إلى implementation(…) في app/build.gradle.kts وأعد البناء."
+    override val litertMissingNote = "بيئة تشغيل نماذج النطق غير موجودة في هذه النسخة، " +
+        "فلا تعمل نماذج الصوت المخصّصة. استخدم محرّك النظام بدلًا منها."
     override fun usingVoiceModel(name: String, rate: Int) = "يستخدم «$name» بمعدل $rate هرتز."
     override val noVoiceModelNote = "لم يُختر نموذج صوت. أضف واحدًا من شاشة النماذج واضبط " +
         "نوعه على «نص ← صوت»."

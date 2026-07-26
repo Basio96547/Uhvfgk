@@ -25,24 +25,51 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
     private var tts: TextToSpeech? = null
     @Volatile
     private var ready = false
+    /** Which engine package the live instance was created with, if any. */
+    @Volatile
+    private var activeEngine: String? = null
     private val utteranceCounter = AtomicLong(0)
 
-    override suspend fun prepare(): Boolean {
-        if (ready) return true
+    override suspend fun prepare(): Boolean = prepare(null)
+
+    /**
+     * Starts the engine, optionally a specific one by package name.
+     *
+     * Which *engine* is used matters more for Arabic than which voice: a phone
+     * often ships a vendor engine as the default while a markedly better one
+     * (Google's, typically) sits installed and unused. The system default is
+     * only ever a default.
+     */
+    suspend fun prepare(enginePackage: String?): Boolean {
+        if (ready && activeEngine == enginePackage) return true
+        // Switching engines means a new instance; the old one holds the audio.
+        if (ready) release()
+
         return suspendCancellableCoroutine { continuation ->
             var engine: TextToSpeech? = null
-            engine = TextToSpeech(context.applicationContext) { status ->
+            val listener = TextToSpeech.OnInitListener { status ->
                 ready = status == TextToSpeech.SUCCESS
                 if (ready) {
                     tts = engine
+                    activeEngine = enginePackage
                 } else {
                     runCatching { engine?.shutdown() }
                 }
                 if (continuation.isActive) continuation.resume(ready)
             }
+            engine = if (enginePackage.isNullOrBlank()) {
+                TextToSpeech(context.applicationContext, listener)
+            } else {
+                TextToSpeech(context.applicationContext, listener, enginePackage)
+            }
             continuation.invokeOnCancellation { runCatching { engine?.shutdown() } }
         }
     }
+
+    /** Speech engines installed on this device. */
+    fun availableEngines(): List<TtsEngineOption> = runCatching {
+        tts?.engines.orEmpty().map { TtsEngineOption(it.name, it.label) }
+    }.getOrDefault(emptyList())
 
     override suspend fun speak(text: String, options: SpeechOptions): SynthesisResult {
         if (text.isBlank()) return SynthesisResult.Failed("Nothing to speak.")
@@ -175,6 +202,7 @@ class SystemTtsSynthesizer(private val context: Context) : SpeechSynthesizer {
         runCatching { tts?.stop() }
         runCatching { tts?.shutdown() }
         tts = null
+        activeEngine = null
         ready = false
     }
 }

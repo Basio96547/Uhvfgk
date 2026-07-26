@@ -1,5 +1,6 @@
 package com.example.ondevicellm.audio
 
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.model.ModelSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -222,22 +223,23 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
         private const val DEFAULT_NOISE_SCALE = 0.667f
         private const val DEFAULT_NOISE_SCALE_W = 0.8f
 
-        const val RUNTIME_MISSING_MESSAGE: String =
-            "The LiteRT runtime isn't bundled in this build, so custom TTS models " +
-                "can't run.\n\nSwitch the speech engine to \"System engine\" in " +
-                "Settings, or enable LiteRT: in app/build.gradle.kts change\n" +
-                "  compileOnly(\"org.tensorflow:tensorflow-lite:…\")\n" +
-                "to\n" +
-                "  implementation(\"org.tensorflow:tensorflow-lite:…\")\n" +
-                "and rebuild."
+        /**
+         * Shown only if the runtime is somehow absent at runtime.
+         *
+         * It used to instruct the user to edit `app/build.gradle.kts`, which is
+         * not a thing to say to someone holding a phone. The dependency is
+         * packaged now, so this is a genuine "should never happen" rather than
+         * a known limitation dressed up as guidance.
+         */
+        val RUNTIME_MISSING_MESSAGE: String
+            get() = Localization.strings.ttsRuntimeMissing
 
         /**
          * Whether the LiteRT classes are actually present.
          *
-         * The dependency is `compileOnly` by default so the app can never
-         * conflict with the TFLite runtime MediaPipe links internally. That
-         * means these classes may legitimately be absent at runtime, and every
-         * entry point has to check before touching them.
+         * Checked rather than assumed. The dependency is packaged now, but a
+         * shrinker or a future exclusion could still take it away, and every
+         * entry point looks before touching it.
          */
         fun isRuntimeAvailable(): Boolean = runCatching {
             Class.forName("org.tensorflow.lite.Interpreter")
