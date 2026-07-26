@@ -24,7 +24,9 @@ import com.example.ondevicellm.core.ThermalLevel
 import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.EngineFactory
 import com.example.ondevicellm.llm.LlamaCppEngine
+import com.example.ondevicellm.llm.QueryRouter
 import com.example.ondevicellm.llm.ResolvedBackend
+import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.llm.TextEngine
 import com.example.ondevicellm.model.ModelImporter
 import com.example.ondevicellm.model.ModelRegistry
@@ -52,6 +54,11 @@ data class ChatMessage(
     val thinkingExpanded: Boolean = false,
     /** Pages the answer was grounded in, when web search ran. */
     val sources: List<SearchSource> = emptyList(),
+    /**
+     * Why this reply was handled the way it was ("Greeting — answering
+     * directly"). Shown above the bubble so routing is never a black box.
+     */
+    val routing: String = "",
 )
 
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
@@ -287,9 +294,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
+        val current = settingsStore.settings.value
+
+        // Decided once, before anything expensive: searching the web for "مرحبا"
+        // and reasoning about it cost half an hour and answered nothing.
+        val decision = QueryRouter.route(
+            message = prompt,
+            // The globe toggle is the master switch; the mode says when.
+            searchMode = if (current.webSearchEnabled) current.searchMode else RoutingMode.NEVER,
+            thinkMode = current.thinkingMode,
+            modelSupportsThinking = active.spec.supportsThinking,
+            defaultMaxTokens = active.spec.maxTokens,
+        )
+
         val userMessage = ChatMessage(nextId++, Author.USER, prompt)
         val replyId = nextId++
-        val placeholder = ChatMessage(replyId, Author.MODEL, "", isGenerating = true)
+        val placeholder = ChatMessage(
+            id = replyId,
+            author = Author.MODEL,
+            text = "",
+            isGenerating = true,
+            routing = decision.reason,
+        )
 
         _uiState.update {
             it.copy(
@@ -299,13 +325,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
-        val current = settingsStore.settings.value
         viewModelScope.launch(Dispatchers.IO) {
             // Match decode threads to the current thermal state before starting.
             (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
 
             var grounding = ""
-            if (current.webSearchEnabled) {
+            if (decision.search) {
                 _uiState.update {
                     it.copy(
                         searchStatus = if (current.searchDepth == SearchDepth.DEEP) {
@@ -343,7 +368,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 active.generate(
                     prompt = prompt,
                     systemPrompt = fullSystem,
-                    thinkingEnabled = current.thinkingEnabled,
+                    thinkingEnabled = decision.think,
+                    maxTokens = decision.maxTokens,
                 ) { thinking, answer, done ->
                     appendDelta(replyId, thinking, answer, done)
                 }

@@ -46,15 +46,19 @@ class InferenceEngine private constructor(
         prompt: String,
         systemPrompt: String?,
         thinkingEnabled: Boolean,
+        // MediaPipe fixes maxTokens when the engine is created, so a per-turn
+        // cap can't be applied here. The /no_think directive still shortens
+        // trivial answers for reasoning models.
+        maxTokens: Int,
         onDelta: (thinking: String, answer: String, done: Boolean) -> Unit,
     ) {
         check(!closed) { "Engine already closed" }
 
-        val parser = if (spec.supportsThinking && thinkingEnabled) {
-            ThinkingStreamParser()
-        } else {
-            null
-        }
+        // Parsed unconditionally: a model that ignores /no_think still emits
+        // <think>…</think>, and without a parser it showed up inline in the
+        // reply even with reasoning switched off.
+        val parser = ThinkingStreamParser()
+        val keepThinking = thinkingEnabled
 
         val fullPrompt = buildString {
             if (!systemPrompt.isNullOrBlank()) {
@@ -62,22 +66,18 @@ class InferenceEngine private constructor(
                 append("\n\n")
             }
             append(prompt)
+            if (spec.supportsThinking) append(QueryRouter.thinkingDirective(thinkingEnabled))
         }
 
         session.addQueryChunk(fullPrompt)
         session.generateResponseAsync { partial, done ->
-            if (parser == null) {
-                onDelta("", partial, done)
-                return@generateResponseAsync
-            }
-
             val delta = parser.consume(partial)
             if (!delta.isEmpty) {
-                onDelta(delta.thinking, delta.answer, false)
+                onDelta(if (keepThinking) delta.thinking else "", delta.answer, false)
             }
             if (done) {
                 val tail = parser.flush()
-                onDelta(tail.thinking, tail.answer, true)
+                onDelta(if (keepThinking) tail.thinking else "", tail.answer, true)
             }
         }
     }
@@ -131,7 +131,8 @@ class InferenceEngine private constructor(
 
             assertEnoughMemory(context, file.length())
 
-            val backend = BackendResolver.resolve(spec.backend, device)
+            // The file size is what turns AUTO into an actual decision.
+            val backend = BackendResolver.resolve(spec.backend, device, file.length())
 
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(spec.path)

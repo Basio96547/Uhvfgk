@@ -28,6 +28,8 @@ interface TextEngine {
         prompt: String,
         systemPrompt: String?,
         thinkingEnabled: Boolean,
+        /** Cap for this turn; the router lowers it for trivial messages. */
+        maxTokens: Int,
         onDelta: (thinking: String, answer: String, done: Boolean) -> Unit,
     )
 

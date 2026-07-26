@@ -23,7 +23,7 @@ data class MediaPipeBackend(
 )
 
 /**
- * Chooses the execution backend.
+ * Adapts [BackendPlanner]'s decision to MediaPipe's two-value backend enum.
  *
  * **On NPU support — read this before filing a bug.** The MediaPipe LLM
  * Inference API used here exposes exactly two backends: `CPU` and `GPU`. There
@@ -36,85 +36,45 @@ data class MediaPipeBackend(
  * So this resolver does two honest things:
  *  1. It *detects* whether a vendor NPU runtime exists on the device and
  *     surfaces that in the UI (see `DeviceCapabilities`).
- *  2. When NPU is requested, it runs on the GPU — the fastest backend actually
- *     available — and says so plainly instead of silently pretending.
+ *  2. When NPU is requested, it falls back to the fastest backend that really
+ *     is available, and says so plainly instead of silently pretending.
  *
  * The [NpuRuntime] hook below is the integration point for wiring in QNN later.
  */
 object BackendResolver {
 
-    fun resolve(pref: BackendPref, device: DeviceSnapshot): MediaPipeBackend = when (pref) {
-        BackendPref.CPU -> mediaPipe(pref, LlmInference.Backend.CPU, "")
-
-        BackendPref.GPU -> if (device.accelerators.vulkanAvailable ||
-            device.accelerators.openClAvailable
-        ) {
-            mediaPipe(pref, LlmInference.Backend.GPU, "")
-        } else {
-            mediaPipe(
-                pref,
-                LlmInference.Backend.CPU,
-                "No Vulkan/OpenCL driver detected — running on CPU.",
-            )
-        }
-
-        BackendPref.NPU -> resolveNpu(device)
-
-        BackendPref.AUTO -> autoSelect(device)
-    }
-
-    private fun mediaPipe(
+    /**
+     * @param modelBytes size of the model file; 0 when unknown. Passing it is
+     *   what makes AUTO a real decision rather than "GPU if there's a driver".
+     */
+    fun resolve(
         pref: BackendPref,
-        backend: LlmInference.Backend,
-        note: String,
-    ): MediaPipeBackend = MediaPipeBackend(
-        backend = backend,
-        resolved = ResolvedBackend(
-            requested = pref,
-            actualLabel = if (backend == LlmInference.Backend.GPU) "GPU" else "CPU",
-            note = note,
-        ),
-    )
+        device: DeviceSnapshot,
+        modelBytes: Long = 0L,
+    ): MediaPipeBackend {
+        val plan = BackendPlanner.plan(
+            pref = pref,
+            gpuCapable = device.accelerators.vulkanAvailable ||
+                device.accelerators.openClAvailable,
+            npuRuntimePresent = device.accelerators.hasNpuRuntime,
+            npuLinked = NpuRuntime.isAvailable(),
+            modelBytes = modelBytes,
+            availableBytes = device.memory.effectiveAvailableBytes,
+            socLabel = device.socModel,
+        )
 
-    private fun resolveNpu(device: DeviceSnapshot): MediaPipeBackend {
-        val npu = device.accelerators
-        val note = when {
-            NpuRuntime.isAvailable() ->
-                "NPU runtime is linked — delegating to the vendor NPU."
-
-            npu.hasNpuRuntime -> buildString {
-                append("Qualcomm NPU runtime detected on this device")
-                npu.hexagonVersion?.let { append(" (Hexagon $it)") }
-                append(", but the MediaPipe LLM API exposes only CPU/GPU. ")
-                append("Running on GPU. See BackendResolver docs to wire up QNN.")
-            }
-
-            else ->
-                "No vendor NPU runtime found on this device — running on GPU."
+        val backend = when (plan.target) {
+            ComputeTarget.GPU -> LlmInference.Backend.GPU
+            ComputeTarget.CPU -> LlmInference.Backend.CPU
         }
-
-        val backend = if (npu.vulkanAvailable || npu.openClAvailable) {
-            LlmInference.Backend.GPU
-        } else {
-            LlmInference.Backend.CPU
-        }
-        return mediaPipe(BackendPref.NPU, backend, note)
-    }
-
-    private fun autoSelect(device: DeviceSnapshot): MediaPipeBackend {
-        // GPU is the best generally-available backend for LLM decode on
-        // Snapdragon; fall back to CPU when no GPU compute driver is present.
-        val gpuCapable = device.accelerators.vulkanAvailable ||
-            device.accelerators.openClAvailable
-        return if (gpuCapable) {
-            mediaPipe(BackendPref.AUTO, LlmInference.Backend.GPU, "")
-        } else {
-            mediaPipe(
-                BackendPref.AUTO,
-                LlmInference.Backend.CPU,
-                "No GPU compute driver detected — running on CPU.",
-            )
-        }
+        return MediaPipeBackend(
+            backend = backend,
+            resolved = ResolvedBackend(
+                requested = pref,
+                actualLabel = if (plan.target == ComputeTarget.GPU) "GPU" else "CPU",
+                note = plan.note,
+            ),
+        )
     }
 }
 

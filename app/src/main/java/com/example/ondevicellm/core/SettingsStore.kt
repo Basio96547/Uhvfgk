@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.web.SearchDepth
 import java.util.Locale
 
@@ -25,8 +26,11 @@ enum class TtsEngine {
 
 data class AppSettings(
     val systemPrompt: String = "",
-    /** Ask reasoning-capable models to think before answering. */
-    val thinkingEnabled: Boolean = true,
+    /**
+     * When reasoning runs. AUTO lets the router decide per message — a greeting
+     * shouldn't cost a chain of thought.
+     */
+    val thinkingMode: RoutingMode = RoutingMode.AUTO,
     /** Show the reasoning trace in the chat UI. */
     val showThinking: Boolean = true,
     val voiceLanguageTag: String = Locale.getDefault().toLanguageTag(),
@@ -42,6 +46,8 @@ data class AppSettings(
      * question to third-party servers. The user opts in explicitly.
      */
     val webSearchEnabled: Boolean = false,
+    /** When search runs, once enabled. AUTO searches only when the question needs it. */
+    val searchMode: RoutingMode = RoutingMode.AUTO,
     /** Snippets only, or open the top pages and read them. */
     val searchDepth: SearchDepth = SearchDepth.QUICK,
 )
@@ -56,7 +62,9 @@ class SettingsStore(context: Context) {
 
     private fun read() = AppSettings(
         systemPrompt = prefs.getString(KEY_SYSTEM_PROMPT, "").orEmpty(),
-        thinkingEnabled = prefs.getBoolean(KEY_THINKING_ENABLED, true),
+        thinkingMode = RoutingMode.entries
+            .firstOrNull { it.name == prefs.getString(KEY_THINKING_MODE, null) }
+            ?: RoutingMode.AUTO,
         showThinking = prefs.getBoolean(KEY_SHOW_THINKING, true),
         voiceLanguageTag = prefs.getString(KEY_VOICE_LANG, null)
             ?: Locale.getDefault().toLanguageTag(),
@@ -67,6 +75,9 @@ class SettingsStore(context: Context) {
         speakingRate = prefs.getFloat(KEY_SPEAKING_RATE, 1.0f),
         pitch = prefs.getFloat(KEY_PITCH, 1.0f),
         webSearchEnabled = prefs.getBoolean(KEY_WEB_SEARCH, false),
+        searchMode = RoutingMode.entries
+            .firstOrNull { it.name == prefs.getString(KEY_SEARCH_MODE, null) }
+            ?: RoutingMode.AUTO,
         searchDepth = SearchDepth.entries
             .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) }
             ?: SearchDepth.QUICK,
@@ -77,7 +88,7 @@ class SettingsStore(context: Context) {
         _settings.value = updated
         prefs.edit()
             .putString(KEY_SYSTEM_PROMPT, updated.systemPrompt)
-            .putBoolean(KEY_THINKING_ENABLED, updated.thinkingEnabled)
+            .putString(KEY_THINKING_MODE, updated.thinkingMode.name)
             .putBoolean(KEY_SHOW_THINKING, updated.showThinking)
             .putString(KEY_VOICE_LANG, updated.voiceLanguageTag)
             .putString(KEY_TTS_ENGINE, updated.ttsEngine.name)
@@ -85,13 +96,15 @@ class SettingsStore(context: Context) {
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
             .putFloat(KEY_PITCH, updated.pitch)
             .putBoolean(KEY_WEB_SEARCH, updated.webSearchEnabled)
+            .putString(KEY_SEARCH_MODE, updated.searchMode.name)
             .putString(KEY_SEARCH_DEPTH, updated.searchDepth.name)
             .apply()
     }
 
     private companion object {
         const val KEY_SYSTEM_PROMPT = "systemPrompt"
-        const val KEY_THINKING_ENABLED = "thinkingEnabled"
+        const val KEY_THINKING_MODE = "thinkingMode"
+        const val KEY_SEARCH_MODE = "searchMode"
         const val KEY_SHOW_THINKING = "showThinking"
         const val KEY_VOICE_LANG = "voiceLanguageTag"
         const val KEY_TTS_ENGINE = "ttsEngine"

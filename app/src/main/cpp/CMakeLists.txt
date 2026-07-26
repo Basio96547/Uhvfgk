@@ -31,6 +31,34 @@ set(LLAMA_BUILD_SERVER     OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON     OFF CACHE BOOL "" FORCE)
 set(LLAMA_CURL             OFF CACHE BOOL "" FORCE)
 
+# --- CPU instruction set ------------------------------------------------------
+#
+# This matters more than any backend setting on the Settings screen.
+#
+# ggml picks its matmul kernels at *compile* time from -march. Cross-compiling
+# for Android with neither GGML_CPU_ARM_ARCH nor GGML_CPU_ALL_VARIANTS set,
+# ggml adds no arch flags at all, so the NDK default applies: plain armv8-a.
+# That builds the scalar/NEON fallback and leaves SDOT unused — on a Snapdragon
+# 8 Elite (S25 Ultra) that is several times slower than the kernels the chip can
+# actually run.
+#
+# armv8.2-a+dotprod+fp16 is the highest baseline that is safe for every device
+# this app installs on (minSdk 24): dotprod arrived with Cortex-A75/A55 in 2018
+# and every 64-bit Android phone since has it. i8mm (armv8.6) would be faster
+# still on 2022+ chips, but emitting those instructions unconditionally would
+# make the app SIGILL on anything older, so it stays opt-in.
+#
+# GGML_CPU_ALL_VARIANTS, which would give per-device dispatch, is not usable
+# here: it builds the backends as versioned MODULE libraries (libggml-cpu-*.so.N)
+# and Android only packages plain .so files out of an APK.
+set(LLAMA_ARM_ARCH "armv8.2-a+dotprod+fp16"
+    CACHE STRING "-march for the ggml CPU kernels")
+# GGML_CPU_ARM_ARCH is only consulted on the non-native path, and -march=native
+# is meaningless when cross-compiling anyway.
+set(GGML_NATIVE       OFF                  CACHE BOOL   "" FORCE)
+set(GGML_CPU_ARM_ARCH "${LLAMA_ARM_ARCH}"  CACHE STRING "" FORCE)
+message(STATUS "ggml CPU kernels: -march=${LLAMA_ARM_ARCH}")
+
 # The NDK ships no OpenMP runtime by default, and llamafile's sgemm kernels
 # don't build cleanly for android arm64 — ggml's own NEON path is used instead.
 set(GGML_OPENMP            OFF CACHE BOOL "" FORCE)

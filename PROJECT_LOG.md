@@ -32,9 +32,15 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
 | Diagnostics/crash log | ⚠️ Compiles — **never triggered in anger** |
+| Query routing (search/think) | ✅ 21 tests, incl. the reported "مرحبا" case |
+| Token streaming (UTF-8) | ✅ Crash fixed and covered by 9 native assertions |
 
-**Nothing has been run on a physical device yet.** Everything below marked ⚠️
-is "correct by construction and unit tests" but unproven in practice.
+**Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
+That run produced four bug reports — routing, a hard crash on Arabic output,
+useless backend selection, and reasoning leaking into replies. All four are
+fixed in session 2 below; **the fixes themselves have not been back on the
+device yet.** Everything still marked ⚠️ is "correct by construction and unit
+tests" but unproven in practice.
 
 ### CI history
 | Run | Commit | Result |
@@ -193,6 +199,75 @@ platform APIs, so grounding can't conflict with the inference runtimes.
     filtering, entity decoding) plus readable-text extraction so `SearchDepth.DEEP`
     can open the top three pages and ground answers in real content. Globe
     toggle moved into the input bar; depth chips in Settings.
+
+### Session 2 — 2026-07-26 · first real-device feedback
+
+The app ran on an actual Galaxy S25 Ultra with `Qwen3-4B-Q8_0`. Four bugs came
+back from that run. All four were real, and none of them were visible from the
+sandbox.
+
+15. **"مرحبا took half an hour and searched the web."** Every message got a web
+    search *and* a full chain of thought, unconditionally. Added
+    `llm/QueryRouter.kt`: a rule set that classifies a message as SOCIAL /
+    SIMPLE / LOOKUP / REASONING and decides search, thinking and a token cap
+    per turn. Deliberately rules, not a model call — routing must be instant
+    and work offline, and a second inference pass to decide whether to run the
+    first would cost more than it saves.
+    - Handles Arabic properly: diacritics stripped, `أإآ→ا`, `ى→ي`, `ة→ه`.
+    - `hasPhrase()` matches on word boundaries. Plain `contains` had put
+      "قارن بين الاندرويد والايفون" into a web search, because "الان" (now) is
+      a substring of "الاندرويد" (Android).
+    - A greeting attached to a real question is still the question:
+      "مرحبا، لماذا السماء زرقاء؟" reasons.
+    - A greeting is capped at 200 tokens. `ALWAYS` overrides are ignored for
+      greetings — forcing a chain of thought on "hello" is the bug itself.
+    - `thinkingEnabled: Boolean` in settings became
+      `thinkingMode: RoutingMode` (Auto/Always/Never), and `searchMode` joined
+      it. The globe stays the master switch; the mode says *when*.
+    - The decision's reason is printed above each reply, so routing is never a
+      black box.
+    - 21 tests in `QueryRouterTest`.
+
+16. **The app crashed and closed after sending a message.** Root cause found in
+    `llama_bridge.cpp`: `env->NewStringUTF(piece.c_str())` on each token. A BPE
+    token is a run of *bytes*, not characters — Arabic letters are two bytes and
+    the tokenizer splits them across pieces constantly. ART aborts the process
+    on malformed Modified UTF-8, so the first split Arabic letter killed the
+    app. Which is why it crashed on his messages and never in any test here.
+    - Added `utf8_complete_prefix()`: only complete UTF-8 is emitted, an
+      incomplete tail is held until the next token completes it.
+    - The callback now takes `ByteArray`, decoded JVM-side as real UTF-8.
+      `NewStringUTF` cannot represent 4-byte sequences at all, so emoji were a
+      second crash waiting to happen.
+    - Nine assertions in `tools/verify-native.sh` cover it, including the exact
+      "مرحبا" split-byte case.
+    - Fixed alongside: prompt ingestion decoded the whole prompt in one batch.
+      Past `n_batch` (512) llama.cpp rejects it, and search grounding routinely
+      pushes prompts well past that. Now chunked.
+
+17. **"The processor selection is dumb — no priority for an S25 Ultra."**
+    Correct on both counts.
+    - **The real cause was in CMake, not in the picker.** Cross-compiling for
+      Android with neither `GGML_CPU_ARM_ARCH` nor `GGML_CPU_ALL_VARIANTS` set,
+      ggml adds *no* `-march` flags, so the NDK default applies: plain
+      `armv8-a`. Every GGUF model was running the scalar fallback with SDOT
+      unused — several times slower than what the chip can do. Now pinned to
+      `armv8.2-a+dotprod+fp16`, the highest baseline safe for every device this
+      app installs on (minSdk 24; dotprod is universal since 2018).
+      `GGML_CPU_ALL_VARIANTS`, which would dispatch per-device, is unusable
+      here: it emits versioned MODULE libraries (`libggml-cpu-*.so.N`) and an
+      APK only packages plain `.so`.
+    - `nativeCpuFeatures()` reports which SIMD kernels are actually live —
+      compile-time *and* HWCAP — and it is shown on the model chip.
+    - `BackendPlanner` replaces the old "is there a GPU driver? → GPU" answer.
+      It weighs model size and free memory: a 4 GB bundle does not go on a
+      phone GPU, it gets memory-mapped on the CPU. Pure Kotlin, 13 tests.
+
+18. **Reasoning showed up inside the reply with thinking switched off.** The
+    `<think>` parser was only constructed when thinking was enabled — but a
+    model that ignores `/no_think` still emits the block, and with no parser it
+    landed verbatim in the bubble. Both engines now parse unconditionally and
+    discard the trace when reasoning wasn't asked for.
 
 ---
 

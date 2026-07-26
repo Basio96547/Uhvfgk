@@ -93,6 +93,10 @@ cat > probe.cpp <<'PROBE'
 #include <jni.h>
 #include <cstdio>
 #include <cstring>
+#include <string>
+
+namespace llamabridge { size_t utf8_complete_prefix(const std::string &); }
+
 extern "C" {
 JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeInit(JNIEnv*, jobject);
 JNIEXPORT jstring JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv*, jobject);
@@ -101,6 +105,7 @@ JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeFre
 JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(JNIEnv*, jobject, jlong, jint);
 JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeStop(JNIEnv*, jobject, jlong);
 JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(JNIEnv*, jobject, jlong);
+JNIEXPORT jstring JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv*, jobject);
 }
 static int failures = 0;
 static void check(const char* n, bool ok) { printf("%s  %s\n", ok?"PASS ":"FAIL ", n); if(!ok) failures++; }
@@ -131,6 +136,39 @@ int main() {
     jstring empty = env->NewStringUTF("");
     check("empty path returns null handle",
           Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(env,nullptr,empty,512,2)==0);
+
+    jstring feats = Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(env,nullptr);
+    const char* fs = env->GetStringUTFChars(feats,nullptr);
+    check("CPU features are reported", fs != nullptr);
+    printf("       host kernels: \"%s\"\n", fs?fs:"(none)");
+    env->ReleaseStringUTFChars(feats,fs);
+
+    // --- the crash fix: a multi-byte character split across two tokens ------
+    // "مرحبا" is 10 bytes; every letter is two. llama.cpp routinely hands over
+    // half of one, and NewStringUTF on that fragment killed the process.
+    {
+        using llamabridge::utf8_complete_prefix;
+        const std::string hello = "\xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7"; // مرحبا
+        check("complete arabic passes through whole",
+              utf8_complete_prefix(hello) == hello.size());
+        check("a split arabic letter is held back",
+              utf8_complete_prefix(hello.substr(0, 9)) == 8);
+        check("a lone lead byte emits nothing",
+              utf8_complete_prefix("\xd9") == 0);
+        check("ascii is never withheld",
+              utf8_complete_prefix("hello") == 5);
+        check("emoji needs all four bytes",
+              utf8_complete_prefix("\xf0\x9f\x98\x80") == 4 &&
+              utf8_complete_prefix("\xf0\x9f\x98") == 0);
+        check("3-byte sequences are handled",
+              utf8_complete_prefix("\xe2\x9c\x93") == 3 &&
+              utf8_complete_prefix("\xe2\x9c") == 0);
+        check("a complete prefix is emitted before an incomplete tail",
+              utf8_complete_prefix("ok\xd9\x85\xd8") == 4);
+        check("an invalid lead byte never stalls the stream",
+              utf8_complete_prefix("\xff\xff") == 2);
+        check("empty input is a no-op", utf8_complete_prefix("") == 0);
+    }
 
     vm->DestroyJavaVM();
     printf("\n%s\n", failures==0 ? ">>> NATIVE BRIDGE VERIFIED" : ">>> FAILURES");

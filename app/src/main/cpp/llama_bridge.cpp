@@ -8,17 +8,60 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
 #include <atomic>
 #include <string>
 #include <vector>
 
+#include "ggml-cpu.h"
 #include "llama.h"
 
 #define LOG_TAG "llamabridge"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+// Externally linked so tools/verify-native.sh can test it directly — it is the
+// fix for a process-killing crash and deserves more than "it compiled".
+namespace llamabridge {
+
+/// Length of the longest prefix of [bytes] that is complete UTF-8.
+///
+/// This is the fix for a hard crash. A BPE token is a run of *bytes*, not
+/// characters: Arabic letters are two bytes and emoji four, and the tokenizer
+/// splits them across pieces all the time. Handing such a fragment to
+/// NewStringUTF makes ART abort the whole process —
+///   "JNI DETECTED ERROR IN APPLICATION: input is not valid Modified UTF-8"
+/// — which is why the app died mid-reply. Anything incomplete is held back
+/// until the following token completes it.
+size_t utf8_complete_prefix(const std::string &bytes) {
+    size_t i = 0;
+    while (i < bytes.size()) {
+        const unsigned char lead = static_cast<unsigned char>(bytes[i]);
+        size_t len;
+        if (lead < 0x80) {
+            len = 1;
+        } else if ((lead & 0xE0) == 0xC0) {
+            len = 2;
+        } else if ((lead & 0xF0) == 0xE0) {
+            len = 3;
+        } else if ((lead & 0xF8) == 0xF0) {
+            len = 4;
+        } else {
+            // Not a valid lead byte. Pass it through rather than stalling
+            // forever waiting for a continuation that will never arrive.
+            len = 1;
+        }
+        if (i + len > bytes.size()) break;
+        i += len;
+    }
+    return i;
+}
+
+} // namespace llamabridge
+
 namespace {
+
+using llamabridge::utf8_complete_prefix;
 
 struct Session {
     llama_model *model = nullptr;
@@ -134,6 +177,28 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv *env, jobjec
     return env->NewStringUTF(g_last_error.c_str());
 }
 
+/// The SIMD extensions this build is actually using, comma-separated.
+///
+/// Compile-time *and* runtime: ggml only reports a feature when the kernels
+/// were built for it and the CPU advertises it. So this is what the model is
+/// really running on, not what the phone could theoretically do.
+JNIEXPORT jstring JNICALL
+Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobject) {
+    std::string features;
+    const auto add = [&features](const char *name, int enabled) {
+        if (!enabled) return;
+        if (!features.empty()) features += ", ";
+        features += name;
+    };
+    add("NEON", ggml_cpu_has_neon());
+    add("dotprod", ggml_cpu_has_dotprod());
+    add("fp16", ggml_cpu_has_fp16_va());
+    add("i8mm", ggml_cpu_has_matmul_int8());
+    add("SVE", ggml_cpu_has_sve());
+    add("SME", ggml_cpu_has_sme());
+    return env->NewStringUTF(features.c_str());
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
     JNIEnv *env, jobject, jstring path_, jint n_ctx, jint n_threads) {
@@ -239,7 +304,9 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
     g_last_error.clear();
 
     jclass callback_class = env->GetObjectClass(callback);
-    jmethodID on_token = env->GetMethodID(callback_class, "onToken", "(Ljava/lang/String;)Z");
+    // Bytes, not String: the JVM decodes them as real UTF-8, which handles
+    // 4-byte sequences (emoji) that NewStringUTF's Modified UTF-8 cannot.
+    jmethodID on_token = env->GetMethodID(callback_class, "onToken", "([B)Z");
     if (on_token == nullptr) {
         g_last_error = "Internal error: token callback not found.";
         return JNI_FALSE;
@@ -267,13 +334,20 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
         tokens = tokenize(session->vocab, formatted, true);
     }
 
-    // Prompt ingestion.
-    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
-    if (llama_decode(session->ctx, batch) != 0) {
-        g_last_error = "Failed to process the prompt (context may be too small).";
-        return JNI_FALSE;
+    // Prompt ingestion, in n_batch-sized chunks. A single decode larger than
+    // n_batch is rejected by llama.cpp, and web-search grounding routinely
+    // pushes a prompt well past 512 tokens.
+    const int32_t n_batch = static_cast<int32_t>(llama_n_batch(session->ctx));
+    for (size_t offset = 0; offset < tokens.size();) {
+        const int32_t chunk = std::min<int32_t>(n_batch, tokens.size() - offset);
+        llama_batch batch = llama_batch_get_one(tokens.data() + offset, chunk);
+        if (llama_decode(session->ctx, batch) != 0) {
+            g_last_error = "Failed to process the prompt (context may be too small).";
+            return JNI_FALSE;
+        }
+        offset += static_cast<size_t>(chunk);
+        session->n_past += chunk;
     }
-    session->n_past += static_cast<llama_pos>(tokens.size());
 
     // Sampler chain: top-k -> top-p -> temperature -> distribution.
     llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
@@ -290,17 +364,31 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
     }
 
     bool ok = true;
+    // Holds the tail of a multi-byte character split across two tokens.
+    std::string pending;
+
     for (int32_t generated = 0; generated < max_tokens; ++generated) {
         if (session->stop.load()) break;
 
         const llama_token token = llama_sampler_sample(sampler, session->ctx, -1);
         if (llama_vocab_is_eog(session->vocab, token)) break;
 
-        const std::string piece = token_to_text(session->vocab, token);
-        if (!piece.empty()) {
-            jstring jpiece = env->NewStringUTF(piece.c_str());
-            const jboolean keep_going = env->CallBooleanMethod(callback, on_token, jpiece);
-            env->DeleteLocalRef(jpiece);
+        pending += token_to_text(session->vocab, token);
+        const size_t emit = utf8_complete_prefix(pending);
+        if (emit > 0) {
+            jbyteArray chunk = env->NewByteArray(static_cast<jsize>(emit));
+            if (chunk == nullptr) {
+                g_last_error = "Out of memory while streaming the reply.";
+                ok = false;
+                break;
+            }
+            env->SetByteArrayRegion(
+                chunk, 0, static_cast<jsize>(emit),
+                reinterpret_cast<const jbyte *>(pending.data()));
+            const jboolean keep_going = env->CallBooleanMethod(callback, on_token, chunk);
+            env->DeleteLocalRef(chunk);
+            pending.erase(0, emit);
+
             if (env->ExceptionCheck()) {
                 env->ExceptionClear();
                 ok = false;

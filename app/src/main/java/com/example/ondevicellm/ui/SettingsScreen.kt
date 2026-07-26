@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.core.TtsEngine
+import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.web.SearchDepth
 import com.example.ondevicellm.ui.theme.Space
 
@@ -61,12 +62,29 @@ fun SettingsScreen(
             subtitle = "How the model thinks",
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
-            ToggleRow(
-                label = "Enable thinking",
-                description = "Let reasoning-capable models think before answering.",
-                checked = settings.thinkingEnabled,
-                onChange = { v -> viewModel.updateSettings { it.copy(thinkingEnabled = v) } },
+            GroupLabel("When to think")
+            ModeChips(
+                selected = settings.thinkingMode,
+                onSelect = { mode -> viewModel.updateSettings { it.copy(thinkingMode = mode) } },
             )
+            Spacer(Modifier.height(Space.sm))
+            Caption(
+                when (settings.thinkingMode) {
+                    RoutingMode.AUTO ->
+                        "Reasoning runs only when the question needs it — maths, code, " +
+                            "comparisons, \"why\" and \"explain\". A greeting is answered " +
+                            "straight away instead of being deliberated over."
+                    RoutingMode.ALWAYS ->
+                        "Every message gets a full chain of thought. Thorough, but slow: " +
+                            "even \"hello\" is reasoned about."
+                    RoutingMode.NEVER ->
+                        "Reasoning is off. Replies come back fastest, and hard questions " +
+                            "are answered in one pass."
+                }
+            )
+
+            SoftDivider()
+
             ToggleRow(
                 label = "Show reasoning",
                 description = "Display the collapsible thinking trace in chat.",
@@ -107,6 +125,28 @@ fun SettingsScreen(
             )
 
             if (settings.webSearchEnabled) {
+                SoftDivider()
+                GroupLabel("When to search")
+                ModeChips(
+                    selected = settings.searchMode,
+                    onSelect = { mode -> viewModel.updateSettings { it.copy(searchMode = mode) } },
+                )
+                Spacer(Modifier.height(Space.sm))
+                Caption(
+                    when (settings.searchMode) {
+                        RoutingMode.AUTO ->
+                            "Searches only when the answer depends on something current " +
+                                "— news, prices, weather, \"latest\", or when you ask it " +
+                                "to look something up."
+                        RoutingMode.ALWAYS ->
+                            "Every question is looked up first. Slower, and sends more " +
+                                "of what you type to third-party servers."
+                        RoutingMode.NEVER ->
+                            "Search stays off even though it's enabled above — useful " +
+                                "for pausing it without losing your settings."
+                    }
+                )
+
                 SoftDivider()
                 GroupLabel("Depth")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -300,6 +340,24 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(Space.xl))
+    }
+}
+
+/** Auto / Always / Never, used for both reasoning and search. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModeChips(
+    selected: RoutingMode,
+    onSelect: (RoutingMode) -> Unit,
+) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        RoutingMode.entries.forEach { mode ->
+            FilterChip(
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                label = { Text(mode.label) },
+            )
+        }
     }
 }
 

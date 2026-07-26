@@ -368,6 +368,17 @@ private fun MessageRow(
     ) {
         Column(Modifier.widthIn(max = 340.dp)) {
 
+            // Says why this reply was routed the way it was, so a missing search
+            // or a skipped chain of thought is explained rather than mysterious.
+            if (!isUser && message.routing.isNotEmpty()) {
+                Text(
+                    message.routing,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = Space.xs, bottom = Space.xs),
+                )
+            }
+
             if (!isUser && showThinking && message.thinking.isNotEmpty()) {
                 ThinkingBlock(
                     text = message.thinking,
