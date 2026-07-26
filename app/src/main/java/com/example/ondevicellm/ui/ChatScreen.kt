@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
@@ -83,6 +84,7 @@ import com.example.ondevicellm.llm.QueryKind
 import com.example.ondevicellm.llm.RoutingDecision
 import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.ui.theme.Gradients
+import com.example.ondevicellm.ui.theme.Layout
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
 import com.example.ondevicellm.ui.theme.panel
@@ -372,7 +374,11 @@ private fun MessageRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
-        Column(Modifier.widthIn(max = 340.dp)) {
+        // A proportion, not 340dp: that constant was 83% of an S25 Ultra and
+        // 96% of a small phone, so one screen looked roomy and the other
+        // edge-to-edge.
+        val bubbleMax = Layout.bubbleMaxWidth(LocalConfiguration.current.screenWidthDp).dp
+        Column(Modifier.widthIn(max = bubbleMax)) {
 
             // Says why this reply was routed the way it was, so a missing search
             // or a skipped chain of thought is explained rather than mysterious.
@@ -783,7 +789,7 @@ private fun SearchToggle(enabled: Boolean, onClick: () -> Unit) {
     val s = LocalStrings.current
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Layout.TOUCH_TARGET_DP.dp)
             .clip(CircleShape)
             .background(
                 if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
@@ -815,7 +821,7 @@ private fun MicButton(isListening: Boolean, enabled: Boolean, onClick: () -> Uni
     )
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Layout.TOUCH_TARGET_DP.dp)
             .scale(scale)
             .clip(CircleShape)
             .background(
@@ -848,7 +854,7 @@ internal fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     )
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(Layout.TOUCH_TARGET_DP.dp)
             .scale(scale)
             .clip(CircleShape)
             .then(

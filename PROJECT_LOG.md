@@ -421,6 +421,46 @@ truncation: comprehension. Five real defects were found, all in the same place
     - The preview and the code editor are pinned LTR, so an Arabic interface
       doesn't mirror a layout the model wrote for LTR.
 
+### Session 6 — 2026-07-26 · sizing for the reference device
+
+Report: the Studio project view is out of proportion on an S25 Ultra, and the
+layouts should be tuned for that screen.
+
+32. **What that screen actually is.** 411 × 891 dp. At 1440×3120 physical
+    pixels it sounds enormous, but Samsung ships density 3.5, so in layout units
+    it is exactly as *wide* as an ordinary phone and unusually *tall*. Designing
+    for "a big screen" by widening things is the wrong instinct — the room is
+    vertical. `ui/theme/Layout.kt` holds the arithmetic as plain functions, all
+    derived from the real window size, with 14 tests.
+
+33. **The navigation bar was overflowing, and I caused it.** Adding the Studio
+    tab took the row from four items to five, at padding sized for four: 425 dp
+    of a 395 dp row, so the last tab was pushed off the edge. Items now take
+    equal weighted shares and the pill padding is computed from the width and
+    the tab count. The test asserts the row fits *and* that each item still
+    meets the 48 dp touch target — squeezed items fit and then get mistapped.
+
+34. **Touch targets.** Header buttons were 40 dp, Studio toolbar buttons 38 dp,
+    and the send/mic/search controls 44 dp — all under the platform minimum, and
+    all reading small on the largest screen in the range. All 48 dp now.
+
+35. **The preview was laying out at 980 px.** The real answer to "out of
+    proportion": a WebView with no viewport meta tag uses a 980 px viewport and
+    scales the result down, so a page written for a phone arrives looking like a
+    shrunken desktop site. `ensureViewport` injects the tag when the model
+    leaves it out — which it does often enough that relying on it is not a plan
+    — and the WebView is pinned to device width with the system font scale
+    ignored, since that belongs to the app's text, not to a layout the model
+    sized itself.
+
+36. **Bubble width is a proportion now.** 340 dp was 83% of this screen and 96%
+    of a small one: the same constant read as roomy on one phone and
+    edge-to-edge on another.
+
+37. **The keyboard covered the input.** `enableEdgeToEdge()` draws behind the
+    system bars, and nothing accounted for the IME. One `imePadding()` at the
+    root lifts content and navigation together on every screen.
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads

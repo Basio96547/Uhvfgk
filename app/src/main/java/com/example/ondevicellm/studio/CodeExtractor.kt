@@ -51,8 +51,42 @@ object CodeExtractor {
             (head.startsWith("<") && text.contains("</", ignoreCase = true))
     }
 
+    private const val VIEWPORT =
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+
     /**
-     * Wraps a fragment so the preview always has a real document.
+     * True when the document tells the browser to lay out at the device width.
+     */
+    fun hasViewport(code: String): Boolean =
+        Regex("<meta[^>]+name\\s*=\\s*[\"']viewport", RegexOption.IGNORE_CASE)
+            .containsMatchIn(code)
+
+    /**
+     * Adds a viewport tag to a document that lacks one.
+     *
+     * Without it a WebView lays the page out at 980 CSS pixels and scales the
+     * result down to fit, so a page written for a phone arrives looking like a
+     * shrunken desktop site — every element proportionally too small, on the
+     * largest screen in the range. Models leave the tag out often enough that
+     * relying on them to include it is not a plan.
+     */
+    fun ensureViewport(code: String): String {
+        if (code.isBlank() || hasViewport(code)) return code
+
+        Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(code)?.let { head ->
+            return code.substring(0, head.range.last + 1) +
+                "\n" + VIEWPORT + code.substring(head.range.last + 1)
+        }
+        Regex("<html[^>]*>", RegexOption.IGNORE_CASE).find(code)?.let { html ->
+            return code.substring(0, html.range.last + 1) +
+                "\n<head>" + VIEWPORT + "</head>" + code.substring(html.range.last + 1)
+        }
+        return "<head>$VIEWPORT</head>\n$code"
+    }
+
+    /**
+     * Wraps a fragment so the preview always has a real document, and makes
+     * sure whatever comes back lays out at the device width.
      *
      * Models frequently return only a `<div>` and its `<style>` when asked for
      * a change, and a WebView will render that as unstyled text at the top-left
@@ -62,7 +96,9 @@ object CodeExtractor {
         val trimmed = code.trim()
         if (trimmed.isEmpty()) return ""
         val head = trimmed.take(200).lowercase()
-        if (head.startsWith("<!doctype") || head.startsWith("<html")) return trimmed
+        if (head.startsWith("<!doctype") || head.startsWith("<html")) {
+            return ensureViewport(trimmed)
+        }
 
         return buildString {
             appendLine("<!doctype html>")

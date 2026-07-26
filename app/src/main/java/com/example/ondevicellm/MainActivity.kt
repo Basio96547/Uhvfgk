@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,6 +62,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -75,6 +78,7 @@ import com.example.ondevicellm.ui.ModelsScreen
 import com.example.ondevicellm.ui.SettingsScreen
 import com.example.ondevicellm.ui.StudioScreen
 import com.example.ondevicellm.ui.theme.OnDeviceLLMTheme
+import com.example.ondevicellm.ui.theme.Layout
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
 
@@ -152,7 +156,16 @@ private fun AppContent(viewModel: ChatViewModel) {
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // enableEdgeToEdge() draws behind the system bars, so the keyboard has
+        // to be accounted for explicitly or it sits on top of the text field.
+        // Applied once at the root: every screen with an input gets it, and the
+        // navigation bar rides up with the content rather than being buried.
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding()
+        ) {
 
             AppHeader(
                 destination = destination,
@@ -296,7 +309,7 @@ private fun HeaderButton(
     }
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(Layout.TOUCH_TARGET_DP.dp)
             .clip(CircleShape)
             .background(
                 if (accent) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -305,7 +318,7 @@ private fun HeaderButton(
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(21.dp))
     }
 }
 
@@ -329,13 +342,20 @@ private fun BottomBar(selected: Destination, onSelect: (Destination) -> Unit) {
                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
                 .navigationBarsPadding()
                 .padding(horizontal = Space.sm, vertical = Space.sm),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val widthDp = LocalConfiguration.current.screenWidthDp
+            val pillPadding = Layout.navPillPadding(widthDp, Destination.entries.size).dp
             Destination.entries.forEach { item ->
                 NavItem(
                     item = item,
                     isSelected = item == selected,
+                    pillPadding = pillPadding,
+                    // Equal shares of the row: five tabs at the padding four
+                    // used needed 425dp of a 395dp row, and the last one fell
+                    // off the edge.
+                    modifier = Modifier.weight(1f),
                     onClick = { onSelect(item) },
                 )
             }
@@ -344,7 +364,13 @@ private fun BottomBar(selected: Destination, onSelect: (Destination) -> Unit) {
 }
 
 @Composable
-private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit) {
+private fun NavItem(
+    item: Destination,
+    isSelected: Boolean,
+    pillPadding: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     val label = item.title(LocalStrings.current)
     val iconScale by animateFloatAsState(
         targetValue = if (isSelected) 1f else 0.92f,
@@ -362,14 +388,14 @@ private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit)
     )
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = Space.lg, vertical = 6.dp),
+            .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -382,14 +408,14 @@ private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit)
                         Modifier
                     }
                 )
-                .padding(horizontal = Space.lg, vertical = 5.dp),
+                .padding(horizontal = pillPadding, vertical = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 item.icon,
                 contentDescription = label,
                 tint = tint,
-                modifier = Modifier.size(21.dp).scale(iconScale),
+                modifier = Modifier.size(Layout.NAV_ICON_DP.dp).scale(iconScale),
             )
         }
         Spacer(Modifier.height(3.dp))
@@ -398,6 +424,8 @@ private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit)
             style = MaterialTheme.typography.labelSmall,
             color = tint,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

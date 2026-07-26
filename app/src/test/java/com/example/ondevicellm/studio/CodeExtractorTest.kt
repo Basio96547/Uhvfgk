@@ -68,10 +68,18 @@ class CodeExtractorTest {
     // ---- wrapping a fragment ----------------------------------------------
 
     @Test
-    fun `a full document is left alone`() {
-        assertEquals(page, CodeExtractor.asDocument(page))
-        val noDoctype = "<html><body>x</body></html>"
-        assertEquals(noDoctype, CodeExtractor.asDocument(noDoctype))
+    fun `a full document keeps its own markup`() {
+        // Not byte-identical: a document without a viewport gains one, because
+        // otherwise the WebView lays it out at 980px and shrinks it. Everything
+        // the model wrote is preserved.
+        listOf(page, "<html><body>x</body></html>").forEach { document ->
+            val result = CodeExtractor.asDocument(document)
+            assertTrue(result.contains("<body>"))
+            assertFalse("must not be wrapped a second time", result.contains("<html", ignoreCase = true)
+                .let { _ -> Regex("<html", RegexOption.IGNORE_CASE).findAll(result).count() > 1 })
+            assertTrue(CodeExtractor.hasViewport(result))
+        }
+        assertTrue(CodeExtractor.asDocument(page).contains("<h1>Hi</h1>"))
     }
 
     @Test
@@ -126,5 +134,50 @@ class CodeExtractorTest {
         assertFalse(CodeExtractor.looksLikeDocument("Here is how I would do it."))
         assertFalse(CodeExtractor.looksLikeDocument("2 < 3 and 4 > 1"))
         assertTrue(CodeExtractor.looksLikeDocument("<div>x</div>"))
+    }
+
+    // ---- laying out at the device width -----------------------------------
+
+    @Test
+    fun `a document without a viewport gets one`() {
+        val bare = "<!doctype html><html><head><title>x</title></head><body>hi</body></html>"
+        assertFalse(CodeExtractor.hasViewport(bare))
+        val fixed = CodeExtractor.asDocument(bare)
+        assertTrue(CodeExtractor.hasViewport(fixed))
+        assertTrue("the page itself is untouched", fixed.contains("<title>x</title>"))
+        assertTrue(fixed.contains("width=device-width"))
+    }
+
+    @Test
+    fun `a document that already has one is left alone`() {
+        val withViewport =
+            "<html><head><meta name=\"viewport\" content=\"width=device-width\"></head></html>"
+        assertEquals(withViewport, CodeExtractor.asDocument(withViewport))
+    }
+
+    @Test
+    fun `single quotes and odd spacing still count as a viewport`() {
+        assertTrue(CodeExtractor.hasViewport("<meta name = 'viewport' content='x'>"))
+        assertTrue(CodeExtractor.hasViewport("<META NAME=\"VIEWPORT\" CONTENT=\"x\">"))
+    }
+
+    @Test
+    fun `a document with no head still gets a viewport`() {
+        val noHead = "<html><body>hi</body></html>"
+        val fixed = CodeExtractor.ensureViewport(noHead)
+        assertTrue(CodeExtractor.hasViewport(fixed))
+        assertTrue(fixed.contains("<body>hi</body>"))
+    }
+
+    @Test
+    fun `a bare fragment with no html tag still gets a viewport`() {
+        val fixed = CodeExtractor.ensureViewport("<div>hi</div>")
+        assertTrue(CodeExtractor.hasViewport(fixed))
+        assertTrue(fixed.contains("<div>hi</div>"))
+    }
+
+    @Test
+    fun `nothing in, nothing invented`() {
+        assertEquals("", CodeExtractor.ensureViewport(""))
     }
 }

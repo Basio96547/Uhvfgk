@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.ModelStatus
 import com.example.ondevicellm.studio.StudioProject
+import com.example.ondevicellm.ui.theme.Layout
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
 import com.example.ondevicellm.ui.theme.panel
@@ -84,7 +85,7 @@ fun StudioScreen(
 
     val ready = chat.status == ModelStatus.READY
 
-    Column(modifier = modifier.fillMaxSize().imePadding()) {
+    Column(modifier = modifier.fillMaxSize()) {
 
         StudioToolbar(
             name = state.name.ifBlank { s.studioUntitled },
@@ -166,7 +167,7 @@ private fun ToolbarButton(
 ) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(Layout.TOUCH_TARGET_DP.dp)
             .clip(RoundedCornerShape(50))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -174,7 +175,7 @@ private fun ToolbarButton(
         Icon(
             icon,
             contentDescription = description,
-            modifier = Modifier.size(19.dp),
+            modifier = Modifier.size(21.dp),
             tint = if (enabled) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
@@ -214,6 +215,15 @@ private fun PagePreview(code: String, revision: Int) {
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
                     settings.setSupportZoom(false)
+                    // Lay out at the device width. Left to itself a WebView
+                    // uses a 980px viewport and scales the result down, so a
+                    // page written for a phone arrives looking like a shrunken
+                    // desktop site — worst of all on the largest screen.
+                    settings.useWideViewPort = false
+                    settings.loadWithOverviewMode = false
+                    // The system font scale belongs to the app's own text, not
+                    // to a page whose layout the model sized itself.
+                    settings.textZoom = 100
                 }
             },
             // Keyed on the revision so typing in the editor doesn't reload the
@@ -281,11 +291,22 @@ private fun BuildingView(streaming: String) {
 @Composable
 private fun StudioEmpty(projects: List<StudioProject>, viewModel: ChatViewModel) {
     val s = LocalStrings.current
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    val heightDp = LocalConfiguration.current.screenHeightDp
+
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(Space.lg),
+        // On a tall window a short empty state pinned to the top reads as
+        // stranded rather than deliberate. With projects listed there is enough
+        // to fill the column, so it goes back to the top.
+        verticalArrangement = if (Layout.isTall(widthDp, heightDp) && projects.isEmpty()) {
+            Arrangement.Center
+        } else {
+            Arrangement.Top
+        },
     ) {
         Text(
             s.studioEmptyTitle,

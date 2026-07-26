@@ -50,6 +50,7 @@ SOURCES=(
     app/src/main/java/com/example/ondevicellm/model/ModelAdvisor.kt
     app/src/main/java/com/example/ondevicellm/studio/CodeExtractor.kt
     app/src/main/java/com/example/ondevicellm/studio/StudioPrompt.kt
+    app/src/main/java/com/example/ondevicellm/ui/theme/Layout.kt
     app/src/test/java/com/example/ondevicellm/core/StringsTest.kt
     app/src/test/java/com/example/ondevicellm/llm/QueryRouterTest.kt
     app/src/test/java/com/example/ondevicellm/llm/BackendPlannerTest.kt
@@ -59,6 +60,7 @@ SOURCES=(
     app/src/test/java/com/example/ondevicellm/model/ModelAdvisorTest.kt
     app/src/test/java/com/example/ondevicellm/studio/CodeExtractorTest.kt
     app/src/test/java/com/example/ondevicellm/studio/StudioPromptTest.kt
+    app/src/test/java/com/example/ondevicellm/ui/theme/LayoutTest.kt
 )
 CLASSES=(
     com.example.ondevicellm.core.StringsTest
@@ -70,6 +72,7 @@ CLASSES=(
     com.example.ondevicellm.model.ModelAdvisorTest
     com.example.ondevicellm.studio.CodeExtractorTest
     com.example.ondevicellm.studio.StudioPromptTest
+    com.example.ondevicellm.ui.theme.LayoutTest
 )
 
 # BackendPlanner references BackendPref, which lives in a file that imports
