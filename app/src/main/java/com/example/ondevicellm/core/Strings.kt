@@ -425,8 +425,8 @@ object EnglishStrings : AppStrings {
     override val sampleRate = "Sample rate (Hz)"
     override val speakerId = "Speaker id"
     override val sampleRateNote = "The sample rate must match the model's training output, or " +
-        "speech plays too fast or too slow. Put a vocabulary next to the model file " +
-        "for correct pronunciation."
+        "speech plays too fast or too slow. Put a \"<name>.tokens.json\" vocabulary next " +
+        "to the model file for correct pronunciation."
     override val path = "Path"
     override val kindText = "Text"
     override val kindAsr = "Speech → Text"
@@ -771,8 +771,8 @@ object ArabicStrings : AppStrings {
     override val sampleRate = "معدل العيّنة (هرتز)"
     override val speakerId = "معرّف المتحدث"
     override val sampleRateNote = "يجب أن يطابق معدل العيّنة ما دُرّب عليه النموذج، وإلا " +
-        "خرج الصوت أسرع أو أبطأ من اللازم. ضع ملف المفردات بجوار ملف النموذج " +
-        "لضبط النطق."
+        "خرج الصوت أسرع أو أبطأ من اللازم. ضع ملف المفردات ‏«‎<name>.tokens.json»‏ " +
+        "بجوار ملف النموذج لضبط النطق."
     override val path = "المسار"
     override val kindText = "نص"
     override val kindAsr = "صوت ← نص"

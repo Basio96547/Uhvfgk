@@ -554,8 +554,7 @@ private fun ModelSettingsDialog(
                         draft = draft.copy(ttsSpeakerId = it.toIntOrNull() ?: draft.ttsSpeakerId)
                     }
                     Text(
-                        s.sampleRateNote<name>.tokens.json\" vocabulary next to the model file " +
-                            "for correct pronunciation.",
+                        s.sampleRateNote,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
