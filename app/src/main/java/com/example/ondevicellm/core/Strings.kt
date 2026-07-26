@@ -349,6 +349,32 @@ interface AppStrings {
     val guidanceDescription: String
     val guidanceNote: String
 
+    // ------------------------------------------------------------- studio
+    val navStudio: String
+    val studioSubtitle: String
+    val studioEmptyTitle: String
+    val studioEmptyBody: String
+    val studioPromptHint: String
+    val studioBuild: String
+    val studioPreview: String
+    val studioCode: String
+    val studioRun: String
+    val studioNewProject: String
+    val studioProjects: String
+    val studioSave: String
+    val studioSaved: String
+    val studioShare: String
+    val studioUntitled: String
+    val studioBuilding: String
+    val studioNoCodeBack: String
+    val studioTooLarge: String
+    val studioOfflineNote: String
+    fun studioExample(index: Int): String
+    /** System prompt for code generation — the whole feature rests on this. */
+    val studioSystemPrompt: String
+    fun studioCreateTurn(request: String): String
+    fun studioEditTurn(code: String, request: String): String
+
     // -------------------------------------------------------- routing modes
     val modeAuto: String
     val modeAlways: String
@@ -732,6 +758,53 @@ object EnglishStrings : AppStrings {
     override val guidanceNote = "A large model works these out on its own; a small one " +
         "doesn't. This is most of the difference between an assistant that pads and " +
         "guesses and one that answers. Your own prompt below is added after it."
+
+    override val navStudio = "Studio"
+    override val studioSubtitle = "Build a page by describing it"
+    override val studioEmptyTitle = "Describe what to build"
+    override val studioEmptyBody = "The model writes one self-contained web page — HTML, " +
+        "CSS and JavaScript in a single file — and it runs here immediately."
+    override val studioPromptHint = "A calculator with big buttons…"
+    override val studioBuild = "Build"
+    override val studioPreview = "Preview"
+    override val studioCode = "Code"
+    override val studioRun = "Run"
+    override val studioNewProject = "New"
+    override val studioProjects = "Projects"
+    override val studioSave = "Save"
+    override val studioSaved = "Saved"
+    override val studioShare = "Share"
+    override val studioUntitled = "Untitled page"
+    override val studioBuilding = "Writing the page…"
+    override val studioNoCodeBack = "The model replied without any code. Try describing " +
+        "the page more concretely — what it shows, and what it does."
+    override val studioTooLarge = "This page is now too long to send back for editing. " +
+        "Edit the code directly, or start a new project."
+    override val studioOfflineNote = "The preview runs offline: it cannot reach the network, " +
+        "so pages that fetch data or load a CDN will not work here."
+    override fun studioExample(index: Int) = when (index) {
+        0 -> "A tip calculator"
+        1 -> "A pomodoro timer with start and reset"
+        2 -> "A colour picker that shows the hex code"
+        else -> "A to-do list saved in the browser"
+    }
+    override val studioSystemPrompt = """
+        You write single-file web pages.
+
+        - Reply with one complete HTML document and nothing else.
+        - Put it in a ```html fenced block. No text before or after the block.
+        - Everything goes in that one file: CSS in <style>, JavaScript in <script>.
+        - Never link to a CDN, a font service, an image URL or any other network
+          resource. There is no network. Use system fonts, CSS and inline SVG.
+        - Make it work on a phone screen: viewport meta tag, large touch targets.
+        - When given an existing page and a change, return the whole file with the
+          change applied, not a snippet or a description of the edit.
+    """.trimIndent()
+    override fun studioCreateTurn(request: String) =
+        "Build this as a single HTML file:\n\n$request"
+    override fun studioEditTurn(code: String, request: String) =
+        "Here is the current page:\n\n```html\n$code\n```\n\n" +
+            "Apply this change and return the whole updated file:\n\n$request"
 
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
@@ -1121,6 +1194,53 @@ object ArabicStrings : AppStrings {
     override val guidanceDescription = "امنح النموذج مجموعة قواعد قصيرة يسير عليها."
     override val guidanceNote = "النموذج الكبير يستنتج هذه القواعد وحده، والصغير لا يفعل. " +
         "وهي معظم الفرق بين مساعد يُطيل ويخمّن ومساعد يجيب. توجيهك الخاص أدناه يُضاف بعدها."
+
+    override val navStudio = "الاستوديو"
+    override val studioSubtitle = "اصنع صفحة بوصفها"
+    override val studioEmptyTitle = "صِف ما تريد بناءه"
+    override val studioEmptyBody = "يكتب النموذج صفحة ويب مكتملة بذاتها — HTML و CSS " +
+        "وJavaScript في ملف واحد — وتعمل هنا فورًا."
+    override val studioPromptHint = "آلة حاسبة بأزرار كبيرة…"
+    override val studioBuild = "ابنِ"
+    override val studioPreview = "المعاينة"
+    override val studioCode = "الكود"
+    override val studioRun = "تشغيل"
+    override val studioNewProject = "جديد"
+    override val studioProjects = "المشاريع"
+    override val studioSave = "حفظ"
+    override val studioSaved = "حُفظ"
+    override val studioShare = "مشاركة"
+    override val studioUntitled = "صفحة بلا عنوان"
+    override val studioBuilding = "يكتب الصفحة…"
+    override val studioNoCodeBack = "رد النموذج بلا كود. جرّب وصف الصفحة بشكل أوضح — " +
+        "ماذا تعرض، وماذا تفعل."
+    override val studioTooLarge = "هذه الصفحة صارت أطول من أن تُرسل للتعديل. عدّل الكود " +
+        "مباشرة، أو ابدأ مشروعًا جديدًا."
+    override val studioOfflineNote = "المعاينة تعمل دون اتصال: لا تصل إلى الشبكة، فالصفحات " +
+        "التي تجلب بيانات أو تحمّل من CDN لن تعمل هنا."
+    override fun studioExample(index: Int) = when (index) {
+        0 -> "حاسبة بقشيش"
+        1 -> "مؤقّت بومودورو مع بدء وإعادة"
+        2 -> "منتقي ألوان يعرض الرمز السداسي"
+        else -> "قائمة مهام تُحفظ في المتصفح"
+    }
+    override val studioSystemPrompt = """
+        تكتب صفحات ويب في ملف واحد.
+
+        - أجب بمستند HTML واحد كامل، ولا شيء غيره.
+        - ضعه داخل كتلة ```html ولا تكتب نصًا قبلها ولا بعدها.
+        - كل شيء في هذا الملف: CSS داخل <style> وJavaScript داخل <script>.
+        - لا تربط بأي CDN ولا خدمة خطوط ولا رابط صورة ولا أي مورد من الشبكة.
+          لا توجد شبكة. استعمل خطوط النظام وCSS وSVG مضمّنًا.
+        - اجعلها تعمل على شاشة هاتف: وسم viewport وأزرار كبيرة للمس.
+        - إذا أُعطيت صفحة قائمة وطُلب تعديل، أعد الملف كاملًا بعد التعديل،
+          لا مقتطفًا ولا وصفًا للتغيير.
+    """.trimIndent()
+    override fun studioCreateTurn(request: String) =
+        "ابنِ هذا كملف HTML واحد:\n\n$request"
+    override fun studioEditTurn(code: String, request: String) =
+        "هذه الصفحة الحالية:\n\n```html\n$code\n```\n\n" +
+            "طبّق هذا التغيير وأعد الملف كاملًا:\n\n$request"
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

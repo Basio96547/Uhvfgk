@@ -33,6 +33,10 @@ import com.example.ondevicellm.llm.TextEngine
 import com.example.ondevicellm.model.ModelImporter
 import com.example.ondevicellm.model.ModelRegistry
 import com.example.ondevicellm.model.ModelSpec
+import com.example.ondevicellm.studio.StudioProject
+import com.example.ondevicellm.studio.StudioSession
+import com.example.ondevicellm.studio.StudioStore
+import com.example.ondevicellm.studio.StudioUiState
 import com.example.ondevicellm.web.SearchQuery
 import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.web.SearchDepth
@@ -97,6 +101,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val audioPlayer = AudioPlayer()
     private val systemTts = SystemTtsSynthesizer(app)
     private var modelTts: ModelTtsSynthesizer? = null
+
+    // One model in memory means generation has to stay serialised, so Studio
+    // borrows the engine from here rather than owning one of its own.
+    private val studioStore = StudioStore(app)
+    private val studio = StudioSession(
+        store = studioStore,
+        newId = { java.util.UUID.randomUUID().toString() },
+        now = { System.currentTimeMillis() },
+    )
+    val studioState: StateFlow<StudioUiState> = studio.state
+    val studioProjects: StateFlow<List<StudioProject>> get() = studio.projects
 
     val settings: StateFlow<AppSettings> = settingsStore.settings
     val models: StateFlow<List<ModelSpec>> = registry.models
@@ -473,6 +488,38 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         activeSystemPrompt = null
         _uiState.update { it.copy(messages = emptyList()) }
     }
+
+    // ---------------------------------------------------------------- studio
+
+    fun studioBuild(request: String) {
+        val active = engine ?: return
+        if (_uiState.value.isBusy) return
+
+        if (ThermalGuard.shouldPause(_uiState.value.thermalLevel)) {
+            _uiState.update { it.copy(notice = Localization.strings.thermalTooHot) }
+            return
+        }
+
+        _uiState.update { it.copy(isBusy = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
+            studio.build(active, request) {
+                _uiState.update { it.copy(isBusy = false) }
+                // The chat's own session was reset out from under it.
+                activeSystemPrompt = null
+                refreshMemory()
+            }
+        }
+    }
+
+    fun studioToggleView() = studio.toggleView()
+    fun studioRun() = studio.run()
+    fun studioEditCode(code: String) = studio.editCode(code)
+    fun studioSave() = studio.save()
+    fun studioNew() = studio.newProject()
+    fun studioOpen(project: StudioProject) = studio.open(project)
+    fun studioDelete(id: String) = studio.delete(id)
+    fun studioDismissNotice() = studio.dismissNotice()
 
     // ----------------------------------------------------------------- voice
 

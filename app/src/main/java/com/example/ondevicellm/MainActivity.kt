@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ReportProblem
@@ -72,12 +73,14 @@ import com.example.ondevicellm.ui.DiagnosticsDialog
 import com.example.ondevicellm.ui.DeviceScreen
 import com.example.ondevicellm.ui.ModelsScreen
 import com.example.ondevicellm.ui.SettingsScreen
+import com.example.ondevicellm.ui.StudioScreen
 import com.example.ondevicellm.ui.theme.OnDeviceLLMTheme
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
 
 private enum class Destination(val icon: ImageVector) {
     CHAT(Icons.AutoMirrored.Filled.Chat),
+    STUDIO(Icons.Filled.Code),
     MODELS(Icons.Filled.ViewInAr),
     DEVICE(Icons.Filled.Memory),
     SETTINGS(Icons.Filled.Tune),
@@ -85,6 +88,7 @@ private enum class Destination(val icon: ImageVector) {
 
     fun title(s: AppStrings): String = when (this) {
         CHAT -> s.navChat
+        STUDIO -> s.navStudio
         MODELS -> s.navModels
         DEVICE -> s.navDevice
         SETTINGS -> s.navSettings
@@ -92,6 +96,7 @@ private enum class Destination(val icon: ImageVector) {
 
     fun subtitle(s: AppStrings): String = when (this) {
         CHAT -> s.chatSubtitle
+        STUDIO -> s.studioSubtitle
         MODELS -> s.modelsSubtitle
         DEVICE -> s.deviceSubtitle
         SETTINGS -> s.settingsSubtitle
@@ -179,6 +184,7 @@ private fun AppContent(viewModel: ChatViewModel) {
                             onOpenModels = { destination = Destination.MODELS },
                         )
 
+                        Destination.STUDIO -> StudioScreen(viewModel)
                         Destination.MODELS -> ModelsScreen(viewModel)
                         Destination.DEVICE -> DeviceScreen(viewModel)
                         Destination.SETTINGS -> SettingsScreen(viewModel)

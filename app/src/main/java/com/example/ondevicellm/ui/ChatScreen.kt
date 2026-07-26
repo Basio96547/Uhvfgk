@@ -641,7 +641,7 @@ private fun ThinkingBlock(
 }
 
 @Composable
-private fun NoticeBar(text: String, onDismiss: () -> Unit) {
+internal fun NoticeBar(text: String, onDismiss: () -> Unit) {
     val s = LocalStrings.current
     Row(
         modifier = Modifier
@@ -839,7 +839,7 @@ private fun MicButton(isListening: Boolean, enabled: Boolean, onClick: () -> Uni
 }
 
 @Composable
-private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+internal fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val s = LocalStrings.current
     val scale by animateFloatAsState(
         targetValue = if (enabled) 1f else 0.9f,

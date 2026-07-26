@@ -387,6 +387,36 @@ truncation: comprehension. Five real defects were found, all in the same place
     On by default, shown in full in Settings rather than described, and four
     tests hold it to being a short rule list rather than prose.
 
+### Session 5 — 2026-07-26 · Studio
+
+31. **A coding studio, on the model of bolt.diy, as a fifth tab.** Describe a
+    page, watch the model write it, see it run. Scoped to **one self-contained
+    HTML file** — not a limitation dressed up as a feature, but the only kind
+    of program a phone can build *and execute* with nothing installed: no
+    toolchain, no package manager, no server. A WebView is a complete runtime
+    that is already on the device.
+    - `CodeExtractor` handles every shape a small model actually replies in:
+      labelled fence, unlabelled fence, four backticks, prose around the block,
+      raw HTML with no fence, and a fence left unterminated because the reply
+      was truncated (the partial page is kept — it shows how far it got, which
+      beats a blank screen). A bare `<div>` is wrapped into a real document,
+      because a WebView renders a loose fragment as unstyled text in the corner
+      and that reads as the model failing when it didn't. 13 tests.
+    - **Studio turns are stateless.** The file *is* the conversation, so the
+      session is reset and each request carries the current code plus the
+      change. Threading it as a chat would put three copies of the page in the
+      context after two edits, and the model would be editing a version whose
+      top it could no longer see.
+    - **The preview is sandboxed.** `loadDataWithBaseURL(null, …)` gives an
+      opaque origin; network loads blocked; file and content access off. A page
+      the model wrote is untrusted input. Blocking the network also makes the
+      constraint honest rather than intermittent, and the system prompt tells
+      the model there is no network so it stops reaching for a CDN.
+    - Thinking is forced off for builds: a chain of thought here spends the
+      whole budget before a single tag is written.
+    - The preview and the code editor are pinned LTR, so an Arabic interface
+      doesn't mirror a layout the model wrote for LTR.
+
 23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads
