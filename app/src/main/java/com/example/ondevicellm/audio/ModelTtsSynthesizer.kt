@@ -41,15 +41,17 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
 
     override suspend fun prepare(): Boolean = withContext(Dispatchers.IO) {
         if (interpreter != null) return@withContext true
+        if (!isRuntimeAvailable()) return@withContext false
 
         val file = File(spec.path)
         if (!file.isFile || !file.canRead()) return@withContext false
 
-        val options = Interpreter.Options().apply {
-            // Leave a couple of cores for the UI and any concurrent LLM decode.
-            numThreads = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 4)
-        }
+        // Leave a couple of cores for the UI and any concurrent LLM decode.
+        val threads = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 4)
+        val options = Interpreter.Options().setNumThreads(threads)
 
+        // Throwable, not Exception: a missing LiteRT runtime surfaces as
+        // NoClassDefFoundError / UnsatisfiedLinkError, which are Errors.
         runCatching { Interpreter(file, options) }
             .onSuccess { loaded ->
                 interpreter = loaded
@@ -63,6 +65,9 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
     override suspend fun speak(text: String, options: SpeechOptions): SynthesisResult =
         withContext(Dispatchers.IO) {
             if (text.isBlank()) return@withContext SynthesisResult.Failed("Nothing to speak.")
+            if (!isRuntimeAvailable()) {
+                return@withContext SynthesisResult.Failed(RUNTIME_MISSING_MESSAGE)
+            }
             if (!prepare()) {
                 return@withContext SynthesisResult.Failed(
                     "Could not load the TTS model at ${spec.path}."
@@ -165,5 +170,30 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
         runCatching { interpreter?.close() }
         interpreter = null
         tokenizer = null
+    }
+
+    companion object {
+
+        const val RUNTIME_MISSING_MESSAGE: String =
+            "The LiteRT runtime isn't bundled in this build, so custom TTS models " +
+                "can't run.\n\nSwitch the speech engine to \"System engine\" in " +
+                "Settings, or enable LiteRT: in app/build.gradle.kts change\n" +
+                "  compileOnly(\"org.tensorflow:tensorflow-lite:…\")\n" +
+                "to\n" +
+                "  implementation(\"org.tensorflow:tensorflow-lite:…\")\n" +
+                "and rebuild."
+
+        /**
+         * Whether the LiteRT classes are actually present.
+         *
+         * The dependency is `compileOnly` by default so the app can never
+         * conflict with the TFLite runtime MediaPipe links internally. That
+         * means these classes may legitimately be absent at runtime, and every
+         * entry point has to check before touching them.
+         */
+        fun isRuntimeAvailable(): Boolean = runCatching {
+            Class.forName("org.tensorflow.lite.Interpreter")
+            true
+        }.getOrDefault(false)
     }
 }

@@ -100,13 +100,21 @@ fun SettingsScreen(
                         "offline once a voice pack is installed."
                 )
 
-                TtsEngine.MODEL -> if (ttsModel != null) {
-                    Hint(
-                        "Using \"${ttsModel.displayName}\" at " +
-                            "${ttsModel.ttsSampleRateHz} Hz."
+                TtsEngine.MODEL -> when {
+                    !viewModel.ttsRuntimeAvailable -> Hint(
+                        "This build doesn't bundle the LiteRT runtime, so custom TTS " +
+                            "models can't run — the app ships that way on purpose so " +
+                            "nothing can conflict with the LLM runtime. Use the system " +
+                            "engine, or in app/build.gradle.kts change compileOnly(…" +
+                            "tensorflow-lite…) to implementation(…) and rebuild.",
+                        isWarning = true,
                     )
-                } else {
-                    Hint(
+
+                    ttsModel != null -> Hint(
+                        "Using \"${ttsModel.displayName}\" at ${ttsModel.ttsSampleRateHz} Hz."
+                    )
+
+                    else -> Hint(
                         "No text-to-speech model selected. Add one on the Models " +
                             "screen and set its type to \"Text → Speech\".",
                         isWarning = true,

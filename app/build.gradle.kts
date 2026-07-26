@@ -61,8 +61,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
         jniLibs {
-            // MediaPipe and TensorFlow Lite both ship a TFLite JNI library.
-            // Take the first rather than failing the build on a duplicate.
+            // Harmless by default (nothing duplicate is packaged). Kept so that
+            // switching the LiteRT dependency to `implementation` cannot fail
+            // the build on a duplicate native library.
             pickFirsts += listOf(
                 "**/libtensorflowlite_jni.so",
                 "**/libtensorflowlite_gpu_jni.so",
@@ -98,9 +99,18 @@ dependencies {
     // MediaPipe LLM Inference (on-device GenAI)
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
-    // LiteRT / TensorFlow Lite — runs user-supplied text-to-speech models.
-    // Drop this (and ModelTtsSynthesizer) if you only need the system TTS engine.
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    // LiteRT / TensorFlow Lite — used only by ModelTtsSynthesizer to run a
+    // user-supplied text-to-speech model.
+    //
+    // compileOnly on purpose: nothing from this artifact is packaged, so it can
+    // never clash with the TFLite runtime that MediaPipe links internally. The
+    // app builds and runs with zero conflicts out of the box, and speech output
+    // works through the system TTS engine.
+    //
+    // To run your own TTS model files, change this one word to `implementation`
+    // and rebuild. The app detects the runtime at startup and tells you if it
+    // is missing instead of crashing.
+    compileOnly("org.tensorflow:tensorflow-lite:2.16.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")

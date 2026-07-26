@@ -21,7 +21,6 @@ import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.InferenceEngine
 import com.example.ondevicellm.llm.ResolvedBackend
 import com.example.ondevicellm.model.ModelImporter
-import com.example.ondevicellm.model.ModelKind
 import com.example.ondevicellm.model.ModelRegistry
 import com.example.ondevicellm.model.ModelSpec
 import kotlinx.coroutines.Dispatchers
@@ -115,7 +114,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             engine = null
 
             try {
-                val loaded = InferenceEngine.load(getApplication(), spec, _device.value)
+                val loaded = InferenceEngine.load(getApplication<Application>(), spec, _device.value)
                 engine = loaded
                 registry.select(spec)
                 _uiState.update {
@@ -373,8 +372,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         speakingMessageId = null,
                         isSynthesizing = false,
-                        notice = "No TTS model selected. Add one on the Models screen, " +
-                            "or switch to the system engine in Settings.",
+                        notice = speechUnavailableReason(),
                     )
                 }
                 return@launch
@@ -471,6 +469,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             TtsEngine.SYSTEM -> systemTts.takeIf { it.prepare() }
 
             TtsEngine.MODEL -> {
+                if (!ModelTtsSynthesizer.isRuntimeAvailable()) return null
                 val spec = registry.selectedTtsModel ?: return null
                 // Reuse the loaded interpreter unless the user switched models
                 // or changed settings that affect synthesis.
@@ -490,19 +489,39 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val canSpeak: Boolean
         get() = when (settingsStore.settings.value.ttsEngine) {
             TtsEngine.SYSTEM -> true
-            TtsEngine.MODEL -> registry.selectedTtsModel != null
+            TtsEngine.MODEL -> ModelTtsSynthesizer.isRuntimeAvailable() &&
+                registry.selectedTtsModel != null
         }
+
+    /** True when custom TTS models can run in this build. See ModelTtsSynthesizer. */
+    val ttsRuntimeAvailable: Boolean get() = ModelTtsSynthesizer.isRuntimeAvailable()
+
+    /** Explains, in the user's terms, why speech output is unavailable. */
+    fun speechUnavailableReason(): String = when {
+        settingsStore.settings.value.ttsEngine == TtsEngine.SYSTEM ->
+            "The system text-to-speech engine is unavailable. Install or enable a " +
+                "TTS engine in system settings."
+
+        !ModelTtsSynthesizer.isRuntimeAvailable() ->
+            ModelTtsSynthesizer.RUNTIME_MISSING_MESSAGE
+
+        registry.selectedTtsModel == null ->
+            "No text-to-speech model selected. Add one on the Models screen and " +
+                "set its type to \"Text → Speech\"."
+
+        else -> "Could not load the selected text-to-speech model."
+    }
 
     // -------------------------------------------------------------- settings
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = settingsStore.update(transform)
 
     fun refreshMemory() {
-        _memory.value = DeviceCapabilities.readMemory(getApplication())
+        _memory.value = DeviceCapabilities.readMemory(getApplication<Application>())
     }
 
     fun refreshDevice() {
-        _device.value = DeviceCapabilities.snapshot(getApplication())
+        _device.value = DeviceCapabilities.snapshot(getApplication<Application>())
         refreshMemory()
     }
 

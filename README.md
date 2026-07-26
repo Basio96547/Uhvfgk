@@ -146,6 +146,15 @@ and stays offline once a voice pack is installed. Honours speed and pitch.
 **Text → Speech**, then pick *My TTS model* in Settings. Audio is generated with
 LiteRT, normalized, and played through `AudioTrack`.
 
+> **This needs one word changed first.** The LiteRT dependency ships as
+> `compileOnly` so that nothing from it is packaged and it can never clash with
+> the TFLite runtime MediaPipe links internally — the app builds and runs with
+> zero conflicts out of the box. To run your own TTS model files, open
+> `app/build.gradle.kts` and change
+> `compileOnly("org.tensorflow:tensorflow-lite:2.16.1")` to
+> `implementation(...)`, then rebuild. The app detects the runtime and tells you
+> exactly this if it is missing, instead of crashing.
+
 ### What a TTS model must look like
 
 `ModelTtsSynthesizer` expects the common VITS/Piper-style export:
@@ -190,6 +199,23 @@ Requirements: Android Studio (Ladybug+), a **physical arm64 device**
 ./gradlew testDebugUnitTest
 ```
 
+### Why this build has no dependency conflicts
+
+Running two on-device inference runtimes in one app is the usual source of
+duplicate-native-library and duplicate-class failures. This project avoids that
+by construction:
+
+| Choice | Reason |
+|---|---|
+| Only **one** runtime is packaged — MediaPipe `tasks-genai` | Nothing else can clash with it |
+| LiteRT is `compileOnly` | Its classes and `.so` files are never packaged |
+| `pickFirsts` on the TFLite `.so` names | A no-op today; pre-empts a duplicate if you later switch LiteRT to `implementation` |
+| `abiFilters = ["arm64-v8a"]` | The only ABI `tasks-genai` ships; avoids "missing library" failures on other ABIs |
+| All dependency versions pinned explicitly | No surprise transitive upgrades between builds |
+
+Speech output works out of the box through the system TTS engine, which is a
+platform API with no dependency at all.
+
 ## Project structure
 
 ```
@@ -232,6 +258,7 @@ app/src/main/java/com/example/ondevicellm/
 | TTS output is gibberish | Supply a `<name>.tokens.json` vocabulary next to the model |
 | "signature doesn't match" | The model isn't a VITS/Piper-style export; adapt `ModelTtsSynthesizer` |
 | No sound at all | Check the engine in Settings; *My TTS model* needs a TTS model selected |
+| "LiteRT runtime isn't bundled" | Expected by default — use the system engine, or switch `compileOnly` to `implementation` (see above) |
 
 ## Notes on verification
 
