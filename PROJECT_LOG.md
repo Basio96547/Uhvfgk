@@ -27,7 +27,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Kotlin/Compose app | ✅ Compiles, APK built and published |
 | Unit tests | ✅ Passing in CI |
 | MediaPipe `.task` path | ✅ Builds — **never run against a real model** |
-| llama.cpp GGUF path | ⚠️ Native build fixed, **rebuild not yet confirmed green** |
+| llama.cpp GGUF path | ✅ Bridge compiled, **linked and run against real llama.cpp** (`tools/verify-native.sh`); Android rebuild pending |
 | Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
 | Diagnostics/crash log | ⚠️ Compiles — **never triggered in anger** |
@@ -39,6 +39,20 @@ is "correct by construction and unit tests" but unproven in practice.
 Run 3 (`857ee6f`) failed: `llama_model_params` no longer has `use_mmap` /
 `use_mlock` — replaced upstream by `load_mode`. Fixed by setting
 `LLAMA_LOAD_MODE_MMAP`. llama.cpp itself compiled fine; only the bridge failed.
+
+### Native bridge — actually verified, not assumed
+`tools/verify-native.sh` clones the pinned llama.cpp, builds it, then:
+1. compiles `llama_bridge.cpp` against the real headers (`-Wall`, clean);
+2. **links** it — so a renamed or removed `llama_*` symbol fails here, which is
+   exactly the class of break that cost two CI rounds;
+3. **runs** the JNI entry points inside a real JVM: `nativeInit`, the
+   null-handle guards, a missing model, and an empty path.
+
+All pass at `7cdd557f76800b5a84ddee2bff6f20178a3e31fe`, which is now the pinned
+commit. Tracking `master` is what broke run 3.
+
+**Still not proven:** real inference. That needs a GGUF file, and
+huggingface.co is unreachable from this sandbox.
 
 ---
 
@@ -156,7 +170,12 @@ platform APIs, so grounding can't conflict with the inference runtimes.
     dialog, header badge; replaced silent catches. Added a **stop-generation**
     control that was missing entirely.
 12. **This log.**
-13. **Real web search**: the Instant Answer API returns definitions only, so
+13. **Host-side native verification**: cloned and built real llama.cpp in the
+    sandbox, compiled + linked + ran the bridge through a JVM, then pinned
+    `LLAMA_CPP_TAG` to the verified commit and switched `GIT_SHALLOW` off
+    (shallow fetch of a bare commit is unreliable). Saved as
+    `tools/verify-native.sh`.
+14. **Real web search**: the Instant Answer API returns definitions only, so
     most questions got nothing. Added `HtmlExtract` — a tested parser for
     DuckDuckGo's HTML endpoint (organic results, click-redirect unwrapping, ad
     filtering, entity decoding) plus readable-text extraction so `SearchDepth.DEEP`
@@ -171,11 +190,18 @@ platform APIs, so grounding can't conflict with the inference runtimes.
 - CI rebuild after the `load_mode` fix is unconfirmed.
 - Nothing has run on a real device.
 
+**Cannot be verified from this sandbox** (network policy blocks them; not
+design choices):
+- Live search — `html.duckduckgo.com`, `api.duckduckgo.com` and
+  `*.wikipedia.org` all fail to connect. The parser is tested against captured
+  markup shapes, not a live response.
+- Real GGUF inference — `huggingface.co` is unreachable, so no model to load.
+- Thermal behaviour and MediaPipe — device-only by nature.
+
 **Fragile**
-- `LLAMA_CPP_TAG` is `master`. That is exactly how run 3 broke. **Pin to the
-  commit CI resolves once a build is green.**
 - MediaPipe API surface (`setPreferredBackend`, `setTopP`) is unexercised —
-  compiles, but no model has been loaded through it.
+  compiles, but no model has been loaded through it. There is no host-side
+  equivalent of `verify-native.sh` for it: MediaPipe ships as an Android AAR.
 - `ModelTtsSynthesizer` assumes a VITS/Piper tensor layout; other exports are
   reported, not adapted.
 
@@ -194,6 +220,10 @@ platform APIs, so grounding can't conflict with the inference runtimes.
 ---
 
 ## 7. How to verify
+
+**Native bridge** — `tools/verify-native.sh`. Compiles, links and runs the JNI
+layer against real llama.cpp on the host. Run this before bumping
+`LLAMA_CPP_TAG`; it catches API drift in one step instead of a CI round trip.
 
 **Full build** — push; CI runs tests, builds the APK, publishes the release.
 

@@ -6,15 +6,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
-# Pinned so a rebuild never silently picks up a breaking API change. Bump
-# deliberately, then rebuild in CI to confirm the bridge still compiles.
-set(LLAMA_CPP_TAG "master" CACHE STRING "llama.cpp git tag or branch")
+# Pinned to a commit the bridge has been compiled *and linked* against — see
+# tools/verify-native.sh. Tracking master is how this broke before:
+# llama_model_params dropped use_mmap/use_mlock in favour of load_mode and the
+# build failed. Bump deliberately, re-run the verifier, then rebuild in CI.
+set(LLAMA_CPP_TAG "7cdd557f76800b5a84ddee2bff6f20178a3e31fe"
+    CACHE STRING "llama.cpp commit, tag or branch")
 
 FetchContent_Declare(
     llama_cpp
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
     GIT_TAG        ${LLAMA_CPP_TAG}
-    GIT_SHALLOW    TRUE
+    # Not shallow: a shallow fetch of an arbitrary commit (rather than a branch
+    # or tag) is unreliable, and a failed fetch costs more than the clone.
+    GIT_SHALLOW    FALSE
 )
 
 # Build only the library: no CLI tools, tests, servers or curl on a phone.
