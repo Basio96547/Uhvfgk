@@ -159,8 +159,17 @@ object ErrorLog {
             if (entry.severity >= Severity.ERROR) {
                 _unseenCount.value = _unseenCount.value + 1
             }
-            persist()
+            // Persisting rewrites the whole file, and one web search can emit a
+            // dozen INFO notes. Only failures that matter after a restart are
+            // written immediately; the rest ride along with the next one, or
+            // are flushed when the log is opened.
+            if (entry.severity >= Severity.ERROR) persist()
         }
+    }
+
+    /** Flushes in-memory entries. Called when the diagnostics view opens. */
+    fun flush() {
+        synchronized(this) { persist() }
     }
 
     /** Marks everything as read; the header badge clears. */

@@ -26,7 +26,8 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 |---|---|
 | Kotlin/Compose app | ✅ Compiles, APK built and published |
 | Unit tests | ✅ Passing in CI |
-| MediaPipe `.task` path | ✅ Builds — **never run against a real model** |
+| MediaPipe `.task` path | ✅ Compiles against the real AAR in CI — **never run against a real model** |
+| TTS model path | ⚠️ Tensor handling rewritten for real VITS/Piper layouts — **untested against an actual voice model** |
 | llama.cpp GGUF path | ✅ Bridge compiled, **linked and run against real llama.cpp** (`tools/verify-native.sh`); Android rebuild pending |
 | Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
@@ -197,6 +198,20 @@ design choices):
   markup shapes, not a live response.
 - Real GGUF inference — `huggingface.co` is unreachable, so no model to load.
 - Thermal behaviour and MediaPipe — device-only by nature.
+
+**Fixed after an audit of "does this actually work?"**
+- `SCAN_DIRS` listed `/sdcard/Download`, which scoped storage forbids listing
+  without `MANAGE_EXTERNAL_STORAGE` (and model files aren't media, so
+  `READ_MEDIA_*` wouldn't help). It silently found nothing and read as "no
+  models". Removed, and the message now says where files must come from.
+- `ModelTtsSynthesizer` filled only single-element auxiliary inputs and left
+  the rest null — but VITS/Piper declare `input_lengths` and a three-element
+  `scales` vector, so it would have thrown on exactly the models it targets.
+  Inputs are now matched by tensor **name** first, int64 token ids are
+  supported, and no slot is ever left null.
+- `ErrorLog` rewrote the whole file on every entry; one search emits a dozen
+  INFO notes. Only ERROR/CRASH write immediately now, with a flush when the
+  diagnostics view opens.
 
 **Fragile**
 - MediaPipe API surface (`setPreferredBackend`, `setTopP`) is unexercised —

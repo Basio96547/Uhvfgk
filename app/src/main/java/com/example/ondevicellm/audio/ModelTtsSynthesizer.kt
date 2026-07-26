@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.Tensor
 import java.io.File
 import java.nio.FloatBuffer
 
@@ -104,17 +105,15 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
         engine.allocateTensors()
 
         val inputs = arrayOfNulls<Any>(engine.inputTensorCount)
-        inputs[0] = arrayOf(tokens)
+        inputs[0] = tokenTensor(engine.getInputTensor(0), tokens)
 
-        // Fill any auxiliary scalar inputs the export declares.
+        // Every remaining input must be filled: leaving one null makes the
+        // interpreter throw. VITS/Piper exports declare input_lengths and a
+        // three-element scales vector alongside the token ids, so matching only
+        // single-element tensors — as this used to — left those null and failed
+        // on exactly the models it was written for.
         for (index in 1 until engine.inputTensorCount) {
-            val tensor = engine.getInputTensor(index)
-            inputs[index] = when {
-                tensor.numElements() != 1 -> continue
-                tensor.dataType() == DataType.INT32 -> intArrayOf(options.speakerId)
-                tensor.dataType() == DataType.FLOAT32 -> floatArrayOf(options.speakingRate)
-                else -> continue
-            }
+            inputs[index] = auxiliaryInput(engine.getInputTensor(index), tokens.size, options)
         }
 
         val outputTensor = engine.getOutputTensor(0)
@@ -132,6 +131,58 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
         return samples
     }
 
+    /** Token ids in whatever integer width the export declares. */
+    private fun tokenTensor(tensor: Tensor, tokens: IntArray): Any =
+        if (tensor.dataType() == DataType.INT64) {
+            // Piper and most VITS exports use int64 for token ids.
+            arrayOf(LongArray(tokens.size) { tokens[it].toLong() })
+        } else {
+            arrayOf(tokens)
+        }
+
+    /**
+     * Builds a value for an auxiliary input.
+     *
+     * Tensor names are the only reliable signal for what an input means, so
+     * they're checked first; shape and type decide the fallback. The result is
+     * never null — an unrecognised input gets zeros, which the model may
+     * ignore, rather than an exception before it even runs.
+     */
+    private fun auxiliaryInput(tensor: Tensor, tokenCount: Int, options: SpeechOptions): Any {
+        val name = tensor.name()?.lowercase().orEmpty()
+        val elements = tensor.numElements().coerceAtLeast(1)
+        val isLong = tensor.dataType() == DataType.INT64
+        val isInt = tensor.dataType() == DataType.INT32
+
+        return when {
+            // Number of real tokens, so the model doesn't read padding.
+            name.contains("length") && (isLong || isInt) ->
+                intVector(elements, tokenCount.toLong(), isLong)
+
+            name.contains("sid") || name.contains("speaker") ->
+                intVector(elements, options.speakerId.toLong(), isLong)
+
+            // VITS scales: [noise, length, noise_w]. Length scale is the
+            // inverse of speed — a larger value stretches the audio.
+            name.contains("scale") && elements >= 3 -> floatArrayOf(
+                DEFAULT_NOISE_SCALE,
+                1f / options.speakingRate.coerceIn(0.25f, 4f),
+                DEFAULT_NOISE_SCALE_W,
+            ) + FloatArray(elements - 3)
+
+            isLong || isInt -> intVector(elements, options.speakerId.toLong(), isLong)
+
+            tensor.dataType() == DataType.FLOAT32 ->
+                FloatArray(elements) { if (elements == 1) options.speakingRate else 0f }
+
+            // Unknown width: zeros are safer than leaving the slot null.
+            else -> FloatArray(elements)
+        }
+    }
+
+    private fun intVector(elements: Int, value: Long, isLong: Boolean): Any =
+        if (isLong) LongArray(elements) { value } else IntArray(elements) { value.toInt() }
+
     /** Human-readable dump of the model's inputs and outputs, for diagnosis. */
     fun describeSignature(): String {
         val engine = interpreter ?: return "Model not loaded."
@@ -140,7 +191,7 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
             for (index in 0 until engine.inputTensorCount) {
                 val tensor = engine.getInputTensor(index)
                 appendLine(
-                    "  input $index: ${tensor.dataType()} " +
+                    "  input $index \"${tensor.name()}\": ${tensor.dataType()} " +
                         tensor.shape().joinToString(prefix = "[", postfix = "]")
                 )
             }
@@ -166,6 +217,10 @@ class ModelTtsSynthesizer(val spec: ModelSpec) : SpeechSynthesizer {
     }
 
     companion object {
+
+        // VITS defaults; these are the values the reference implementation ships.
+        private const val DEFAULT_NOISE_SCALE = 0.667f
+        private const val DEFAULT_NOISE_SCALE_W = 0.8f
 
         const val RUNTIME_MISSING_MESSAGE: String =
             "The LiteRT runtime isn't bundled in this build, so custom TTS models " +

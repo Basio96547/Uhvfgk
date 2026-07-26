@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,9 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
     val entries by ErrorLog.entries.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmClear by remember { mutableStateOf(false) }
+
+    // Lower-severity entries are kept in memory; make sure they survive from here.
+    LaunchedEffect(Unit) { ErrorLog.flush() }
 
     AlertDialog(
         onDismissRequest = onDismiss,

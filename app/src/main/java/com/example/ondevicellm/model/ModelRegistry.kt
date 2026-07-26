@@ -195,14 +195,21 @@ class ModelRegistry(private val context: Context) {
         val MODEL_EXTENSIONS = listOf(".task", ".gguf", ".litertlm", ".tflite", ".bin")
 
         /**
-         * `/data/local/tmp/llm` is the path used by Google's official MediaPipe
-         * samples — writable via adb without root, and readable by the app.
+         * Directories the scan can actually read.
+         *
+         * `/sdcard/Download` used to be listed here and never worked: scoped
+         * storage on Android 11+ forbids listing it without
+         * MANAGE_EXTERNAL_STORAGE, and model files aren't media so the
+         * READ_MEDIA_* permissions don't help either. Listing it produced a
+         * silent no-op that looked like "no models found". Files outside these
+         * paths must come through the file picker, which grants access per file.
+         *
+         * `/data/local/tmp/llm` is the path in Google's MediaPipe samples —
+         * writable via adb without root. Readability from the app depends on
+         * the device's permissions on that directory, so a failure here is
+         * reported rather than assumed to mean "empty".
          */
-        val SCAN_DIRS = listOf(
-            "/data/local/tmp/llm",
-            "/sdcard/Download",
-            "/storage/emulated/0/Download",
-        )
+        val SCAN_DIRS = listOf("/data/local/tmp/llm")
 
         fun guessKind(name: String) = ModelHeuristics.guessKind(name)
 

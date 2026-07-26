@@ -241,7 +241,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _uiState.update {
                 it.copy(
                     notice = if (found.isEmpty()) {
-                        "No new models found in /data/local/tmp/llm or Downloads."
+                        "No new models in /data/local/tmp/llm. Files elsewhere — " +
+                            "including Downloads — have to be added with \"Add\", " +
+                            "which grants access to the file you pick."
                     } else {
                         "Found ${found.size} model(s)."
                     }
