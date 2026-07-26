@@ -15,6 +15,7 @@ import com.example.ondevicellm.audio.WavWriter
 import com.example.ondevicellm.core.AppSettings
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.core.Severity
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.MemorySnapshot
@@ -25,6 +26,7 @@ import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.EngineFactory
 import com.example.ondevicellm.llm.LlamaCppEngine
 import com.example.ondevicellm.llm.QueryRouter
+import com.example.ondevicellm.llm.RoutingDecision
 import com.example.ondevicellm.llm.ResolvedBackend
 import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.llm.TextEngine
@@ -55,10 +57,10 @@ data class ChatMessage(
     /** Pages the answer was grounded in, when web search ran. */
     val sources: List<SearchSource> = emptyList(),
     /**
-     * Why this reply was handled the way it was ("Greeting — answering
-     * directly"). Shown above the bubble so routing is never a black box.
+     * How this reply was routed. Kept as the decision rather than a sentence
+     * so the UI can word it in the reader's language.
      */
-    val routing: String = "",
+    val routing: RoutingDecision? = null,
 )
 
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
@@ -130,8 +132,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     engine?.stop()
                     _uiState.update {
                         it.copy(
-                            notice = "Paused: the phone is getting hot. " +
-                                "Generation will be slower until it cools down.",
+                            notice = Localization.strings.thermalPaused,
                         )
                     }
                 }
@@ -175,7 +176,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.update {
                     it.copy(
                         status = ModelStatus.ERROR,
-                        errorMessage = e.message ?: "Failed to load the model.",
+                        errorMessage = e.message ?: Localization.strings.modelLoadFailedFallback,
                     )
                 }
             }
@@ -195,14 +196,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     _uiState.update {
                         it.copy(
                             importState = ImportState(
-                                fileName = "Copying model…",
+                                fileName = Localization.strings.copyingModel,
                                 fraction = progress.fraction,
                             )
                         )
                     }
                 }
                 _uiState.update {
-                    it.copy(importState = null, notice = "Added \"${spec.displayName}\".")
+                    it.copy(
+                        importState = null,
+                        notice = Localization.strings.addedModel(spec.displayName),
+                    )
                 }
                 if (spec.kind.isConversational && registry.selectedTextModel?.id == spec.id) {
                     loadModel(spec)
@@ -214,7 +218,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.update {
                     it.copy(
                         importState = null,
-                        errorMessage = e.message ?: "Import failed.",
+                        errorMessage = e.message ?: Localization.strings.importFailed,
                     )
                 }
             }
@@ -223,7 +227,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelImport() {
         importJob?.cancel()
-        _uiState.update { it.copy(importState = null, notice = "Import cancelled.") }
+        _uiState.update {
+            it.copy(importState = null, notice = Localization.strings.importCancelled)
+        }
     }
 
     /** Registers an already-on-disk model (e.g. `adb push`ed) without copying it. */
@@ -231,11 +237,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val spec = importer.registerInPlace(path.trim())
-                _uiState.update { it.copy(notice = "Added \"${spec.displayName}\".") }
+                _uiState.update { it.copy(notice = Localization.strings.addedModel(spec.displayName)) }
             } catch (e: Throwable) {
                 ErrorLog.report("Model", "Could not register \"$path\"", e)
                 _uiState.update {
-                    it.copy(errorMessage = e.message ?: "Could not register that path.")
+                    it.copy(errorMessage = e.message ?: Localization.strings.couldNotRegisterPath)
                 }
             }
         }
@@ -248,11 +254,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _uiState.update {
                 it.copy(
                     notice = if (found.isEmpty()) {
-                        "No new models in /data/local/tmp/llm. Files elsewhere — " +
-                            "including Downloads — have to be added with \"Add\", " +
-                            "which grants access to the file you pick."
+                        Localization.strings.noNewModels
                     } else {
-                        "Found ${found.size} model(s)."
+                        Localization.strings.foundModels(found.size)
                     }
                 )
             }
@@ -287,8 +291,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (ThermalGuard.shouldPause(_uiState.value.thermalLevel)) {
             _uiState.update {
                 it.copy(
-                    notice = "The phone is too hot to run the model right now. " +
-                        "Give it a moment to cool down.",
+                    notice = Localization.strings.thermalTooHot,
                 )
             }
             return
@@ -314,7 +317,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             author = Author.MODEL,
             text = "",
             isGenerating = true,
-            routing = decision.reason,
+            routing = decision,
         )
 
         _uiState.update {
@@ -334,9 +337,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.update {
                     it.copy(
                         searchStatus = if (current.searchDepth == SearchDepth.DEEP) {
-                            "Searching and reading pages…"
+                            Localization.strings.searchingAndReading
                         } else {
-                            "Searching the web…"
+                            Localization.strings.searchingWeb
                         }
                     )
                 }
@@ -360,7 +363,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            val fullSystem = listOf(current.systemPrompt, grounding)
+            // Language instruction first, then the user's own prompt, then the
+            // search context. A multilingual model left to itself answers an
+            // Arabic question in English about as often as not, and grounding
+            // in English pages makes that worse — so it is stated outright.
+            val fullSystem = listOf(
+                Localization.strings.replyLanguageInstruction,
+                current.systemPrompt,
+                grounding,
+            )
                 .filter { it.isNotBlank() }
                 .joinToString("\n\n")
 
@@ -587,8 +598,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
             _uiState.update {
                 it.copy(
-                    notice = if (saved) "Saved to ${target.absolutePath}"
-                    else "Could not save audio."
+                    notice = if (saved) {
+                        Localization.strings.savedAudioTo(target.absolutePath)
+                    } else {
+                        Localization.strings.couldNotSaveAudio
+                    }
                 )
             }
         }
@@ -626,17 +640,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Explains, in the user's terms, why speech output is unavailable. */
     fun speechUnavailableReason(): String = when {
         settingsStore.settings.value.ttsEngine == TtsEngine.SYSTEM ->
-            "The system text-to-speech engine is unavailable. Install or enable a " +
-                "TTS engine in system settings."
+            Localization.strings.ttsSystemUnavailable
 
         !ModelTtsSynthesizer.isRuntimeAvailable() ->
             ModelTtsSynthesizer.RUNTIME_MISSING_MESSAGE
 
         registry.selectedTtsModel == null ->
-            "No text-to-speech model selected. Add one on the Models screen and " +
-                "set its type to \"Text → Speech\"."
+            Localization.strings.ttsNoModelSelected
 
-        else -> "Could not load the selected text-to-speech model."
+        else -> Localization.strings.ttsModelLoadFailed
     }
 
     // -------------------------------------------------------------- settings

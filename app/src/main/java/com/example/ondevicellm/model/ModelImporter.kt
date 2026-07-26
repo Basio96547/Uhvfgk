@@ -1,5 +1,6 @@
 package com.example.ondevicellm.model
 
+import com.example.ondevicellm.core.Localization
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -40,8 +41,7 @@ class ModelImporter(
         val totalBytes = sizeOf(uri)
 
         require(freeSpaceBytes() > totalBytes) {
-            "Not enough free storage to import this model " +
-                "(needs ${totalBytes / (1024 * 1024)} MB)."
+            Localization.strings.notEnoughStorage(totalBytes / (1024 * 1024))
         }
 
         val target = uniqueTarget(name)
@@ -60,7 +60,7 @@ class ModelImporter(
                         onProgress(Progress(copied, totalBytes))
                     }
                 }
-            } ?: throw java.io.IOException("Cannot open the selected file.")
+            } ?: throw java.io.IOException(Localization.strings.cannotOpenFile)
         } catch (e: Throwable) {
             target.delete()
             throw e
@@ -93,8 +93,8 @@ class ModelImporter(
      */
     fun registerInPlace(path: String, displayName: String? = null): ModelSpec {
         val file = File(path)
-        require(file.isFile) { "No file at $path" }
-        require(file.canRead()) { "File at $path is not readable by this app." }
+        require(file.isFile) { Localization.strings.noFileAt(path) }
+        require(file.canRead()) { Localization.strings.fileNotReadable(path) }
         ModelFormat.detect(file).rejectionMessage(file.name)?.let { error(it) }
 
         val spec = ModelSpec(

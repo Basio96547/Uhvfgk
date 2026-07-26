@@ -35,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.ChatViewModel
+import com.example.ondevicellm.core.AppLanguage
+import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.RoutingMode
 import com.example.ondevicellm.web.SearchDepth
@@ -46,6 +48,7 @@ fun SettingsScreen(
     viewModel: ChatViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val ttsModel = viewModel.registry.selectedTtsModel
 
@@ -56,99 +59,107 @@ fun SettingsScreen(
             .padding(horizontal = Space.lg),
         verticalArrangement = Arrangement.spacedBy(Space.md),
     ) {
+        // First card on the screen: the language you read the rest of it in
+        // shouldn't be buried below eight sections you can't read yet.
+        SectionCard(
+            icon = Icons.Filled.Translate,
+            title = s.language,
+            subtitle = s.languageSubtitle,
+            tint = MaterialTheme.colorScheme.primary,
+        ) {
+            GroupLabel(s.interfaceLanguage)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                AppLanguage.entries.forEach { language ->
+                    FilterChip(
+                        selected = settings.language == language,
+                        onClick = {
+                            viewModel.updateSettings { current ->
+                                // Voice follows the interface unless the user has
+                                // already picked a tag of their own.
+                                val voice = language.resolve().defaultVoiceTag
+                                current.copy(language = language, voiceLanguageTag = voice)
+                            }
+                        },
+                        // Each option is written in its own language, so it is
+                        // legible even when the app currently isn't.
+                        label = { Text(language.label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.languageNote)
+        }
+
         SectionCard(
             icon = Icons.Filled.Psychology,
-            title = "Reasoning",
-            subtitle = "How the model thinks",
+            title = s.reasoningTitle,
+            subtitle = s.reasoningSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
-            GroupLabel("When to think")
+            GroupLabel(s.whenToThink)
             ModeChips(
                 selected = settings.thinkingMode,
+                strings = s,
                 onSelect = { mode -> viewModel.updateSettings { it.copy(thinkingMode = mode) } },
             )
             Spacer(Modifier.height(Space.sm))
             Caption(
                 when (settings.thinkingMode) {
-                    RoutingMode.AUTO ->
-                        "Reasoning runs only when the question needs it — maths, code, " +
-                            "comparisons, \"why\" and \"explain\". A greeting is answered " +
-                            "straight away instead of being deliberated over."
-                    RoutingMode.ALWAYS ->
-                        "Every message gets a full chain of thought. Thorough, but slow: " +
-                            "even \"hello\" is reasoned about."
-                    RoutingMode.NEVER ->
-                        "Reasoning is off. Replies come back fastest, and hard questions " +
-                            "are answered in one pass."
+                    RoutingMode.AUTO -> s.thinkAuto
+                    RoutingMode.ALWAYS -> s.thinkAlways
+                    RoutingMode.NEVER -> s.thinkNever
                 }
             )
 
             SoftDivider()
 
             ToggleRow(
-                label = "Show reasoning",
-                description = "Display the collapsible thinking trace in chat.",
+                label = s.showReasoning,
+                description = s.showReasoningDesc,
                 checked = settings.showThinking,
                 onChange = { v -> viewModel.updateSettings { it.copy(showThinking = v) } },
             )
             Spacer(Modifier.height(Space.sm))
-            Caption(
-                "Detected from <think>…</think> in the model's output. Mark a model " +
-                    "as reasoning-capable on the Models screen."
-            )
+            Caption(s.reasoningDetectedNote)
         }
 
         SectionCard(
             icon = Icons.Filled.Language,
-            title = "Web search",
-            subtitle = "Ground answers in live sources",
+            title = s.webSearch,
+            subtitle = s.webSearchSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
             ToggleRow(
-                label = "Search the web",
-                description = "Look up the question before answering, and cite sources.",
+                label = s.searchTheWeb,
+                description = s.searchTheWebDesc,
                 checked = settings.webSearchEnabled,
                 onChange = { v -> viewModel.updateSettings { it.copy(webSearchEnabled = v) } },
             )
             Spacer(Modifier.height(Space.sm))
             Caption(
-                if (settings.webSearchEnabled) {
-                    "Your questions are sent to DuckDuckGo and Wikipedia. This is the " +
-                        "only feature that leaves your device — everything else stays " +
-                        "offline. Results are used as context and cited under each reply."
-                } else {
-                    "Off. The model answers from its own weights and nothing leaves " +
-                        "your device. Turning this on sends your questions to " +
-                        "DuckDuckGo and Wikipedia."
-                },
+                if (settings.webSearchEnabled) s.searchOnNote else s.searchOffNote,
                 isWarning = settings.webSearchEnabled,
             )
 
             if (settings.webSearchEnabled) {
                 SoftDivider()
-                GroupLabel("When to search")
+                GroupLabel(s.whenToSearch)
                 ModeChips(
                     selected = settings.searchMode,
+                    strings = s,
                     onSelect = { mode -> viewModel.updateSettings { it.copy(searchMode = mode) } },
                 )
                 Spacer(Modifier.height(Space.sm))
                 Caption(
                     when (settings.searchMode) {
-                        RoutingMode.AUTO ->
-                            "Searches only when the answer depends on something current " +
-                                "— news, prices, weather, \"latest\", or when you ask it " +
-                                "to look something up."
-                        RoutingMode.ALWAYS ->
-                            "Every question is looked up first. Slower, and sends more " +
-                                "of what you type to third-party servers."
-                        RoutingMode.NEVER ->
-                            "Search stays off even though it's enabled above — useful " +
-                                "for pausing it without losing your settings."
+                        RoutingMode.AUTO -> s.searchAuto
+                        RoutingMode.ALWAYS -> s.searchAlways
+                        RoutingMode.NEVER -> s.searchNever
                     }
                 )
 
                 SoftDivider()
-                GroupLabel("Depth")
+                GroupLabel(s.depth)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SearchDepth.entries.forEach { depth ->
                         FilterChip(
@@ -156,19 +167,22 @@ fun SettingsScreen(
                             onClick = {
                                 viewModel.updateSettings { it.copy(searchDepth = depth) }
                             },
-                            label = { Text(depth.label) },
+                            label = {
+                                Text(
+                                    when (depth) {
+                                        SearchDepth.QUICK -> s.depthQuickLabel
+                                        SearchDepth.DEEP -> s.depthDeepLabel
+                                    }
+                                )
+                            },
                         )
                     }
                 }
                 Spacer(Modifier.height(Space.sm))
                 Caption(
                     when (settings.searchDepth) {
-                        SearchDepth.QUICK ->
-                            "Uses result snippets. One round of requests, fastest."
-                        SearchDepth.DEEP ->
-                            "Opens the top three results and reads them, so answers " +
-                                "come from page content rather than a two-line " +
-                                "snippet. Slower and uses more data."
+                        SearchDepth.QUICK -> s.depthQuick
+                        SearchDepth.DEEP -> s.depthDeep
                     }
                 )
             }
@@ -176,37 +190,32 @@ fun SettingsScreen(
 
         SectionCard(
             icon = Icons.Filled.Thermostat,
-            title = "Performance",
-            subtitle = "Heat and battery",
+            title = s.performance,
+            subtitle = s.performanceSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
             Caption(
                 if (viewModel.thermalSupported) {
-                    "The app watches the phone's thermal state and lowers the number " +
-                        "of compute threads as it warms up, pausing if it gets too " +
-                        "hot. Sustained performance mode is requested so clocks stay " +
-                        "steady instead of spiking then throttling."
+                    s.thermalSupportedNote
                 } else {
-                    "This Android version doesn't report thermal state, so a " +
-                        "conservative thread count is used at all times. Sustained " +
-                        "performance mode is still requested."
+                    s.thermalUnsupportedNote
                 }
             )
         }
 
         SectionCard(
             icon = Icons.Filled.RecordVoiceOver,
-            title = "Speech output",
-            subtitle = "Read replies aloud",
+            title = s.speechOutput,
+            subtitle = s.speechOutputSubtitle,
             tint = MaterialTheme.colorScheme.primary,
         ) {
-            GroupLabel("Engine")
+            GroupLabel(s.engine)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TtsEngine.entries.forEach { engine ->
                     FilterChip(
                         selected = settings.ttsEngine == engine,
                         onClick = { viewModel.updateSettings { it.copy(ttsEngine = engine) } },
-                        label = { Text(engine.label) },
+                        label = { Text(engine.label(s)) },
                     )
                 }
             }
@@ -214,37 +223,24 @@ fun SettingsScreen(
             Spacer(Modifier.height(Space.md))
 
             when (settings.ttsEngine) {
-                TtsEngine.SYSTEM -> Caption(
-                    "Android's built-in engine. Works out of the box and stays offline " +
-                        "once a voice pack is installed."
-                )
+                TtsEngine.SYSTEM -> Caption(s.systemEngineNote)
 
                 TtsEngine.MODEL -> when {
-                    !viewModel.ttsRuntimeAvailable -> Caption(
-                        "This build doesn't bundle the LiteRT runtime, so custom TTS " +
-                            "models can't run. Use the system engine, or switch " +
-                            "compileOnly(…tensorflow-lite…) to implementation(…) in " +
-                            "app/build.gradle.kts and rebuild.",
-                        isWarning = true,
-                    )
+                    !viewModel.ttsRuntimeAvailable -> Caption(s.litertMissingNote, isWarning = true)
 
                     ttsModel != null -> Caption(
-                        "Using \"${ttsModel.displayName}\" at ${ttsModel.ttsSampleRateHz} Hz."
+                        s.usingVoiceModel(ttsModel.displayName, ttsModel.ttsSampleRateHz)
                     )
 
-                    else -> Caption(
-                        "No voice model selected. Add one on the Models screen and set " +
-                            "its type to \"Text → Speech\".",
-                        isWarning = true,
-                    )
+                    else -> Caption(s.noVoiceModelNote, isWarning = true)
                 }
             }
 
             SoftDivider()
 
             ToggleRow(
-                label = "Speak replies automatically",
-                description = "Read each reply aloud as soon as it finishes.",
+                label = s.speakAutomatically,
+                description = s.speakAutomaticallyDesc,
                 checked = settings.autoSpeakReplies,
                 onChange = { v -> viewModel.updateSettings { it.copy(autoSpeakReplies = v) } },
             )
@@ -252,7 +248,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(Space.sm))
 
             SliderRow(
-                label = "Speed",
+                label = s.speed,
                 value = settings.speakingRate,
                 range = 0.5f..2.0f,
                 onChange = { v -> viewModel.updateSettings { it.copy(speakingRate = v) } },
@@ -261,7 +257,7 @@ fun SettingsScreen(
             // Pitch is a system-engine feature; model synthesis ignores it.
             if (settings.ttsEngine == TtsEngine.SYSTEM) {
                 SliderRow(
-                    label = "Pitch",
+                    label = s.pitch,
                     value = settings.pitch,
                     range = 0.5f..1.5f,
                     onChange = { v -> viewModel.updateSettings { it.copy(pitch = v) } },
@@ -271,22 +267,15 @@ fun SettingsScreen(
 
         SectionCard(
             icon = Icons.Filled.Mic,
-            title = "Voice input",
-            subtitle = "Dictate instead of typing",
+            title = s.voiceInputTitle,
+            subtitle = s.voiceInputSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
             Caption(
                 when {
-                    !viewModel.speechAvailable ->
-                        "No speech recognizer is available on this device."
-
-                    viewModel.speechOnDevice ->
-                        "On-device recognition available — your speech stays on the phone."
-
-                    else ->
-                        "Recognition available, but no on-device pack was found. Install " +
-                            "an offline language pack in system settings to keep " +
-                            "transcription local."
+                    !viewModel.speechAvailable -> s.noRecognizer
+                    viewModel.speechOnDevice -> s.onDeviceRecognition
+                    else -> s.cloudRecognition
                 },
                 isWarning = viewModel.speechAvailable && !viewModel.speechOnDevice,
             )
@@ -294,14 +283,14 @@ fun SettingsScreen(
 
         SectionCard(
             icon = Icons.Filled.Translate,
-            title = "Language",
-            subtitle = "For voice in and out",
+            title = s.voiceLanguage,
+            subtitle = s.voiceLanguageSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
             OutlinedTextField(
                 value = settings.voiceLanguageTag,
                 onValueChange = { v -> viewModel.updateSettings { it.copy(voiceLanguageTag = v) } },
-                label = { Text("Language tag") },
+                label = { Text(s.languageTag) },
                 placeholder = { Text("ar-SA, en-US, …") },
                 singleLine = true,
                 shape = MaterialTheme.shapes.small,
@@ -309,7 +298,12 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(Space.sm))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("ar-SA", "ar-EG", "en-US", "en-GB", "fr-FR", "tr-TR").forEach { tag ->
+                // Arabic variants lead: they are what this app is used in most,
+                // and speech recognition is markedly better with the right one.
+                listOf(
+                    "ar-SA", "ar-EG", "ar-AE", "ar-MA", "ar-IQ",
+                    "en-US", "en-GB", "fr-FR", "tr-TR",
+                ).forEach { tag ->
                     FilterChip(
                         selected = settings.voiceLanguageTag == tag,
                         onClick = {
@@ -323,20 +317,20 @@ fun SettingsScreen(
 
         SectionCard(
             icon = Icons.Filled.Tune,
-            title = "System prompt",
-            subtitle = "Set the assistant's behaviour",
+            title = s.systemPrompt,
+            subtitle = s.systemPromptSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
             OutlinedTextField(
                 value = settings.systemPrompt,
                 onValueChange = { v -> viewModel.updateSettings { it.copy(systemPrompt = v) } },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("e.g. You are a concise assistant.") },
+                placeholder = { Text(s.systemPromptPlaceholder) },
                 shape = MaterialTheme.shapes.small,
                 minLines = 3,
             )
             Spacer(Modifier.height(Space.sm))
-            Caption("Prepended to each message. Takes effect on the next message.")
+            Caption(s.systemPromptNote)
         }
 
         Spacer(Modifier.height(Space.xl))
@@ -348,6 +342,7 @@ fun SettingsScreen(
 @Composable
 private fun ModeChips(
     selected: RoutingMode,
+    strings: AppStrings,
     onSelect: (RoutingMode) -> Unit,
 ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -355,7 +350,15 @@ private fun ModeChips(
             FilterChip(
                 selected = selected == mode,
                 onClick = { onSelect(mode) },
-                label = { Text(mode.label) },
+                label = {
+                    Text(
+                        when (mode) {
+                            RoutingMode.AUTO -> strings.modeAuto
+                            RoutingMode.ALWAYS -> strings.modeAlways
+                            RoutingMode.NEVER -> strings.modeNever
+                        }
+                    )
+                },
             )
         }
     }

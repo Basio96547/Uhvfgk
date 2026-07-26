@@ -58,6 +58,45 @@ object SearchQuery {
         return if (valid) "$code.wikipedia.org" else "en.wikipedia.org"
     }
 
+    /**
+     * True when [text] is written in Arabic.
+     *
+     * The question's own script beats the interface language: someone running
+     * the app in English still deserves ar.wikipedia.org and Arabic-ranked
+     * results when they type in Arabic — and the reverse. Counted over letters
+     * only, so digits and punctuation don't skew a short query.
+     *
+     * A third rather than a half: real Arabic questions carry Latin product
+     * names ("متى صدر Android 16"), and "Android" alone outweighs the four
+     * Arabic words around it. A single Arabic word inside an English sentence
+     * still falls below the line.
+     */
+    fun isArabic(text: String): Boolean {
+        var arabic = 0
+        var letters = 0
+        for (ch in text) {
+            if (!ch.isLetter()) continue
+            letters++
+            if (ch in '؀'..'ۿ' || ch in 'ݐ'..'ݿ' ||
+                ch in 'ﭐ'..'﷿' || ch in 'ﹰ'..'﻿'
+            ) {
+                arabic++
+            }
+        }
+        return letters > 0 && arabic * 3 >= letters
+    }
+
+    /**
+     * The language to search in: the script the user actually typed, falling
+     * back to their chosen voice/interface language.
+     */
+    fun searchLanguageTag(query: String, languageTag: String): String =
+        if (isArabic(query)) "ar" else languageTag
+
+    /** DuckDuckGo region code for [languageTag], or "" to let it decide. */
+    fun regionFor(languageTag: String): String =
+        if (languageTag.substringBefore('-').lowercase() == "ar") "xa-ar" else ""
+
     /** Collapses whitespace and cuts on a word boundary. */
     fun trimSnippet(text: String, maxChars: Int = MAX_SNIPPET_CHARS): String {
         val clean = text.replace(HTML_TAG, "").replace(WHITESPACE, " ").trim()
@@ -91,19 +130,32 @@ object SearchQuery {
         val used = results.take(MAX_RESULTS_IN_PROMPT)
         if (used.isEmpty()) return ""
 
+        // Written in the question's own language. An English instruction block
+        // in front of an Arabic question pulls a small model into answering in
+        // English — the grounding ends up costing the user their language.
+        val arabic = isArabic(query)
         return buildString {
-            appendLine("Web search results for \"${query.trim()}\":")
+            appendLine(
+                if (arabic) "نتائج بحث الويب عن «${query.trim()}»:"
+                else "Web search results for \"${query.trim()}\":"
+            )
             appendLine()
             used.forEachIndexed { index, result ->
                 appendLine("[${index + 1}] ${result.title}")
                 appendLine(trimSnippet(result.snippet))
-                appendLine("Source: ${result.url}")
+                appendLine(if (arabic) "المصدر: ${result.url}" else "Source: ${result.url}")
                 appendLine()
             }
             appendLine(
-                "Answer the question using these results. Cite them inline as " +
-                    "[1], [2]. If the results don't contain the answer, say so " +
-                    "instead of guessing."
+                if (arabic) {
+                    "أجب عن السؤال بالاعتماد على هذه النتائج، وأشر إليها داخل النص " +
+                        "هكذا [1] و[2]. وإن لم تتضمن النتائج الإجابة فقل ذلك صراحةً " +
+                        "بدل التخمين. اكتب إجابتك بالعربية."
+                } else {
+                    "Answer the question using these results. Cite them inline as " +
+                        "[1], [2]. If the results don't contain the answer, say so " +
+                        "instead of guessing."
+                }
             )
         }
     }

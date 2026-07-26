@@ -3,6 +3,7 @@ package com.example.ondevicellm.llm
 import android.content.Context
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.core.formatBytes
 import com.example.ondevicellm.model.ModelFormat
 import com.example.ondevicellm.model.ModelSpec
@@ -113,14 +114,12 @@ class InferenceEngine private constructor(
          */
         fun load(context: Context, spec: ModelSpec, device: DeviceSnapshot): InferenceEngine {
             val file = File(spec.path)
+            val s = Localization.strings
             if (!file.exists()) {
-                throw ModelLoadException("Model file not found:\n${spec.path}")
+                throw ModelLoadException(s.modelFileNotFound(spec.path))
             }
             if (!file.canRead()) {
-                throw ModelLoadException(
-                    "Model file is not readable by this app:\n${spec.path}\n\n" +
-                        "Re-import it through \"Add model\" so it lives in app storage."
-                )
+                throw ModelLoadException(s.modelFileNotReadable(spec.path))
             }
 
             // Checked before anything expensive: the runtime's own failure for a
@@ -144,11 +143,7 @@ class InferenceEngine private constructor(
                 LlmInference.createFromOptions(context, options)
             } catch (e: Throwable) {
                 throw ModelLoadException(
-                    "The runtime could not load this model.\n\n" +
-                        "${e.message}\n\n" +
-                        "Check that it is a MediaPipe-compatible .task bundle and " +
-                        "that the selected backend " +
-                        "(${backend.resolved.actualLabel}) is supported.",
+                    s.taskLoadFailed(e.message.orEmpty(), backend.resolved.actualLabel),
                     e,
                 )
             }
@@ -168,20 +163,30 @@ class InferenceEngine private constructor(
             val budget = memory.effectiveAvailableBytes
 
             if (budget in 1 until modelBytes) {
+                val s = Localization.strings
                 throw ModelLoadException(
                     buildString {
-                        append("Not enough memory to load this model.\n\n")
-                        append("Model: ${modelBytes.formatBytes()}\n")
-                        append("Available RAM: ${memory.availableRamBytes.formatBytes()}\n")
+                        append(s.notEnoughMemoryTitle)
+                        append("\n\n")
+                        appendLine(s.memoryLine(s.model, modelBytes.formatBytes()))
+                        appendLine(
+                            s.memoryLine(
+                                s.availableRamLabel,
+                                memory.availableRamBytes.formatBytes(),
+                            )
+                        )
                         if (memory.hasExtendedMemory) {
-                            append("Free extended memory (RAM Plus/zram): ")
-                            append("${memory.swapFreeBytes.formatBytes()}\n")
+                            appendLine(
+                                s.memoryLine(
+                                    s.freeExtendedLabel,
+                                    memory.swapFreeBytes.formatBytes(),
+                                )
+                            )
                         } else {
-                            append("Extended memory (RAM Plus): not enabled\n")
+                            appendLine(s.ramPlusNotEnabled)
                         }
-                        append("\nClose background apps, enable RAM Plus in ")
-                        append("Settings › Device care › Memory, or use a smaller ")
-                        append("quantized model.")
+                        append("\n")
+                        append(s.notEnoughMemoryAdvice)
                     }
                 )
             }

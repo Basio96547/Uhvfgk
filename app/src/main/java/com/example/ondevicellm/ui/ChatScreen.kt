@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -76,7 +77,10 @@ import com.example.ondevicellm.Author
 import com.example.ondevicellm.ChatMessage
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.ModelStatus
+import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.core.ThermalLevel
+import com.example.ondevicellm.llm.QueryKind
+import com.example.ondevicellm.llm.RoutingDecision
 import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.ui.theme.Gradients
 import com.example.ondevicellm.ui.theme.Space
@@ -89,6 +93,7 @@ fun ChatScreen(
     onOpenModels: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -135,7 +140,7 @@ fun ChatScreen(
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            "${(import.fraction * 100).toInt()}%",
+                            s.copyingPercent((import.fraction * 100).toInt()),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
@@ -151,33 +156,32 @@ fun ChatScreen(
             when (state.status) {
                 ModelStatus.LOADING -> EmptyState(
                     icon = Icons.Filled.AutoAwesome,
-                    title = "Warming up",
-                    subtitle = state.activeModel?.displayName?.let { "Loading $it" }
-                        ?: "Loading model",
+                    title = s.warmingUp,
+                    subtitle = state.activeModel?.displayName?.let { s.loadingNamed(it) }
+                        ?: s.loadingModel,
                     showSpinner = true,
                 )
 
                 ModelStatus.ERROR -> EmptyState(
                     icon = Icons.Filled.ErrorOutline,
-                    title = "Couldn't load the model",
+                    title = s.couldNotLoadModel,
                     subtitle = state.errorMessage,
                     isError = true,
-                    action = "Try again" to viewModel::retryLoad,
+                    action = s.tryAgain to viewModel::retryLoad,
                 )
 
                 ModelStatus.NONE -> EmptyState(
                     icon = Icons.Filled.Download,
-                    title = "Add your first model",
-                    subtitle = "Everything runs on your device. Nothing is uploaded, " +
-                        "and no account is needed.",
-                    action = "Browse models" to onOpenModels,
+                    title = s.addFirstModel,
+                    subtitle = s.privacyNote,
+                    action = s.browseModels to onOpenModels,
                 )
 
                 ModelStatus.READY -> if (state.messages.isEmpty()) {
                     EmptyState(
                         icon = Icons.Filled.AutoAwesome,
-                        title = "Ready when you are",
-                        subtitle = "Running fully offline on this device.",
+                        title = s.readyWhenYouAre,
+                        subtitle = s.runningOffline,
                     )
                 } else {
                     LazyColumn(
@@ -270,6 +274,7 @@ private fun ModelChip(
     note: String,
     thermalLevel: ThermalLevel,
 ) {
+    val s = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
     val hasNote = note.isNotEmpty()
 
@@ -312,7 +317,7 @@ private fun ModelChip(
             if (thermalLevel != ThermalLevel.NORMAL) {
                 Spacer(Modifier.width(6.dp))
                 StatusPill(
-                    thermalLevel.label,
+                    thermalLevel.label(s),
                     icon = Icons.Filled.Thermostat,
                     color = if (thermalLevel == ThermalLevel.CRITICAL) {
                         MaterialTheme.colorScheme.error
@@ -329,7 +334,7 @@ private fun ModelChip(
                 )
                 Icon(
                     Icons.Filled.ExpandMore,
-                    contentDescription = "Details",
+                    contentDescription = s.details,
                     modifier = Modifier
                         .padding(start = 2.dp)
                         .size(16.dp)
@@ -360,6 +365,7 @@ private fun MessageRow(
     onToggleSpeak: () -> Unit,
     onSaveAudio: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val isUser = message.author == Author.USER
 
     Column(
@@ -370,9 +376,9 @@ private fun MessageRow(
 
             // Says why this reply was routed the way it was, so a missing search
             // or a skipped chain of thought is explained rather than mysterious.
-            if (!isUser && message.routing.isNotEmpty()) {
+            message.routing?.takeIf { !isUser }?.let { decision ->
                 Text(
-                    message.routing,
+                    routingLine(decision, s),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = Space.xs, bottom = Space.xs),
@@ -406,7 +412,7 @@ private fun MessageRow(
                             isSpeaking -> Icons.Filled.Stop
                             else -> Icons.Filled.VolumeUp
                         },
-                        label = if (isSpeaking) "Stop" else "Listen",
+                        label = if (isSpeaking) s.stop else s.listen,
                         loading = isSynthesizing,
                         active = isSpeaking,
                         onClick = onToggleSpeak,
@@ -414,13 +420,35 @@ private fun MessageRow(
                     Spacer(Modifier.width(Space.sm))
                     ActionChip(
                         icon = Icons.Filled.Download,
-                        label = "Save",
+                        label = s.save,
                         onClick = onSaveAudio,
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Turns a routing decision into a sentence, in the reader's language.
+ *
+ * The router deliberately returns the decision rather than prose, so this is
+ * the only place the wording lives and Arabic gets a real sentence instead of
+ * a translated fragment.
+ */
+private fun routingLine(decision: RoutingDecision, s: AppStrings): String {
+    val base = when (decision.kind) {
+        QueryKind.SOCIAL -> s.routeGreeting
+        QueryKind.SIMPLE -> s.routeSimple
+        QueryKind.LOOKUP -> s.routeLookup
+        QueryKind.REASONING -> s.routeReasoning
+    }
+    val extras = buildList {
+        if (decision.search) add(s.routeSearching)
+        if (decision.think) add(s.routeThinking)
+        if (isEmpty() && decision.overridden) add(s.routeOverridden)
+    }
+    return s.routeLine(base, extras)
 }
 
 /** Numbered, tappable citations matching the [1], [2] markers in the answer. */
@@ -491,7 +519,13 @@ private fun Bubble(message: ChatMessage, isUser: Boolean) {
             Text(
                 text = message.text,
                 modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    // Direction from the text itself, not from the interface:
+                    // an Arabic reply reads right-to-left even when the app is
+                    // in English, and a code block or a Latin quotation inside
+                    // an Arabic chat still reads left-to-right.
+                    textDirection = TextDirection.Content,
+                ),
                 color = if (isUser) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
@@ -551,6 +585,7 @@ private fun ThinkingBlock(
     stillThinking: Boolean,
     onToggle: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val accent = MaterialTheme.colorScheme.tertiary
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -576,7 +611,7 @@ private fun ThinkingBlock(
             )
             Spacer(Modifier.width(7.dp))
             Text(
-                text = if (stillThinking) "Thinking" else "Reasoning",
+                text = if (stillThinking) s.thinking else s.reasoning,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = accent,
@@ -588,7 +623,7 @@ private fun ThinkingBlock(
             Spacer(Modifier.weight(1f))
             Icon(
                 Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = if (expanded) s.collapse else s.expand,
                 modifier = Modifier.size(17.dp).rotate(rotation),
                 tint = accent,
             )
@@ -607,6 +642,7 @@ private fun ThinkingBlock(
 
 @Composable
 private fun NoticeBar(text: String, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -624,7 +660,7 @@ private fun NoticeBar(text: String, onDismiss: () -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
-        TextButton(onClick = onDismiss) { Text("Got it") }
+        TextButton(onClick = onDismiss) { Text(s.gotIt) }
     }
 }
 
@@ -637,6 +673,7 @@ private fun MessageInput(
     searchEnabled: Boolean,
     onToggleSearch: () -> Unit,
 ) {
+    val s = LocalStrings.current
     var text by remember { mutableStateOf("") }
     val context = LocalContext.current
 
@@ -692,7 +729,7 @@ private fun MessageInput(
                 value = text,
                 onValueChange = { text = it },
                 enabled = enabled,
-                placeholder = if (isListening) "Listening…" else "Ask anything",
+                placeholder = if (isListening) s.listening else s.askAnything,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = Space.sm, vertical = 10.dp),
@@ -743,6 +780,7 @@ private fun BareTextField(
 
 @Composable
 private fun SearchToggle(enabled: Boolean, onClick: () -> Unit) {
+    val s = LocalStrings.current
     Box(
         modifier = Modifier
             .size(44.dp)
@@ -756,7 +794,7 @@ private fun SearchToggle(enabled: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Filled.Language,
-            contentDescription = if (enabled) "Web search on" else "Web search off",
+            contentDescription = if (enabled) s.webSearchOn else s.webSearchOff,
             modifier = Modifier.size(20.dp),
             tint = if (enabled) {
                 MaterialTheme.colorScheme.primary
@@ -769,6 +807,7 @@ private fun SearchToggle(enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun MicButton(isListening: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val s = LocalStrings.current
     val scale by animateFloatAsState(
         targetValue = if (isListening) 1.08f else 1f,
         animationSpec = spring(),
@@ -787,7 +826,7 @@ private fun MicButton(isListening: Boolean, enabled: Boolean, onClick: () -> Uni
         IconButton(onClick = onClick, enabled = enabled) {
             Icon(
                 if (isListening) Icons.Filled.Stop else Icons.Filled.Mic,
-                contentDescription = if (isListening) "Stop listening" else "Voice input",
+                contentDescription = if (isListening) s.stopListening else s.voiceInput,
                 modifier = Modifier.size(20.dp),
                 tint = if (isListening) {
                     MaterialTheme.colorScheme.onErrorContainer
@@ -801,6 +840,7 @@ private fun MicButton(isListening: Boolean, enabled: Boolean, onClick: () -> Uni
 
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
+    val s = LocalStrings.current
     val scale by animateFloatAsState(
         targetValue = if (enabled) 1f else 0.9f,
         animationSpec = spring(),
@@ -820,7 +860,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             Icons.AutoMirrored.Filled.Send,
-            contentDescription = "Send",
+            contentDescription = s.send,
             modifier = Modifier.size(19.dp),
             tint = if (enabled) {
                 MaterialTheme.colorScheme.onPrimary

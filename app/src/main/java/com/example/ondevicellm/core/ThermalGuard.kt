@@ -28,13 +28,12 @@ enum class ThermalLevel {
     CRITICAL,
     ;
 
-    val label: String
-        get() = when (this) {
-            NORMAL -> "Normal"
-            WARM -> "Warm"
-            HOT -> "Hot"
-            CRITICAL -> "Throttling"
-        }
+    fun label(s: AppStrings): String = when (this) {
+        NORMAL -> s.thermalNormal
+        WARM -> s.thermalWarm
+        HOT -> s.thermalHot
+        CRITICAL -> s.thermalCritical
+    }
 }
 
 /**

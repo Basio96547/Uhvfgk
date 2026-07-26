@@ -14,8 +14,16 @@ import java.net.URLDecoder
 object HtmlExtract {
 
     /** DuckDuckGo's keyless HTML endpoint. Real results, no API key. */
-    fun duckDuckGoHtmlUrl(query: String): String =
-        "https://html.duckduckgo.com/html/?q=${SearchQuery.encode(query)}"
+    /**
+     * @param region DuckDuckGo `kl` region code, e.g. `xa-ar` for Arabic. An
+     *   Arabic query sent without it comes back ranked for an English-speaking
+     *   audience, which is the wrong half of the web for the question asked.
+     */
+    fun duckDuckGoHtmlUrl(query: String, region: String = ""): String = buildString {
+        append("https://html.duckduckgo.com/html/?q=")
+        append(SearchQuery.encode(query))
+        if (region.isNotBlank()) append("&kl=").append(region)
+    }
 
     // Result anchors carry one of these classes depending on which frontend
     // answered; both shapes are accepted so a change to one doesn't kill search.

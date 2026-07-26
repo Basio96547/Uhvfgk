@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ondevicellm.core.AppError
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.core.ErrorLog
 import com.example.ondevicellm.core.Severity
 import com.example.ondevicellm.ui.theme.Space
@@ -68,6 +69,7 @@ fun severityColor(severity: Severity): Color = when (severity) {
  */
 @Composable
 fun DiagnosticsDialog(onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     val entries by ErrorLog.entries.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmClear by remember { mutableStateOf(false) }
@@ -79,12 +81,12 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
+                Text(s.diagnostics, style = MaterialTheme.typography.titleMedium)
                 Text(
                     if (entries.isEmpty()) {
-                        "Nothing has gone wrong."
+                        s.nothingWentWrong
                     } else {
-                        "${entries.size} recorded ${if (entries.size == 1) "event" else "events"}"
+                        s.recordedCount(entries.size)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -112,10 +114,10 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
                         modifier = Modifier.size(15.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("Copy all")
+                    Text(s.copyAll)
                 }
             } else {
-                TextButton(onClick = onDismiss) { Text("Close") }
+                TextButton(onClick = onDismiss) { Text(s.close) }
             }
         },
         dismissButton = {
@@ -127,7 +129,7 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
                         modifier = Modifier.size(15.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("Clear")
+                    Text(s.clear)
                 }
             }
         },
@@ -136,16 +138,16 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear diagnostics?") },
-            text = { Text("The recorded events will be deleted from this device.") },
+            title = { Text(s.clearDiagnosticsTitle) },
+            text = { Text(s.clearDiagnosticsBody) },
             confirmButton = {
                 TextButton(onClick = {
                     ErrorLog.clear()
                     confirmClear = false
-                }) { Text("Clear") }
+                }) { Text(s.clear) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmClear = false }) { Text(s.cancel) }
             },
         )
     }
@@ -153,6 +155,7 @@ fun DiagnosticsDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun EmptyDiagnostics() {
+    val s = LocalStrings.current
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = Space.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -173,8 +176,7 @@ private fun EmptyDiagnostics() {
         }
         Spacer(Modifier.height(Space.md))
         Text(
-            "No problems recorded. Anything that fails — a model that won't " +
-                "load, a search that times out, a crash — will show up here.",
+            s.noProblemsRecorded,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -184,6 +186,7 @@ private fun EmptyDiagnostics() {
 
 @Composable
 private fun DiagnosticRow(entry: AppError) {
+    val s = LocalStrings.current
     var expanded by remember { mutableStateOf(false) }
     val accent = severityColor(entry.severity)
 
@@ -226,7 +229,7 @@ private fun DiagnosticRow(entry: AppError) {
             } else {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Tap for details",
+                    s.tapForDetails,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -236,6 +239,9 @@ private fun DiagnosticRow(entry: AppError) {
 }
 
 private fun copyToClipboard(context: Context, text: String) {
+    // Not a composable, so it reads the language from the global holder.
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("Diagnostics", text))
+    clipboard?.setPrimaryClip(
+        ClipData.newPlainText(Localization.strings.diagnostics, text)
+    )
 }

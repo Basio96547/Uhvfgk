@@ -1,5 +1,6 @@
 package com.example.ondevicellm.model
 
+import com.example.ondevicellm.core.AppStrings
 import org.json.JSONObject
 
 /** What a registered model is used for. */
@@ -17,13 +18,12 @@ enum class ModelKind {
     MULTIMODAL,
     ;
 
-    val label: String
-        get() = when (this) {
-            TEXT -> "Text"
-            ASR -> "Speech → Text"
-            TTS -> "Text → Speech"
-            MULTIMODAL -> "Multimodal"
-        }
+    fun label(s: AppStrings): String = when (this) {
+        TEXT -> s.kindText
+        ASR -> s.kindAsr
+        TTS -> s.kindTts
+        MULTIMODAL -> s.kindMultimodal
+    }
 
     /** Kinds that produce chat replies, as opposed to handling audio. */
     val isConversational: Boolean get() = this == TEXT || this == MULTIMODAL
@@ -40,13 +40,13 @@ enum class BackendPref {
     NPU,
     ;
 
-    val label: String
-        get() = when (this) {
-            AUTO -> "Auto"
-            CPU -> "CPU"
-            GPU -> "GPU"
-            NPU -> "NPU"
-        }
+    /** CPU/GPU/NPU are the hardware's own names; only "Auto" is a word. */
+    fun label(s: AppStrings): String = when (this) {
+        AUTO -> s.modeAuto
+        CPU -> "CPU"
+        GPU -> "GPU"
+        NPU -> "NPU"
+    }
 }
 
 /**

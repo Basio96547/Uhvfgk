@@ -1,5 +1,6 @@
 package com.example.ondevicellm.audio
 
+import com.example.ondevicellm.core.Localization
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -39,7 +40,7 @@ class SpeechInput(private val context: Context) {
     fun start(languageTag: String = Locale.getDefault().toLanguageTag(), callbacks: Callbacks) {
         if (listening) return
         if (!isAvailable) {
-            callbacks.onError("Speech recognition is not available on this device.")
+            callbacks.onError(Localization.strings.speechUnavailable)
             return
         }
 
@@ -112,16 +113,19 @@ class SpeechInput(private val context: Context) {
         recognizer = null
     }
 
-    private fun describeError(error: Int): String = when (error) {
-        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error."
-        SpeechRecognizer.ERROR_CLIENT -> "Speech client error."
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission denied."
-        SpeechRecognizer.ERROR_NETWORK -> "Network error (install an offline language pack)."
-        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout."
-        SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch that — try again."
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer is busy."
-        SpeechRecognizer.ERROR_SERVER -> "Recognition server error."
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected."
-        else -> "Speech recognition failed (code $error)."
+    private fun describeError(error: Int): String {
+        val s = Localization.strings
+        return when (error) {
+            SpeechRecognizer.ERROR_AUDIO -> s.speechErrorAudio
+            SpeechRecognizer.ERROR_CLIENT -> s.speechErrorClient
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> s.speechErrorPermission
+            SpeechRecognizer.ERROR_NETWORK -> s.speechErrorNetwork
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> s.speechErrorTimeout
+            SpeechRecognizer.ERROR_NO_MATCH -> s.speechErrorNoMatch
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> s.speechErrorBusy
+            SpeechRecognizer.ERROR_SERVER -> s.speechErrorServer
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> s.speechErrorNoSpeech
+            else -> s.speechErrorOther(error)
+        }
     }
 }

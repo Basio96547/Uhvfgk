@@ -209,9 +209,85 @@ class QueryRouterTest {
     }
 
     @Test
-    fun `the reason is never blank`() {
+    fun `auto routing is never marked as overridden`() {
         listOf("مرحبا", "ما عاصمة فرنسا", "أخبار اليوم", "احسب 2 + 2").forEach {
-            assertTrue(route(it).reason.isNotBlank())
+            assertFalse(route(it).overridden)
+        }
+        assertTrue(
+            QueryRouter.route("مرحبا", thinkMode = RoutingMode.NEVER).overridden
+        )
+    }
+
+    // ---- Arabic beyond the textbook form ----------------------------------
+
+    @Test
+    fun `arabic-indic digits are understood`() {
+        // Samsung's Arabic keyboard produces ٠-٩, so this arrived with no ASCII
+        // digit in it at all and was routed as a plain question.
+        val d = route("احسب ٢٥ × ١٧")
+        assertEquals(QueryKind.REASONING, d.kind)
+        assertTrue(d.think)
+    }
+
+    @Test
+    fun `persian digits are understood too`() {
+        assertEquals(QueryKind.REASONING, route("۱۲ + ۸").kind)
+    }
+
+    @Test
+    fun `normalize folds both digit sets`() {
+        assertEquals("25 17", QueryRouter.normalize("٢٥ ١٧"))
+        assertEquals("1980", QueryRouter.normalize("۱۹۸۰"))
+    }
+
+    @Test
+    fun `dialect greetings are recognised`() {
+        listOf(
+            "شلونك",        // Gulf
+            "ازيك",          // Egyptian
+            "شو الاخبار",    // Levantine
+            "كي داير",       // Maghrebi
+            "هلا والله",
+            "يعطيك العافية",
+            "الله يعطيك العافية",
+            "ما قصرت",
+        ).forEach {
+            assertEquals("expected SOCIAL for \"$it\"", QueryKind.SOCIAL, route(it).kind)
+        }
+    }
+
+    @Test
+    fun `dialect lookups still search`() {
+        listOf(
+            "كم سعر الدولار الحين",
+            "ايه الاخبار النهاردة عن الذهب",
+            "نتيجة المباراة اليوم",
+        ).forEach {
+            assertTrue("expected search for \"$it\"", route(it).search)
+        }
+    }
+
+    @Test
+    fun `dialect reasoning is recognised`() {
+        listOf(
+            "ليش السماء زرقاء",
+            "ازاي بيشتغل المحرك",
+            "وش الافضل اندرويد ولا ايفون",
+            "اشرح لي بالتفصيل",
+        ).forEach {
+            assertTrue("expected think for \"$it\"", route(it).think)
+        }
+    }
+
+    @Test
+    fun `arabic quotation marks do not break matching`() {
+        assertEquals(QueryKind.SOCIAL, route("«مرحبا»").kind)
+    }
+
+    @Test
+    fun `alef variants all fold together`() {
+        listOf("أهلا", "إهلا", "آهلا", "اهلا").forEach {
+            assertEquals(QueryKind.SOCIAL, route(it).kind)
         }
     }
 

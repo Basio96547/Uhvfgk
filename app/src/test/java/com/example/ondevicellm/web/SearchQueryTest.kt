@@ -1,6 +1,7 @@
 package com.example.ondevicellm.web
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -81,5 +82,63 @@ class SearchQueryTest {
         val sources = SearchQuery.toSources(SearchQuery.dedupe(sample))
         assertEquals(2, sources.size)
         assertEquals(1, sources[0].index)
+    }
+
+    // ---- Arabic questions get an Arabic search --------------------------
+
+    @Test
+    fun `an arabic question is detected as arabic`() {
+        assertTrue(SearchQuery.isArabic("ما هي أخبار اليوم؟"))
+        assertTrue(SearchQuery.isArabic("كم سعر الذهب الآن"))
+        // Latin brand names and digits inside an Arabic question don't flip it.
+        assertTrue(SearchQuery.isArabic("متى صدر Android 16 ؟"))
+    }
+
+    @Test
+    fun `an english question is not detected as arabic`() {
+        assertFalse(SearchQuery.isArabic("what is the weather today"))
+        assertFalse(SearchQuery.isArabic("Android 16 release date"))
+        assertFalse(SearchQuery.isArabic("12345 + 678"))
+        // One Arabic word inside an English question is still an English one.
+        assertFalse(SearchQuery.isArabic("what does the word مرحبا mean in English"))
+    }
+
+    @Test
+    fun `the question's script beats the interface language`() {
+        // Arabic typed into an English-language app still gets Arabic sources.
+        assertEquals("ar", SearchQuery.searchLanguageTag("ما عاصمة فرنسا", "en-US"))
+        // And the reverse: English typed by an Arabic-speaking user.
+        assertEquals("en-US", SearchQuery.searchLanguageTag("capital of France", "en-US"))
+    }
+
+    @Test
+    fun `arabic gets the arabic wikipedia and region`() {
+        assertEquals("ar.wikipedia.org", SearchQuery.wikiHost("ar"))
+        assertEquals("xa-ar", SearchQuery.regionFor("ar-SA"))
+        assertEquals("", SearchQuery.regionFor("en-US"))
+    }
+
+    @Test
+    fun `the region reaches the search URL`() {
+        val url = HtmlExtract.duckDuckGoHtmlUrl("الطقس", "xa-ar")
+        assertTrue(url.contains("kl=xa-ar"))
+        assertFalse(HtmlExtract.duckDuckGoHtmlUrl("weather").contains("kl="))
+    }
+
+    @Test
+    fun `an arabic question gets an arabic context block`() {
+        val context = SearchQuery.buildContext("ما أخبار اليوم", SearchQuery.dedupe(sample))
+        assertTrue(context.contains("المصدر"))
+        // The instruction is what keeps a multilingual model from switching
+        // to English just because the sources are English pages.
+        assertTrue(context.contains("بالعربية"))
+        assertFalse(context.contains("say so"))
+    }
+
+    @Test
+    fun `an english question keeps the english context block`() {
+        val context = SearchQuery.buildContext("todays news", SearchQuery.dedupe(sample))
+        assertTrue(context.contains("Source:"))
+        assertFalse(context.contains("المصدر"))
     }
 }

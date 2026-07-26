@@ -1,5 +1,6 @@
 package com.example.ondevicellm.model
 
+import com.example.ondevicellm.core.Localization
 import java.io.File
 
 /**
@@ -86,10 +87,5 @@ enum class ModelFormat {
 fun ModelFormat.rejectionMessage(fileName: String): String? = when (this) {
     ModelFormat.TASK, ModelFormat.LITERTLM, ModelFormat.TFLITE, ModelFormat.GGUF -> null
 
-    ModelFormat.UNKNOWN -> buildString {
-        append("\"$fileName\" isn't a model format this app can read.\n\n")
-        append("Supported: GGUF (.gguf) and MediaPipe bundles (.task).\n\n")
-        append("Files ending in .safetensors or .pth come from PyTorch repos and ")
-        append("need converting to GGUF on a computer first.")
-    }
+    ModelFormat.UNKNOWN -> Localization.strings.unsupportedFormat(fileName)
 }

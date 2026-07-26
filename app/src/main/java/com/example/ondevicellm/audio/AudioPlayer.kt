@@ -1,5 +1,6 @@
 package com.example.ondevicellm.audio
 
+import com.example.ondevicellm.core.Localization
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -36,7 +37,7 @@ class AudioPlayer {
         // getMinBufferSize returns a negative error code for unsupported rates.
         if (minBuffer <= 0) {
             throw IllegalArgumentException(
-                "This device cannot play audio at ${sampleRateHz} Hz."
+                Localization.strings.cannotPlayAudio(sampleRateHz)
             )
         }
 

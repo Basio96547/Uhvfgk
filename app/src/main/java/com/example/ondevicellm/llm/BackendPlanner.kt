@@ -1,5 +1,6 @@
 package com.example.ondevicellm.llm
 
+import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.model.BackendPref
 
 /** Where a model ends up running. */
@@ -20,7 +21,8 @@ data class BackendPlan(val target: ComputeTarget, val note: String)
  * every choice comes with a sentence explaining itself.
  *
  * Pure Kotlin with no Android or MediaPipe types, so the policy is unit-tested
- * rather than only observed on a device.
+ * rather than only observed on a device. The explanation is written in the
+ * user's language: [AppStrings] is plain Kotlin too, so this stays testable.
  */
 object BackendPlanner {
 
@@ -46,29 +48,30 @@ object BackendPlanner {
         availableBytes: Long,
         /** e.g. "Snapdragon 8 Elite"; empty when unknown. */
         socLabel: String,
+        s: AppStrings,
     ): BackendPlan = when (pref) {
         BackendPref.CPU -> BackendPlan(
             ComputeTarget.CPU,
-            if (socLabel.isNotEmpty()) "Running on the $socLabel CPU, as requested." else "",
+            if (socLabel.isNotEmpty()) s.cpuAsRequested(socLabel) else "",
         )
 
         BackendPref.GPU -> if (gpuCapable) {
-            val fit = gpuFit(modelBytes, availableBytes)
+            val fit = gpuFit(modelBytes, availableBytes, s)
             if (fit == null) {
                 BackendPlan(ComputeTarget.GPU, "")
             } else {
                 // Requested explicitly, so it is honoured — but say what to expect.
-                BackendPlan(ComputeTarget.GPU, "$fit Switch to CPU if loading fails.")
+                BackendPlan(ComputeTarget.GPU, "$fit ${s.gpuSwitchIfItFails}")
             }
         } else {
-            BackendPlan(ComputeTarget.CPU, "No Vulkan or OpenCL driver here — running on CPU.")
+            BackendPlan(ComputeTarget.CPU, s.noGpuDriver)
         }
 
         BackendPref.NPU -> planNpu(
-            gpuCapable, npuRuntimePresent, npuLinked, modelBytes, availableBytes,
+            gpuCapable, npuRuntimePresent, npuLinked, modelBytes, availableBytes, s,
         )
 
-        BackendPref.AUTO -> planAuto(gpuCapable, modelBytes, availableBytes, socLabel)
+        BackendPref.AUTO -> planAuto(gpuCapable, modelBytes, availableBytes, socLabel, s)
     }
 
     private fun planAuto(
@@ -76,19 +79,17 @@ object BackendPlanner {
         modelBytes: Long,
         availableBytes: Long,
         socLabel: String,
+        s: AppStrings,
     ): BackendPlan {
-        val soc = socLabel.ifEmpty { "this device" }
+        val soc = socLabel.ifEmpty { s.thisDevice }
         if (!gpuCapable) {
-            return BackendPlan(
-                ComputeTarget.CPU,
-                "Auto: no GPU compute driver on $soc, so the CPU it is.",
-            )
+            return BackendPlan(ComputeTarget.CPU, s.autoNoGpu(soc))
         }
-        val problem = gpuFit(modelBytes, availableBytes)
+        val problem = gpuFit(modelBytes, availableBytes, s)
         return if (problem == null) {
-            BackendPlan(ComputeTarget.GPU, "Auto: GPU — this model is small enough to fit.")
+            BackendPlan(ComputeTarget.GPU, s.autoGpuFits)
         } else {
-            BackendPlan(ComputeTarget.CPU, "Auto: CPU. $problem")
+            BackendPlan(ComputeTarget.CPU, s.autoCpu(problem))
         }
     }
 
@@ -98,17 +99,13 @@ object BackendPlanner {
         npuLinked: Boolean,
         modelBytes: Long,
         availableBytes: Long,
+        s: AppStrings,
     ): BackendPlan {
         if (npuLinked) {
-            return BackendPlan(ComputeTarget.GPU, "NPU runtime is linked — delegating to it.")
+            return BackendPlan(ComputeTarget.GPU, s.npuLinked)
         }
-        val fallback = planAuto(gpuCapable, modelBytes, availableBytes, "")
-        val lead = if (npuRuntimePresent) {
-            "This phone has a vendor NPU, but no public API exposes it to a " +
-                "general GGUF/.task model, so it can't be used here."
-        } else {
-            "No usable vendor NPU runtime on this device."
-        }
+        val fallback = planAuto(gpuCapable, modelBytes, availableBytes, "", s)
+        val lead = if (npuRuntimePresent) s.npuDetectedUnusable else s.npuNoRuntime
         return BackendPlan(fallback.target, "$lead ${fallback.note}".trim())
     }
 
@@ -116,14 +113,11 @@ object BackendPlanner {
      * Returns null when the GPU is a good fit, or a sentence saying why it
      * isn't.
      */
-    private fun gpuFit(modelBytes: Long, availableBytes: Long): String? {
+    private fun gpuFit(modelBytes: Long, availableBytes: Long, s: AppStrings): String? {
         if (modelBytes <= 0L) return null
-        if (modelBytes > GPU_MODEL_LIMIT_BYTES) {
-            return "This model is too large for a phone GPU allocation; " +
-                "the CPU path memory-maps it instead."
-        }
+        if (modelBytes > GPU_MODEL_LIMIT_BYTES) return s.gpuTooLargeModel
         if (availableBytes > 0 && availableBytes < modelBytes * GPU_MEMORY_HEADROOM) {
-            return "Not enough free memory to keep the weights resident on the GPU."
+            return s.gpuNotEnoughMemory
         }
         return null
     }

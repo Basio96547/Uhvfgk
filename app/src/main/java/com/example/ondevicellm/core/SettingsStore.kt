@@ -17,14 +17,15 @@ enum class TtsEngine {
     MODEL,
     ;
 
-    val label: String
-        get() = when (this) {
-            SYSTEM -> "System engine"
-            MODEL -> "My TTS model"
-        }
+    fun label(s: AppStrings): String = when (this) {
+        SYSTEM -> s.ttsEngineSystem
+        MODEL -> s.ttsEngineModel
+    }
 }
 
 data class AppSettings(
+    /** Interface language, layout direction, and the language replies come back in. */
+    val language: AppLanguage = AppLanguage.SYSTEM,
     val systemPrompt: String = "",
     /**
      * When reasoning runs. AUTO lets the router decide per message — a greeting
@@ -57,10 +58,13 @@ class SettingsStore(context: Context) {
 
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    private val _settings = MutableStateFlow(read())
+    private val _settings = MutableStateFlow(read().also { Localization.apply(it.language) })
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     private fun read() = AppSettings(
+        language = AppLanguage.entries
+            .firstOrNull { it.name == prefs.getString(KEY_LANGUAGE, null) }
+            ?: AppLanguage.SYSTEM,
         systemPrompt = prefs.getString(KEY_SYSTEM_PROMPT, "").orEmpty(),
         thinkingMode = RoutingMode.entries
             .firstOrNull { it.name == prefs.getString(KEY_THINKING_MODE, null) }
@@ -85,8 +89,12 @@ class SettingsStore(context: Context) {
 
     fun update(transform: (AppSettings) -> AppSettings) {
         val updated = transform(_settings.value)
+        // Kept in step so code below the UI layer raises messages in the right
+        // language too — model-load failures are the ones users actually hit.
+        Localization.apply(updated.language)
         _settings.value = updated
         prefs.edit()
+            .putString(KEY_LANGUAGE, updated.language.name)
             .putString(KEY_SYSTEM_PROMPT, updated.systemPrompt)
             .putString(KEY_THINKING_MODE, updated.thinkingMode.name)
             .putBoolean(KEY_SHOW_THINKING, updated.showThinking)
@@ -102,6 +110,7 @@ class SettingsStore(context: Context) {
     }
 
     private companion object {
+        const val KEY_LANGUAGE = "language"
         const val KEY_SYSTEM_PROMPT = "systemPrompt"
         const val KEY_THINKING_MODE = "thinkingMode"
         const val KEY_SEARCH_MODE = "searchMode"

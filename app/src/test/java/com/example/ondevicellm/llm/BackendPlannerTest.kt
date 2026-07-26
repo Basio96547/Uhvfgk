@@ -1,5 +1,8 @@
 package com.example.ondevicellm.llm
 
+import com.example.ondevicellm.core.AppStrings
+import com.example.ondevicellm.core.ArabicStrings
+import com.example.ondevicellm.core.EnglishStrings
 import com.example.ondevicellm.model.BackendPref
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,8 +20,10 @@ class BackendPlannerTest {
         modelBytes: Long = gb,
         availableBytes: Long = 8 * gb,
         socLabel: String = "Snapdragon 8 Elite",
+        strings: AppStrings = EnglishStrings,
     ) = BackendPlanner.plan(
-        pref, gpuCapable, npuRuntimePresent, npuLinked, modelBytes, availableBytes, socLabel,
+        pref, gpuCapable, npuRuntimePresent, npuLinked, modelBytes, availableBytes,
+        socLabel, strings,
     )
 
     // ---- AUTO is a decision, not a coin flip ------------------------------
@@ -116,5 +121,45 @@ class BackendPlannerTest {
     @Test
     fun `unknown model size does not block the GPU`() {
         assertEquals(ComputeTarget.GPU, plan(modelBytes = 0).target)
+    }
+
+    // ---- the explanation follows the language, the decision does not -------
+
+    @Test
+    fun `the same decision is explained in arabic`() {
+        val en = plan(modelBytes = 4 * gb, strings = EnglishStrings)
+        val ar = plan(modelBytes = 4 * gb, strings = ArabicStrings)
+        assertEquals(en.target, ar.target)
+        assertTrue(ar.note.any { it in '\u0600'..'\u06FF' })
+        assertTrue(en.note != ar.note)
+    }
+
+    @Test
+    fun `no arabic plan leaks an english sentence`() {
+        // socLabel blank on purpose: the SoC name is a proper noun read off the
+        // device ("Snapdragon 8 Elite"), so it stays Latin in either language.
+        // What must not appear is a sentence this app wrote in English.
+        listOf(
+            plan(socLabel = "", strings = ArabicStrings),
+            plan(socLabel = "", modelBytes = 6 * gb, strings = ArabicStrings),
+            plan(socLabel = "", gpuCapable = false, strings = ArabicStrings),
+            plan(socLabel = "", pref = BackendPref.NPU, strings = ArabicStrings),
+            plan(socLabel = "", pref = BackendPref.GPU, gpuCapable = false,
+                strings = ArabicStrings),
+        ).forEach { p ->
+            assertTrue("english leaked: ${p.note}", !hasEnglishProse(p.note))
+        }
+    }
+
+    /**
+     * True when [note] contains an English *word*, as opposed to a technical
+     * name that stays Latin in any language.
+     */
+    private fun hasEnglishProse(note: String): Boolean {
+        val technical = Regex(
+            "gguf|\\.task|cpu|gpu|npu|vulkan|opencl|ram plus|snapdragon|elite|mmap",
+            RegexOption.IGNORE_CASE,
+        )
+        return note.replace(technical, "").any { it in 'a'..'z' }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.ondevicellm.llm
 
 import com.example.ondevicellm.core.DeviceSnapshot
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.model.BackendPref
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 
@@ -61,6 +62,7 @@ object BackendResolver {
             modelBytes = modelBytes,
             availableBytes = device.memory.effectiveAvailableBytes,
             socLabel = device.socModel,
+            s = Localization.strings,
         )
 
         val backend = when (plan.target) {

@@ -1,6 +1,7 @@
 package com.example.ondevicellm.web
 
 import com.example.ondevicellm.core.ErrorLog
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.core.Severity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -18,13 +19,6 @@ enum class SearchDepth {
 
     /** Also opens the top pages and reads them. Slower, much better answers. */
     DEEP,
-    ;
-
-    val label: String
-        get() = when (this) {
-            QUICK -> "Quick"
-            DEEP -> "Read pages"
-        }
 }
 
 /**
@@ -63,11 +57,19 @@ class WebSearchService {
         languageTag: String,
         depth: SearchDepth = SearchDepth.QUICK,
     ): Outcome = coroutineScope {
-        if (query.isBlank()) return@coroutineScope Outcome(emptyList(), "Nothing to search for.")
+        if (query.isBlank()) {
+            return@coroutineScope Outcome(emptyList(), Localization.strings.searchNothingToDo)
+        }
 
-        val organic = async(Dispatchers.IO) { attempt("Web results") { webResults(query) } }
+        // The script the question is written in wins over the app's language:
+        // an Arabic question deserves ar.wikipedia.org and Arabic-ranked
+        // results even when the interface is in English.
+        val effectiveTag = SearchQuery.searchLanguageTag(query, languageTag)
+        val region = SearchQuery.regionFor(effectiveTag)
+
+        val organic = async(Dispatchers.IO) { attempt("Web results") { webResults(query, region) } }
         val instant = async(Dispatchers.IO) { attempt("Instant answer") { duckDuckGo(query) } }
-        val wiki = async(Dispatchers.IO) { attempt("Wikipedia") { wikipedia(query, languageTag) } }
+        val wiki = async(Dispatchers.IO) { attempt("Wikipedia") { wikipedia(query, effectiveTag) } }
 
         val organicResults = organic.await()
         val instantResults = instant.await()
@@ -76,8 +78,7 @@ class WebSearchService {
         if (organicResults == null && instantResults == null && wikiResults == null) {
             return@coroutineScope Outcome(
                 emptyList(),
-                "Couldn't reach the web. Check your connection, or turn search off " +
-                    "to answer from the model alone.",
+                Localization.strings.searchUnreachable,
             )
         }
 
@@ -88,7 +89,7 @@ class WebSearchService {
         )
 
         if (merged.isEmpty()) {
-            return@coroutineScope Outcome(emptyList(), "No useful web results for that question.")
+            return@coroutineScope Outcome(emptyList(), Localization.strings.searchNoResults)
         }
 
         val enriched = if (depth == SearchDepth.DEEP) readPages(merged) else merged
@@ -111,9 +112,9 @@ class WebSearchService {
     // ------------------------------------------------------------- providers
 
     /** Organic results — the part that makes this an actual search engine. */
-    private fun webResults(query: String): List<SearchResult> =
+    private fun webResults(query: String, region: String): List<SearchResult> =
         HtmlExtract.parseDuckDuckGoResults(
-            fetch(HtmlExtract.duckDuckGoHtmlUrl(query), accept = ACCEPT_HTML),
+            fetch(HtmlExtract.duckDuckGoHtmlUrl(query, region), accept = ACCEPT_HTML),
             limit = MAX_ORGANIC,
         )
 

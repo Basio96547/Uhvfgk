@@ -3,6 +3,7 @@ package com.example.ondevicellm.llm
 import android.content.Context
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
+import com.example.ondevicellm.core.Localization
 import com.example.ondevicellm.core.ThermalGuard
 import com.example.ondevicellm.core.ThermalLevel
 import com.example.ondevicellm.core.formatBytes
@@ -194,16 +195,12 @@ class LlamaCppEngine private constructor(
 
         fun load(context: Context, spec: ModelSpec, device: DeviceSnapshot): LlamaCppEngine {
             if (!LlamaBridge.isAvailable()) {
-                throw ModelLoadException(
-                    "The GGUF runtime isn't available in this build.\n\n" +
-                        "Use a MediaPipe .task model instead, or rebuild the app with " +
-                        "the native component enabled."
-                )
+                throw ModelLoadException(Localization.strings.ggufRuntimeMissing)
             }
 
             val file = File(spec.path)
             if (!file.isFile || !file.canRead()) {
-                throw ModelLoadException("Model file not readable:\n${spec.path}")
+                throw ModelLoadException(Localization.strings.modelFileNotReadable(spec.path))
             }
 
             assertEnoughMemory(context, file.length())
@@ -219,7 +216,7 @@ class LlamaCppEngine private constructor(
             val handle = bridge.nativeLoadModel(spec.path, contextTokens, threads)
             if (handle == 0L) {
                 val detail = bridge.nativeLastError().ifBlank { "Unknown error." }
-                throw ModelLoadException("Could not load this GGUF model.\n\n$detail")
+                throw ModelLoadException(Localization.strings.ggufLoadFailed(detail))
             }
 
             // llama.cpp runs on the CPU here: no GPU backend is compiled in, so
@@ -227,12 +224,12 @@ class LlamaCppEngine private constructor(
             // but say which SIMD kernels are live, because that is what
             // actually decides how fast this model runs.
             val features = runCatching { bridge.nativeCpuFeatures() }.getOrDefault("")
+            val strings = Localization.strings
             val note = buildString {
                 if (spec.backend != BackendPref.CPU && spec.backend != BackendPref.AUTO) {
-                    append("GGUF models run on the CPU in this build; ")
-                    append("the ${spec.backend.label} preference doesn't apply. ")
+                    append(strings.ggufBackendIgnored(spec.backend.label(strings)))
                 }
-                append("$threads of $cores cores")
+                append(strings.threadsOfCores(threads, cores))
                 if (features.isNotBlank()) append(" · $features")
                 append(".")
             }
@@ -258,18 +255,30 @@ class LlamaCppEngine private constructor(
             val memory = DeviceCapabilities.readMemory(context)
             val budget = memory.effectiveAvailableBytes
             if (budget in 1 until modelBytes) {
+                val s = Localization.strings
                 throw ModelLoadException(
                     buildString {
-                        append("Not enough memory to load this model.\n\n")
-                        append("Model: ${modelBytes.formatBytes()}\n")
-                        append("Available RAM: ${memory.availableRamBytes.formatBytes()}\n")
+                        append(s.notEnoughMemoryTitle)
+                        append("\n\n")
+                        appendLine(s.memoryLine(s.model, modelBytes.formatBytes()))
+                        appendLine(
+                            s.memoryLine(
+                                s.availableRamLabel,
+                                memory.availableRamBytes.formatBytes(),
+                            )
+                        )
                         if (memory.hasExtendedMemory) {
-                            append("Free RAM Plus: ${memory.swapFreeBytes.formatBytes()}\n")
+                            appendLine(
+                                s.memoryLine(
+                                    s.freeExtendedLabel,
+                                    memory.swapFreeBytes.formatBytes(),
+                                )
+                            )
                         } else {
-                            append("RAM Plus: not enabled\n")
+                            appendLine(s.ramPlusNotEnabled)
                         }
-                        append("\nUse a smaller quantisation (Q4_K_M instead of Q8_0), ")
-                        append("close background apps, or enable RAM Plus.")
+                        append("\n")
+                        append(s.notEnoughMemoryAdvice)
                     }
                 )
             }

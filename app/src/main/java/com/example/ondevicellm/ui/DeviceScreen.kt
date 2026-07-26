@@ -52,6 +52,7 @@ fun DeviceScreen(
     viewModel: ChatViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val device by viewModel.device.collectAsStateWithLifecycle()
     val memory by viewModel.memory.collectAsStateWithLifecycle()
     val problems by ErrorLog.entries.collectAsStateWithLifecycle()
@@ -71,14 +72,14 @@ fun DeviceScreen(
                 } else {
                     "Snapdragon 8 Elite"
                 },
-                subtitle = "High-end Qualcomm silicon detected. GPU backend recommended.",
+                subtitle = s.snapdragonNote,
             )
         }
 
         SectionCard(
             icon = Icons.Filled.DeveloperBoard,
-            title = "Hardware",
-            subtitle = device.socModel.ifBlank { "Unknown SoC" },
+            title = s.hardware,
+            subtitle = device.socModel.ifBlank { s.unknownSoc },
             trailing = {
                 Box(
                     Modifier
@@ -88,24 +89,24 @@ fun DeviceScreen(
                 ) {
                     Icon(
                         Icons.Filled.Refresh,
-                        contentDescription = "Refresh",
+                        contentDescription = s.refresh,
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
         ) {
-            InfoRow("Model", device.deviceModel.ifBlank { "unknown" })
-            InfoRow("Manufacturer", device.manufacturer.ifBlank { "unknown" })
-            InfoRow("SoC vendor", device.socManufacturer.ifBlank { "unknown" })
-            InfoRow("CPU cores", device.cpuCores.toString())
-            InfoRow("ABIs", device.supportedAbis.joinToString(", ").ifBlank { "unknown" })
+            InfoRow(s.model, device.deviceModel.ifBlank { s.unknown })
+            InfoRow(s.manufacturer, device.manufacturer.ifBlank { s.unknown })
+            InfoRow(s.socVendor, device.socManufacturer.ifBlank { s.unknown })
+            InfoRow(s.cpuCores, device.cpuCores.toString())
+            InfoRow(s.abis, device.supportedAbis.joinToString(", ").ifBlank { s.unknown })
         }
 
         SectionCard(
             icon = Icons.Filled.Memory,
-            title = "Memory",
-            subtitle = "Physical and extended",
+            title = s.memory,
+            subtitle = s.physicalAndExtended,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
             val used = (memory.totalRamBytes - memory.availableRamBytes).coerceAtLeast(0)
@@ -121,7 +122,7 @@ fun DeviceScreen(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "free of ${memory.totalRamBytes.formatBytes()}",
+                    s.freeOf(memory.totalRamBytes.formatBytes()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 3.dp),
@@ -132,7 +133,7 @@ fun DeviceScreen(
             ProgressBar(fraction, color = MaterialTheme.colorScheme.tertiary, height = 8)
             Spacer(Modifier.height(6.dp))
             Text(
-                "${(fraction * 100).toInt()}% in use",
+                s.percentInUse((fraction * 100).toInt()),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -141,13 +142,13 @@ fun DeviceScreen(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "RAM Plus",
+                    s.ramPlus,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 StatusPill(
-                    if (memory.hasExtendedMemory) "Active" else "Off",
+                    if (memory.hasExtendedMemory) s.ramPlusOn else s.off,
                     color = if (memory.hasExtendedMemory) {
                         MaterialTheme.colorScheme.tertiary
                     } else {
@@ -159,17 +160,15 @@ fun DeviceScreen(
             Spacer(Modifier.height(Space.sm))
 
             if (memory.hasExtendedMemory) {
-                InfoRow("Total", memory.swapTotalBytes.formatBytes())
-                InfoRow("Free", memory.swapFreeBytes.formatBytes())
+                InfoRow(s.total, memory.swapTotalBytes.formatBytes())
+                InfoRow(s.free, memory.swapFreeBytes.formatBytes())
                 Spacer(Modifier.height(Space.sm))
                 Caption(
-                    "Model weights are memory-mapped, so pages can spill into " +
-                        "extended memory instead of failing to allocate."
+                    s.mmapNote
                 )
             } else {
                 Caption(
-                    "Not enabled. Turn it on in Settings › Device care › Memory › " +
-                        "RAM Plus to give large models more headroom."
+                    s.ramPlusOff
                 )
             }
 
@@ -186,7 +185,7 @@ fun DeviceScreen(
             ) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        "Effective budget",
+                        s.effectiveBudget,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -199,22 +198,22 @@ fun DeviceScreen(
                     )
                 }
                 Spacer(Modifier.height(Space.xs))
-                Caption("Available RAM + free extended memory. Decides what can load.")
+                Caption(s.effectiveBudgetNote)
             }
         }
 
         SectionCard(
             icon = Icons.Filled.Bolt,
-            title = "Accelerators",
+            title = s.accelerators,
             subtitle = device.accelerators.hexagonVersion?.let { "Hexagon $it" }
-                ?: "GPU and NPU support",
+                ?: s.gpuAndNpu,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
             val acc = device.accelerators
-            CapabilityRow("Vulkan", acc.vulkanAvailable)
-            CapabilityRow("OpenCL", acc.openClAvailable)
-            CapabilityRow("NNAPI", acc.nnapiAvailable, "deprecated on Android 15+")
-            CapabilityRow("Vendor NPU runtime", acc.hasNpuRuntime)
+            CapabilityRow(s.vulkan, acc.vulkanAvailable)
+            CapabilityRow(s.openCl, acc.openClAvailable)
+            CapabilityRow(s.nnapi, acc.nnapiAvailable, s.deprecatedOn15)
+            CapabilityRow(s.vendorNpuRuntime, acc.hasNpuRuntime)
 
             if (acc.hasNpuRuntime) {
                 Spacer(Modifier.height(Space.md))
@@ -239,33 +238,30 @@ fun DeviceScreen(
             SoftDivider()
 
             Text(
-                "How NPU selection behaves",
+                s.howNpuBehaves,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(Space.xs))
             Caption(
-                "The bundled LLM runtime exposes CPU and GPU. Choosing \"NPU\" for a " +
-                    "model runs it on the GPU and says so on the chat screen rather " +
-                    "than pretending. Wiring in Qualcomm's QNN/Genie runtime is done " +
-                    "in BackendResolver.kt."
+                s.npuExplanation
             )
         }
 
         SectionCard(
             icon = Icons.Filled.Storage,
-            title = "Storage",
-            subtitle = "Where models live",
+            title = s.storage,
+            subtitle = s.whereModelsLive,
         ) {
-            InfoRow("Free space", viewModel.registry.managedDir.usableSpace.formatBytes())
+            InfoRow(s.freeSpace, viewModel.registry.managedDir.usableSpace.formatBytes())
             Spacer(Modifier.height(Space.sm))
             Caption(viewModel.registry.managedDir.absolutePath)
         }
 
         SectionCard(
             icon = Icons.Filled.ReportProblem,
-            title = "Diagnostics",
-            subtitle = "What went wrong, if anything",
+            title = s.diagnostics,
+            subtitle = s.whatWentWrong,
             tint = if (problems.any { it.severity >= Severity.ERROR }) {
                 MaterialTheme.colorScheme.error
             } else {
@@ -276,22 +272,21 @@ fun DeviceScreen(
             val warnings = problems.count { it.severity == Severity.WARNING }
 
             InfoRow(
-                "Recorded events",
+                s.recordedEvents,
                 if (problems.isEmpty()) "none" else problems.size.toString(),
             )
             if (errors > 0) {
                 InfoRow(
-                    "Errors and crashes",
+                    s.errorsAndCrashes,
                     errors.toString(),
                     valueColor = MaterialTheme.colorScheme.error,
                 )
             }
-            if (warnings > 0) InfoRow("Warnings", warnings.toString())
+            if (warnings > 0) InfoRow(s.warnings, warnings.toString())
 
             Spacer(Modifier.height(Space.md))
             Caption(
-                "Failures are recorded here instead of being silently ignored — " +
-                    "including crashes, which survive a restart."
+                s.diagnosticsIntro
             )
             Spacer(Modifier.height(Space.md))
             Row(
@@ -305,7 +300,7 @@ fun DeviceScreen(
                     .padding(horizontal = Space.lg, vertical = Space.sm),
             ) {
                 Text(
-                    if (problems.isEmpty()) "Open log" else "Review ${problems.size}",
+                    if (problems.isEmpty()) s.openLog else s.reviewCount(problems.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     fontWeight = FontWeight.SemiBold,
@@ -358,6 +353,7 @@ private fun HeroBanner(title: String, subtitle: String) {
 /** Capability line with a coloured dot — reads faster than yes/no text. */
 @Composable
 private fun CapabilityRow(label: String, available: Boolean, note: String? = null) {
+    val s = LocalStrings.current
     Row(
         Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -374,7 +370,7 @@ private fun CapabilityRow(label: String, available: Boolean, note: String? = nul
         Spacer(Modifier.width(Space.md))
         Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
         Text(
-            if (available) "available" else (note ?: "not found"),
+            if (available) s.availableWord else (note ?: s.notFound),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = if (available) {

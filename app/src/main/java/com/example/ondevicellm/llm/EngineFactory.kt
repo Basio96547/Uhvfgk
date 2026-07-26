@@ -1,5 +1,6 @@
 package com.example.ondevicellm.llm
 
+import com.example.ondevicellm.core.Localization
 import android.content.Context
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.model.ModelFormat
@@ -19,7 +20,7 @@ object EngineFactory {
     fun load(context: Context, spec: ModelSpec, device: DeviceSnapshot): TextEngine {
         val file = File(spec.path)
         if (!file.exists()) {
-            throw ModelLoadException("Model file not found:\n${spec.path}")
+            throw ModelLoadException(Localization.strings.modelFileNotFound(spec.path))
         }
 
         return when (val format = ModelFormat.detect(file)) {
@@ -31,7 +32,7 @@ object EngineFactory {
 
             ModelFormat.UNKNOWN -> throw ModelLoadException(
                 format.rejectionMessage(file.name)
-                    ?: "Unrecognised model format."
+                    ?: Localization.strings.unrecognisedFormat
             )
         }
     }

@@ -63,8 +63,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ondevicellm.core.AppStrings
 import com.example.ondevicellm.core.ErrorLog
 import com.example.ondevicellm.ui.ChatScreen
+import com.example.ondevicellm.ui.LocalStrings
+import com.example.ondevicellm.ui.ProvideLocalization
 import com.example.ondevicellm.ui.DiagnosticsDialog
 import com.example.ondevicellm.ui.DeviceScreen
 import com.example.ondevicellm.ui.ModelsScreen
@@ -73,16 +76,26 @@ import com.example.ondevicellm.ui.theme.OnDeviceLLMTheme
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
 
-private enum class Destination(
-    val label: String,
-    val title: String,
-    val subtitle: String,
-    val icon: ImageVector,
-) {
-    CHAT("Chat", "Chat", "Private, on-device", Icons.AutoMirrored.Filled.Chat),
-    MODELS("Models", "Models", "Add and configure", Icons.Filled.ViewInAr),
-    DEVICE("Device", "Device", "Hardware and memory", Icons.Filled.Memory),
-    SETTINGS("Settings", "Settings", "Voice and behaviour", Icons.Filled.Tune),
+private enum class Destination(val icon: ImageVector) {
+    CHAT(Icons.AutoMirrored.Filled.Chat),
+    MODELS(Icons.Filled.ViewInAr),
+    DEVICE(Icons.Filled.Memory),
+    SETTINGS(Icons.Filled.Tune),
+    ;
+
+    fun title(s: AppStrings): String = when (this) {
+        CHAT -> s.navChat
+        MODELS -> s.navModels
+        DEVICE -> s.navDevice
+        SETTINGS -> s.navSettings
+    }
+
+    fun subtitle(s: AppStrings): String = when (this) {
+        CHAT -> s.chatSubtitle
+        MODELS -> s.modelsSubtitle
+        DEVICE -> s.deviceSubtitle
+        SETTINGS -> s.settingsSubtitle
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -114,64 +127,74 @@ class MainActivity : ComponentActivity() {
 fun App() {
     OnDeviceLLMTheme {
         val viewModel: ChatViewModel = viewModel()
-        val state by viewModel.uiState.collectAsStateWithLifecycle()
-        var destination by remember { mutableStateOf(Destination.CHAT) }
-        var showDiagnostics by remember { mutableStateOf(false) }
-        val unseenProblems by ErrorLog.unseenCount.collectAsStateWithLifecycle()
+        val settings by viewModel.settings.collectAsStateWithLifecycle()
 
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // Wraps everything: the language switch has to change layout direction
+        // too, not just the words, or Arabic ends up inside an English shell.
+        ProvideLocalization(settings.language) { AppContent(viewModel) }
+    }
+}
 
-                AppHeader(
-                    destination = destination,
-                    isSpeaking = state.speakingMessageId != null,
-                    isGenerating = state.isBusy,
-                    canReset = destination == Destination.CHAT &&
-                        state.status == ModelStatus.READY && !state.isBusy,
-                    unseenProblems = unseenProblems,
-                    onStopSpeaking = viewModel::stopSpeaking,
-                    onStopGenerating = viewModel::stopGeneration,
-                    onReset = viewModel::clearConversation,
-                    onOpenDiagnostics = {
-                        ErrorLog.markSeen()
-                        showDiagnostics = true
-                    },
-                )
+@Composable
+private fun AppContent(viewModel: ChatViewModel) {
+    val strings = LocalStrings.current
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var destination by remember { mutableStateOf(Destination.CHAT) }
+    var showDiagnostics by remember { mutableStateOf(false) }
+    val unseenProblems by ErrorLog.unseenCount.collectAsStateWithLifecycle()
 
-                Box(Modifier.weight(1f)) {
-                    // Crossfade keeps tab switches calm; a slide would fight the
-                    // bottom bar's own motion.
-                    Crossfade(
-                        targetState = destination,
-                        animationSpec = tween(220),
-                        label = "screen",
-                    ) { current ->
-                        when (current) {
-                            Destination.CHAT -> ChatScreen(
-                                viewModel = viewModel,
-                                onOpenModels = { destination = Destination.MODELS },
-                            )
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
 
-                            Destination.MODELS -> ModelsScreen(viewModel)
-                            Destination.DEVICE -> DeviceScreen(viewModel)
-                            Destination.SETTINGS -> SettingsScreen(viewModel)
-                        }
+            AppHeader(
+                destination = destination,
+                isSpeaking = state.speakingMessageId != null,
+                isGenerating = state.isBusy,
+                canReset = destination == Destination.CHAT &&
+                    state.status == ModelStatus.READY && !state.isBusy,
+                unseenProblems = unseenProblems,
+                onStopSpeaking = viewModel::stopSpeaking,
+                onStopGenerating = viewModel::stopGeneration,
+                onReset = viewModel::clearConversation,
+                onOpenDiagnostics = {
+                    ErrorLog.markSeen()
+                    showDiagnostics = true
+                },
+            )
+
+            Box(Modifier.weight(1f)) {
+                // Crossfade keeps tab switches calm; a slide would fight the
+                // bottom bar's own motion.
+                Crossfade(
+                    targetState = destination,
+                    animationSpec = tween(220),
+                    label = "screen",
+                ) { current ->
+                    when (current) {
+                        Destination.CHAT -> ChatScreen(
+                            viewModel = viewModel,
+                            onOpenModels = { destination = Destination.MODELS },
+                        )
+
+                        Destination.MODELS -> ModelsScreen(viewModel)
+                        Destination.DEVICE -> DeviceScreen(viewModel)
+                        Destination.SETTINGS -> SettingsScreen(viewModel)
                     }
                 }
-
-                BottomBar(
-                    selected = destination,
-                    onSelect = { destination = it },
-                )
             }
-        }
 
-        if (showDiagnostics) {
-            DiagnosticsDialog(onDismiss = { showDiagnostics = false })
+            BottomBar(
+                selected = destination,
+                onSelect = { destination = it },
+            )
         }
+    }
+
+    if (showDiagnostics) {
+        DiagnosticsDialog(onDismiss = { showDiagnostics = false })
     }
 }
 
@@ -187,6 +210,7 @@ private fun AppHeader(
     onReset: () -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -195,12 +219,12 @@ private fun AppHeader(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                destination.title,
+                destination.title(strings),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                destination.subtitle,
+                destination.subtitle(strings),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -212,7 +236,7 @@ private fun AppHeader(
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
         ) {
-            HeaderButton(Icons.Filled.Stop, "Stop generating", onStopGenerating, accent = true)
+            HeaderButton(Icons.Filled.Stop, strings.stopGenerating, onStopGenerating, accent = true)
         }
 
         AnimatedVisibility(
@@ -220,7 +244,7 @@ private fun AppHeader(
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
         ) {
-            HeaderButton(Icons.Filled.VolumeOff, "Stop speaking", onStopSpeaking, accent = true)
+            HeaderButton(Icons.Filled.VolumeOff, strings.stopSpeaking, onStopSpeaking, accent = true)
         }
 
         // Badge shows only when something actually failed.
@@ -229,7 +253,7 @@ private fun AppHeader(
             Box {
                 HeaderButton(
                     Icons.Filled.ReportProblem,
-                    "Diagnostics",
+                    strings.diagnostics,
                     onOpenDiagnostics,
                     accent = true,
                 )
@@ -246,7 +270,7 @@ private fun AppHeader(
 
         if (destination == Destination.CHAT) {
             Spacer(Modifier.width(Space.xs))
-            HeaderButton(Icons.Filled.RestartAlt, "New chat", onReset, enabled = canReset)
+            HeaderButton(Icons.Filled.RestartAlt, strings.newChat, onReset, enabled = canReset)
         }
     }
 }
@@ -315,6 +339,7 @@ private fun BottomBar(selected: Destination, onSelect: (Destination) -> Unit) {
 
 @Composable
 private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit) {
+    val label = item.title(LocalStrings.current)
     val iconScale by animateFloatAsState(
         targetValue = if (isSelected) 1f else 0.92f,
         animationSpec = spring(),
@@ -356,14 +381,14 @@ private fun NavItem(item: Destination, isSelected: Boolean, onClick: () -> Unit)
         ) {
             Icon(
                 item.icon,
-                contentDescription = item.label,
+                contentDescription = label,
                 tint = tint,
                 modifier = Modifier.size(21.dp).scale(iconScale),
             )
         }
         Spacer(Modifier.height(3.dp))
         Text(
-            item.label,
+            label,
             style = MaterialTheme.typography.labelSmall,
             color = tint,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,

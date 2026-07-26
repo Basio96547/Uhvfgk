@@ -13,29 +13,22 @@ enum class QueryKind {
 
     /** Needs working through: maths, multi-step, code, comparison. */
     REASONING,
-    ;
-
-    val label: String
-        get() = when (this) {
-            SOCIAL -> "Chat"
-            SIMPLE -> "Direct"
-            LOOKUP -> "Web"
-            REASONING -> "Thinking"
-        }
 }
 
 /**
  * The plan for one message.
  *
- * [reason] is shown in the UI so the routing is never a black box — when it
- * gets something wrong the user can see why and override it.
+ * Carries the decision, not a sentence about it: the UI renders the
+ * explanation in the user's own language. Routing is never a black box — when
+ * it gets something wrong the user can see why and override it.
  */
 data class RoutingDecision(
     val kind: QueryKind,
     val search: Boolean,
     val think: Boolean,
     val maxTokens: Int,
-    val reason: String,
+    /** True when a manual Always/Never overrode what the router would have done. */
+    val overridden: Boolean,
 )
 
 /** Per-feature override. */
@@ -44,14 +37,6 @@ enum class RoutingMode {
     AUTO,
     ALWAYS,
     NEVER,
-    ;
-
-    val label: String
-        get() = when (this) {
-            AUTO -> "Auto"
-            ALWAYS -> "Always"
-            NEVER -> "Never"
-        }
 }
 
 /**
@@ -73,7 +58,34 @@ object QueryRouter {
     // Diacritics, alef and ya variants and tatweel all vary by keyboard and by
     // writer. Matching raw text against a word list misses most real input.
     private val DIACRITICS = Regex("[ً-ْـ]")
-    private val PUNCTUATION = Regex("[\\p{Punct}،؛؟٪-٭۔]")
+    private val PUNCTUATION = Regex("[\\p{Punct}،؛؟٪-٭۔«»]")
+
+    /**
+     * Arabic-Indic digits, both the Arabic (٠-٩) and Persian/Urdu (۰-۹) sets.
+     *
+     * Samsung's Arabic keyboard produces these, so "احسب ٢٥ × ١٧" arrived with
+     * not a single ASCII digit in it and was routed as a simple question with
+     * no working shown. Folded to ASCII before any matching.
+     */
+    private const val ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
+    private const val PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
+
+    fun foldDigits(text: String): String {
+        if (text.none { it in ARABIC_DIGITS || it in PERSIAN_DIGITS }) return text
+        return buildString(text.length) {
+            for (ch in text) {
+                val arabic = ARABIC_DIGITS.indexOf(ch)
+                val persian = PERSIAN_DIGITS.indexOf(ch)
+                append(
+                    when {
+                        arabic >= 0 -> '0' + arabic
+                        persian >= 0 -> '0' + persian
+                        else -> ch
+                    }
+                )
+            }
+        }
+    }
 
     /**
      * Whole-phrase containment.
@@ -89,72 +101,124 @@ object QueryRouter {
     private fun anyPhrase(normalizedText: String, phrases: List<String>): Boolean =
         phrases.any { hasPhrase(normalizedText, it) }
 
-    fun normalize(text: String): String = text
+    fun normalize(text: String): String = foldDigits(text)
         .lowercase()
         .replace(DIACRITICS, "")
-        .replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-        .replace('ى', 'ي')
+        .replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
+        .replace('ى', 'ي').replace('ئ', 'ي')
         .replace('ة', 'ه')
+        .replace('ؤ', 'و')
+        // Gulf and Egyptian keyboards; also common in transliterated chat.
+        .replace('گ', 'ك').replace('ک', 'ك')
+        .replace('ی', 'ي')
         .replace(PUNCTUATION, " ")
         .replace(Regex("\\s+"), " ")
         .trim()
 
-    /** Greetings and pleasantries — never worth a search or a chain of thought. */
+    /**
+     * Greetings and pleasantries — never worth a search or a chain of thought.
+     *
+     * Arabic is covered across dialects on purpose: people write to this app in
+     * Gulf, Egyptian, Levantine and Maghrebi, not in the textbook form. Every
+     * entry is already normalised (no diacritics, ا/ي/ه folded), because that is
+     * what it is matched against.
+     */
     private val SOCIAL_PHRASES = listOf(
-        // Arabic
-        "مرحبا", "اهلا", "اهلين", "هلا", "السلام عليكم", "وعليكم السلام",
-        "صباح الخير", "مساء الخير", "صباح النور", "تصبح علي خير",
-        "كيف حالك", "كيفك", "شلونك", "شخبارك", "عساك بخير",
-        "شكرا", "مشكور", "يعطيك العافيه", "تسلم", "الله يعافيك",
-        "مع السلامه", "وداعا", "الي اللقاء", "تمام", "طيب", "اوك", "ماشي",
-        // English
+        // --- Arabic: greetings ---
+        "مرحبا", "مرحبتين", "اهلا", "اهلين", "اهلا وسهلا", "هلا", "هلا والله",
+        "يا هلا", "السلام عليكم", "وعليكم السلام", "سلام", "سلام عليكم",
+        "صباح الخير", "مساء الخير", "صباح النور", "مساء النور",
+        "تصبح علي خير", "صباحك سعيد", "نهارك سعيد",
+        // --- Arabic: how are you, by dialect ---
+        "كيف حالك", "كيف الحال", "كيفك", "كيف حالكم", "شلونك", "شلونكم",
+        "شخبارك", "شخبارك اليوم", "عساك بخير", "عساكم بخير", "وش اخبارك",
+        "ايه الاخبار", "عامل ايه", "ازيك", "ازيك عامل ايه", "لباس", "كي داير",
+        "شو الاخبار", "شو اخبارك",
+        // --- Arabic: thanks and blessings ---
+        "شكرا", "شكرا لك", "شكرا جزيلا", "مشكور", "مشكوره", "متشكر",
+        "يعطيك العافيه", "الله يعطيك العافيه", "تسلم", "تسلم ايدك",
+        "الله يعافيك", "جزاك الله خير", "بارك الله فيك", "ما قصرت",
+        // --- Arabic: farewells and fillers ---
+        "مع السلامه", "وداعا", "الي اللقاء", "في امان الله", "بالتوفيق",
+        "تمام", "طيب", "اوك", "ماشي", "زين", "حلو", "ممتاز", "عظيم",
+        "اكيد", "ان شاء الله", "ولا يهمك", "عفوا", "العفو", "لا شكر علي واجب",
+        // --- English ---
         "hi", "hello", "hey", "yo", "good morning", "good evening", "good night",
-        "how are you", "how r u", "whats up", "sup",
-        "thanks", "thank you", "thx", "ty", "appreciate it",
+        "how are you", "how r u", "how are u", "whats up", "sup", "howdy",
+        "thanks", "thank you", "thanks a lot", "thx", "ty", "appreciate it",
         "bye", "goodbye", "see you", "ok", "okay", "cool", "nice", "great",
+        "perfect", "got it", "sure", "no problem", "youre welcome",
     )
 
     /** Asking for something that changes over time, or that the model can't know. */
     private val LOOKUP_MARKERS = listOf(
-        // Arabic
-        "اليوم", "الان", "حاليا", "الحين", "احدث", "اخر", "جديد", "مؤخرا",
-        "اخبار", "خبر", "سعر", "اسعار", "الطقس", "الجو", "درجه الحراره",
-        "متي يصدر", "متي صدر", "هذا العام", "هذه السنه", "هذا الشهر",
-        "من هو", "من هي", "ما هو موقع", "كم سعر",
-        // English
+        // --- Arabic: time ---
+        "اليوم", "الان", "حاليا", "الحين", "هسه", "دلوقتي", "دلوقت",
+        "احدث", "اخر", "اخر شي", "جديد", "الجديد", "مؤخرا", "هالايام",
+        "هذا العام", "هذه السنه", "هذا الشهر", "هذا الاسبوع", "امس", "بكره",
+        "متي يصدر", "متي صدر", "متي ينزل", "موعد",
+        // --- Arabic: things that change ---
+        "اخبار", "خبر", "عاجل", "سعر", "اسعار", "بكم", "كم سعر", "تكلفه",
+        "الطقس", "الجو", "درجه الحراره", "امطار", "توقعات",
+        "الدولار", "الريال", "الذهب", "العمله", "البورصه", "الاسهم",
+        "نتيجه", "نتيجه المباراه", "مباراه", "دوري", "ترتيب",
+        // --- Arabic: entities the model may not know ---
+        "من هو", "من هي", "من هم", "ما هو موقع", "رابط", "موقع",
+        "اصدار", "الاصدار", "مواصفات",
+        // --- English ---
         "today", "right now", "currently", "latest", "newest", "recent",
-        "news", "headline", "price", "cost of", "weather", "forecast",
-        "stock", "release date", "released", "version", "changelog",
+        "news", "breaking", "headline", "price", "cost of", "how much is",
+        "weather", "forecast", "temperature",
+        "stock", "exchange rate", "release date", "released", "version",
+        "changelog", "score", "results", "standings",
         "this year", "this month", "this week", "who is", "who was",
     )
 
     /** An explicit instruction to look it up beats any heuristic. */
     private val EXPLICIT_SEARCH = listOf(
-        "ابحث", "ابحثلي", "دور", "دورلي", "جيب لي معلومات", "شوف بالنت",
+        "ابحث", "ابحث لي", "ابحثلي", "دور", "دور لي", "دورلي", "بحث",
+        "جيب لي معلومات", "شوف بالنت", "شوف في النت", "شوف على النت",
+        "من الانترنت", "من النت", "من الويب", "ابحث في الانترنت",
         "search", "google", "look up", "look it up", "find online", "web search",
     )
 
     /** Wants an explanation or a derivation, not a fact. */
     private val REASONING_MARKERS = listOf(
-        // Arabic
-        "لماذا", "ليش", "ليه", "كيف يعمل", "كيف تعمل", "اشرح", "وضح",
-        "قارن", "الفرق بين", "افضل ام", "حلل", "استنتج", "برهن", "اثبت",
-        "احسب", "كم يساوي", "حل المسئله", "خطوه بخطوه", "علل",
-        // English
-        "why", "how does", "how do", "explain", "elaborate", "walk me through",
-        "compare", "difference between", "trade-off", "tradeoff", "pros and cons",
+        // --- Arabic: why / how ---
+        "لماذا", "لماذا لا", "ليش", "ليه", "علي وش", "كيف يعمل", "كيف تعمل",
+        "كيف يشتغل", "ازاي", "كيفيه", "ما السبب", "السبب",
+        // --- Arabic: explain ---
+        "اشرح", "اشرح لي", "وضح", "فسر", "بسط", "علل", "فصل",
+        // --- Arabic: compare and judge ---
+        "قارن", "الفرق بين", "الفروق", "ايهما افضل", "افضل ام", "وش الافضل",
+        "مميزات وعيوب", "ايجابيات وسلبيات", "رايك",
+        // --- Arabic: work it out ---
+        "حلل", "استنتج", "برهن", "اثبت", "استنبط",
+        "احسب", "احسب لي", "كم يساوي", "كم الناتج", "حل المسئله", "حل المساله",
+        "خطوه بخطوه", "بالتفصيل", "اكتب لي", "صمم", "خطط",
+        // --- English ---
+        "why", "how does", "how do", "how would", "explain", "elaborate",
+        "walk me through", "compare", "difference between", "trade-off",
+        "tradeoff", "pros and cons", "which is better",
         "analyse", "analyze", "prove", "derive", "calculate", "solve",
-        "step by step", "reason about", "debug", "optimize", "optimise",
-        "algorithm", "complexity", "refactor",
+        "step by step", "in detail", "reason about", "debug", "optimize",
+        "optimise", "algorithm", "complexity", "refactor", "design",
     )
 
-    /** Arithmetic in the text is a strong signal that working is required. */
+    /**
+     * Arithmetic in the text is a strong signal that working is required.
+     *
+     * Matched against digit-folded text, so "احسب ٢٥ × ١٧" reaches this as
+     * "احسب 25 × 17". Not against fully normalised text: that strips `+` as
+     * punctuation, which would hide half the arithmetic there is.
+     */
     private val ARITHMETIC = Regex("\\d+\\s*[+\\-*/×÷^%]\\s*\\d+")
 
     /** Code, which usually needs care even when the question is short. */
     private val CODE_MARKERS = listOf(
         "```", "function", "def ", "class ", "import ", "null pointer",
-        "stack trace", "exception", "compile", "كود", "داله", "خطا برمجي",
+        "stack trace", "exception", "compile", "traceback", "segfault",
+        "كود", "برمج", "داله", "دالة", "خطا برمجي", "خطأ برمجي", "سكربت",
     )
 
     private const val TRIVIAL_TOKENS = 200
@@ -179,7 +243,10 @@ object QueryRouter {
         val social = isSocial(text, words)
         val explicitSearch = anyPhrase(text, EXPLICIT_SEARCH)
         val lookup = explicitSearch || anyPhrase(text, LOOKUP_MARKERS)
-        val reasoning = ARITHMETIC.containsMatchIn(message) ||
+        // Digits folded but punctuation intact: normalize() strips "+" along
+        // with the rest of \p{Punct}, which would hide "12 + 8" from the
+        // arithmetic check.
+        val reasoning = ARITHMETIC.containsMatchIn(foldDigits(message)) ||
             anyPhrase(text, REASONING_MARKERS) ||
             // Code markers are matched raw: they carry their own punctuation.
             CODE_MARKERS.any { message.lowercase().contains(it) } ||
@@ -219,7 +286,7 @@ object QueryRouter {
             search = search,
             think = think,
             maxTokens = maxTokens,
-            reason = explain(kind, search, think, searchMode, thinkMode),
+            overridden = searchMode != RoutingMode.AUTO || thinkMode != RoutingMode.AUTO,
         )
     }
 
@@ -247,31 +314,6 @@ object QueryRouter {
 
         // Only filler left over (a name, "و", an emoji) means it was just a greeting.
         return remaining.isEmpty() || remaining.length <= LEFTOVER_SLACK
-    }
-
-    private fun explain(
-        kind: QueryKind,
-        search: Boolean,
-        think: Boolean,
-        searchMode: RoutingMode,
-        thinkMode: RoutingMode,
-    ): String {
-        val forced = searchMode != RoutingMode.AUTO || thinkMode != RoutingMode.AUTO
-        val base = when (kind) {
-            QueryKind.SOCIAL -> "Greeting — answering directly"
-            QueryKind.SIMPLE -> "Straightforward question"
-            QueryKind.LOOKUP -> "Needs current information"
-            QueryKind.REASONING -> "Needs working through"
-        }
-        val extras = buildList {
-            if (search) add("searching")
-            if (think) add("thinking")
-        }
-        return when {
-            extras.isEmpty() && forced -> "$base · overrides applied"
-            extras.isEmpty() -> base
-            else -> "$base · ${extras.joinToString(" and ")}"
-        }
     }
 
     /**

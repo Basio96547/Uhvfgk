@@ -98,6 +98,7 @@ fun ModelsScreen(
     viewModel: ChatViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val models by viewModel.models.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedText by viewModel.registry.selectedTextModelId.collectAsStateWithLifecycle()
@@ -118,13 +119,13 @@ fun ModelsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 PrimaryAction(
                     icon = Icons.Filled.Add,
-                    label = "Add model",
+                    label = s.addModel,
                     enabled = state.importState == null,
                     onClick = { picker.launch(arrayOf("*/*")) },
                     modifier = Modifier.weight(1f),
                 )
-                SecondaryAction(Icons.Filled.Search, "Scan", viewModel::scanForModels)
-                SecondaryAction(Icons.Filled.FolderOpen, "Path") { pathDialog = true }
+                SecondaryAction(Icons.Filled.Search, s.scan, viewModel::scanForModels)
+                SecondaryAction(Icons.Filled.FolderOpen, s.path) { pathDialog = true }
             }
 
             AnimatedVisibility(
@@ -141,12 +142,12 @@ fun ModelsScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                "${(import.fraction * 100).toInt()}%",
+                                s.copyingPercent((import.fraction * 100).toInt()),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
                             )
-                            TextButton(onClick = viewModel::cancelImport) { Text("Cancel") }
+                            TextButton(onClick = viewModel::cancelImport) { Text(s.cancel) }
                         }
                         GradientProgressBar(import.fraction, Gradients.accent)
                     }
@@ -262,6 +263,7 @@ private fun SecondaryAction(icon: ImageVector, label: String, onClick: () -> Uni
 
 @Composable
 private fun EmptyModels() {
+    val s = LocalStrings.current
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = Space.huge),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -283,13 +285,13 @@ private fun EmptyModels() {
         }
         Spacer(Modifier.height(Space.xl))
         Text(
-            "Nothing installed yet",
+            s.nothingInstalledYet,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(Space.sm))
         Text(
-            "Pick a model file with Add, or push one from your computer:",
+            s.pickAModelFile,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -319,6 +321,7 @@ private fun ModelCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val s = LocalStrings.current
     var confirmDelete by remember { mutableStateOf(false) }
     val accent = colorFor(model.kind)
 
@@ -347,13 +350,13 @@ private fun ModelCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "${model.kind.label} · ${model.sizeBytes.formatBytes()}",
+                    "${model.kind.label(s)} · ${model.sizeBytes.formatBytes()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (isActive) {
-                StatusPill("Active", icon = Icons.Filled.Check, filled = true, color = accent)
+                StatusPill(s.active, icon = Icons.Filled.Check, filled = true, color = accent)
             }
         }
 
@@ -364,7 +367,7 @@ private fun ModelCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (model.kind.isConversational) {
-                StatusPill(model.backend.label, color = MaterialTheme.colorScheme.secondary)
+                StatusPill(model.backend.label(s), color = MaterialTheme.colorScheme.secondary)
                 StatusPill(
                     "${model.maxTokens} tok",
                     color = MaterialTheme.colorScheme.secondary,
@@ -372,7 +375,7 @@ private fun ModelCard(
             }
             if (model.supportsThinking) {
                 StatusPill(
-                    "Reasoning",
+                    s.reasoningSection,
                     icon = Icons.Filled.Psychology,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
@@ -385,18 +388,18 @@ private fun ModelCard(
                 )
             }
             if (!model.managed) {
-                StatusPill("Linked", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                StatusPill(s.linkedInPlace, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
         SoftDivider()
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CardAction(Icons.Filled.Tune, "Tune", onEdit)
+            CardAction(Icons.Filled.Tune, s.tune, onEdit)
             Spacer(Modifier.width(Space.sm))
             CardAction(
                 Icons.Filled.Delete,
-                "Remove",
+                s.remove,
                 { confirmDelete = true },
                 tint = MaterialTheme.colorScheme.error,
             )
@@ -410,7 +413,7 @@ private fun ModelCard(
                         .padding(horizontal = Space.lg, vertical = Space.sm),
                 ) {
                     Text(
-                        if (model.kind.isConversational) "Load" else "Use",
+                        if (model.kind.isConversational) s.load else "Use",
                         style = MaterialTheme.typography.labelMedium,
                         color = accent,
                         fontWeight = FontWeight.SemiBold,
@@ -424,15 +427,16 @@ private fun ModelCard(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
-            title = { Text("Remove model?") },
+            title = { Text(s.removeModelTitle) },
             text = {
                 Text(
                     if (model.managed) {
-                        "\"${model.displayName}\" will be deleted from app storage, " +
-                            "freeing ${model.sizeBytes.formatBytes()}."
+                        s.removeManagedModelBody(
+                            model.displayName,
+                            model.sizeBytes.formatBytes(),
+                        )
                     } else {
-                        "\"${model.displayName}\" will be removed from this list. " +
-                            "The file on disk is left untouched."
+                        s.removeLinkedModelBody(model.displayName) + " " + s.fileLeftUntouched
                     }
                 )
             },
@@ -440,10 +444,10 @@ private fun ModelCard(
                 TextButton(onClick = {
                     confirmDelete = false
                     onDelete()
-                }) { Text("Remove") }
+                }) { Text(s.remove) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmDelete = false }) { Text(s.cancel) }
             },
         )
     }
@@ -476,6 +480,7 @@ private fun ModelSettingsDialog(
     onDismiss: () -> Unit,
     onSave: (ModelSpec) -> Unit,
 ) {
+    val s = LocalStrings.current
     var draft by remember { mutableStateOf(model) }
 
     AlertDialog(
@@ -487,46 +492,46 @@ private fun ModelSettingsDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Space.md),
             ) {
-                GroupLabel("Type")
+                GroupLabel(s.type)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ModelKind.entries.forEach { kind ->
                         FilterChip(
                             selected = draft.kind == kind,
                             onClick = { draft = draft.copy(kind = kind) },
-                            label = { Text(kind.label) },
+                            label = { Text(kind.label(s)) },
                         )
                     }
                 }
 
                 // Only show the fields that matter for the chosen type.
                 if (draft.kind.isConversational) {
-                    GroupLabel("Backend")
+                    GroupLabel(s.backend)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         BackendPref.entries.forEach { backend ->
                             FilterChip(
                                 selected = draft.backend == backend,
                                 onClick = { draft = draft.copy(backend = backend) },
-                                label = { Text(backend.label) },
+                                label = { Text(backend.label(s)) },
                             )
                         }
                     }
 
-                    GroupLabel("Generation")
-                    NumberField("Max tokens", draft.maxTokens.toString()) {
+                    GroupLabel(s.generation)
+                    NumberField(s.maxTokens, draft.maxTokens.toString()) {
                         draft = draft.copy(maxTokens = it.toIntOrNull() ?: draft.maxTokens)
                     }
-                    NumberField("Temperature", draft.temperature.toString()) {
+                    NumberField(s.temperature, draft.temperature.toString()) {
                         draft = draft.copy(temperature = it.toFloatOrNull() ?: draft.temperature)
                     }
-                    NumberField("Top-K", draft.topK.toString()) {
+                    NumberField(s.topK, draft.topK.toString()) {
                         draft = draft.copy(topK = it.toIntOrNull() ?: draft.topK)
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Emits reasoning", style = MaterialTheme.typography.bodyMedium)
+                            Text(s.emitsReasoning, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "Wraps its thinking in <think> tags",
+                                s.wrapsThinkTags,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -539,19 +544,17 @@ private fun ModelSettingsDialog(
                 }
 
                 if (draft.kind == ModelKind.TTS) {
-                    GroupLabel("Voice output")
-                    NumberField("Sample rate (Hz)", draft.ttsSampleRateHz.toString()) {
+                    GroupLabel(s.voiceOutput)
+                    NumberField(s.sampleRate, draft.ttsSampleRateHz.toString()) {
                         draft = draft.copy(
                             ttsSampleRateHz = it.toIntOrNull() ?: draft.ttsSampleRateHz
                         )
                     }
-                    NumberField("Speaker id", draft.ttsSpeakerId.toString()) {
+                    NumberField(s.speakerId, draft.ttsSpeakerId.toString()) {
                         draft = draft.copy(ttsSpeakerId = it.toIntOrNull() ?: draft.ttsSpeakerId)
                     }
                     Text(
-                        "The sample rate must match the model's training output, or " +
-                            "speech plays too fast or too slow. Put a " +
-                            "\"<name>.tokens.json\" vocabulary next to the model file " +
+                        s.sampleRateNote<name>.tokens.json\" vocabulary next to the model file " +
                             "for correct pronunciation.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -559,8 +562,8 @@ private fun ModelSettingsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(draft) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(draft) }) { Text(s.save) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
 }
 
@@ -578,17 +581,17 @@ private fun NumberField(label: String, value: String, onChange: (String) -> Unit
 
 @Composable
 private fun PathDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val s = LocalStrings.current
     var path by remember { mutableStateOf("/data/local/tmp/llm/model.task") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
-        title = { Text("Link by path") },
+        title = { Text(s.linkByPath) },
         text = {
             Column {
                 Text(
-                    "For models pushed with adb. The file is referenced in place — " +
-                        "nothing is copied, so no extra storage is used.",
+                    s.pushHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -596,14 +599,14 @@ private fun PathDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
                 OutlinedTextField(
                     value = path,
                     onValueChange = { path = it },
-                    label = { Text("Absolute path") },
+                    label = { Text(s.absolutePath) },
                     singleLine = true,
                     shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(path) }) { Text("Link") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onConfirm(path) }) { Text(s.link) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.cancel) } },
     )
 }

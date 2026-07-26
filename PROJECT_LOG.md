@@ -32,8 +32,9 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Web search | ⚠️ Real organic results + page reading; parser tested — **never hit a live endpoint** |
 | Thermal management | ⚠️ Logic tested — **never observed on real hardware** |
 | Diagnostics/crash log | ⚠️ Compiles — **never triggered in anger** |
-| Query routing (search/think) | ✅ 21 tests, incl. the reported "مرحبا" case |
+| Query routing (search/think) | ✅ 30 tests, incl. the reported "مرحبا" case |
 | Token streaming (UTF-8) | ✅ Crash fixed and covered by 9 native assertions |
+| Arabic localization | ✅ Whole UI + RTL; completeness enforced by the compiler and by `StringsTest` |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -268,6 +269,62 @@ sandbox.
     model that ignores `/no_think` still emits the block, and with no parser it
     landed verbatim in the bubble. Both engines now parse unconditionally and
     discard the trace when reasoning wasn't asked for.
+
+### Session 3 — 2026-07-26 · Arabic as a first-class language
+
+19. **`core/Strings.kt`: every user-facing string, in both languages.** An
+    interface with two implementing objects rather than `strings.xml` — a
+    missing Arabic string is then a *compile error*, where a missing XML key is
+    a crash on the device in the one language the author can't read. It is
+    plain Kotlin with no Android imports, so `StringsTest` walks every property
+    by reflection and fails on anything copied across untranslated or left in
+    Latin script. That check is what makes "fully translated" a fact rather
+    than a claim.
+    - `AppLanguage` (Auto / العربية / English) in settings; each option written
+      in its own language, because a picker that says "Arabic" in English is no
+      use to the person who needs it.
+    - `ProvideLocalization` overrides `LocalLayoutDirection` as well as the
+      words, so the whole app mirrors — padding, rows, nav bar, bubbles.
+    - `Localization.strings` is a global mirror for code below the UI. Engine
+      load failures and search errors were exactly the messages appearing in
+      English on the device, and they are raised far from any composable.
+    - Enum labels (`ModelKind`, `BackendPref`, `TtsEngine`, `ThermalLevel`,
+      `RoutingMode`, `SearchDepth`) took an `AppStrings` parameter. `QueryRouter`
+      stopped returning an English sentence and returns the decision; the UI
+      words it. `BackendPlanner` takes `AppStrings` and stays unit-testable —
+      two tests assert an Arabic plan reaches the same decision and leaks no
+      English prose.
+
+20. **The router learned how people actually write Arabic.**
+    - Arabic-Indic digits (٠-٩) and Persian (۰-۹) folded to ASCII. Samsung's
+      Arabic keyboard produces them, so "احسب ٢٥ × ١٧" contained no ASCII digit
+      and was routed as a plain question with no working shown.
+    - Arithmetic is matched on digit-folded but *unstripped* text: `normalize()`
+      removes `+` along with the rest of `\p{Punct}`, which hid "12 + 8".
+    - Normalisation extended: ٱ, ئ, ؤ, گ/ک, ی, and «» quotation marks.
+    - Phrase lists rewritten across dialects — Gulf (شلونك, شخبارك), Egyptian
+      (ازيك, دلوقتي, ايه الاخبار), Levantine (شو الاخبار, هسه), Maghrebi
+      (كي داير) — plus prayers and pleasantries (يعطيك العافية, ما قصرت,
+      جزاك الله خير) that are greetings, not questions.
+
+21. **Search follows the question's script, not the app's language.**
+    `SearchQuery.isArabic` counts Arabic letters; a third of the letters is
+    enough, because real Arabic questions carry Latin product names
+    ("متى صدر Android 16") and "Android" alone outweighs the words around it.
+    A single Arabic word inside an English sentence stays below the line. An
+    Arabic question then gets ar.wikipedia.org, DuckDuckGo's `kl=xa-ar` region,
+    **and an Arabic context block** — an English instruction block in front of
+    an Arabic question pulls a small model into answering in English, so
+    grounding was costing the user their language.
+
+22. **The model is told to answer in Arabic.** `replyLanguageInstruction` leads
+    the system prompt when Arabic is selected. Empty for English: telling a
+    model to use its default wastes context.
+
+23. **Chat bubbles use `TextDirection.Content`.** Direction comes from the text
+    itself, so an Arabic reply reads right-to-left even with the interface in
+    English, and a code block inside an Arabic conversation still reads
+    left-to-right.
 
 ---
 
