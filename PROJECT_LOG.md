@@ -35,6 +35,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Query routing (search/think) | ✅ 30 tests, incl. the reported "مرحبا" case |
 | Token streaming (UTF-8) | ✅ Crash fixed and covered by 9 native assertions |
 | Arabic localization | ✅ Whole UI + RTL; completeness enforced by the compiler and by `StringsTest` |
+| Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -58,7 +59,11 @@ tests" but unproven in practice.
 | 12 | `91a0e1e` | ✅ the four device fixes |
 | 13 | `2277bb5` | ❌ scripted edit ate half a string literal |
 | 14 | `f2cccb3` | ❌ StringsTest needs kotlin-reflect, not a declared dep |
-| 15 | `6adce14` | ✅ current — APK **38.8 MB** |
+| 15 | `6adce14` | ✅ APK **38.8 MB** |
+| 16 | `cd1d6cf` | ✅ |
+| 17 | `4d68799` | ✅ the five answer-quality fixes |
+| 18 | `8b9d9b1` | ⏹ cancelled by a newer push |
+| 19 | `881ff16` | ✅ current — house rules + model advisor |
 
 Runs 13 and 14 are worth keeping in view: both were caused by the local checks
 being *weaker* than CI, not by the code being wrong in some subtle way. A brace
