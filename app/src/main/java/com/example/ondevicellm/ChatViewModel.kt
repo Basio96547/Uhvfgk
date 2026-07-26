@@ -17,13 +17,19 @@ import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
 import com.example.ondevicellm.core.MemorySnapshot
 import com.example.ondevicellm.core.SettingsStore
+import com.example.ondevicellm.core.ThermalGuard
+import com.example.ondevicellm.core.ThermalLevel
 import com.example.ondevicellm.core.TtsEngine
 import com.example.ondevicellm.llm.EngineFactory
+import com.example.ondevicellm.llm.LlamaCppEngine
 import com.example.ondevicellm.llm.ResolvedBackend
 import com.example.ondevicellm.llm.TextEngine
 import com.example.ondevicellm.model.ModelImporter
 import com.example.ondevicellm.model.ModelRegistry
 import com.example.ondevicellm.model.ModelSpec
+import com.example.ondevicellm.web.SearchQuery
+import com.example.ondevicellm.web.SearchSource
+import com.example.ondevicellm.web.WebSearchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +47,8 @@ data class ChatMessage(
     val thinking: String = "",
     val isGenerating: Boolean = false,
     val thinkingExpanded: Boolean = false,
+    /** Pages the answer was grounded in, when web search ran. */
+    val sources: List<SearchSource> = emptyList(),
 )
 
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
@@ -61,6 +69,9 @@ data class ChatUiState(
     val isSynthesizing: Boolean = false,
     val importState: ImportState? = null,
     val notice: String? = null,
+    /** Non-null while a web search is running, for the status line. */
+    val searchStatus: String? = null,
+    val thermalLevel: ThermalLevel = ThermalLevel.NORMAL,
 )
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
@@ -69,6 +80,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val importer = ModelImporter(app, registry)
     private val settingsStore = SettingsStore(app)
     private val speech = SpeechInput(app)
+    private val thermalGuard = ThermalGuard(app)
+    private val webSearch = WebSearchService()
     private val audioPlayer = AudioPlayer()
     private val systemTts = SystemTtsSynthesizer(app)
     private var modelTts: ModelTtsSynthesizer? = null
@@ -94,7 +107,27 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val speechAvailable: Boolean get() = speech.isAvailable
     val speechOnDevice: Boolean get() = speech.supportsOnDevice
 
+    val thermalSupported: Boolean get() = thermalGuard.isSupported
+
     init {
+        thermalGuard.start()
+        // Retune the running engine as the device heats up, and surface it.
+        viewModelScope.launch {
+            thermalGuard.level.collect { level ->
+                _uiState.update { it.copy(thermalLevel = level) }
+                (engine as? LlamaCppEngine)?.applyThermalLevel(level)
+                if (ThermalGuard.shouldPause(level) && _uiState.value.isBusy) {
+                    engine?.stop()
+                    _uiState.update {
+                        it.copy(
+                            notice = "Paused: the phone is getting hot. " +
+                                "Generation will be slower until it cools down.",
+                        )
+                    }
+                }
+            }
+        }
+
         // Pick up anything already side-loaded so first run isn't empty.
         viewModelScope.launch(Dispatchers.IO) {
             registry.pruneMissing()
@@ -234,6 +267,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val active = engine
         if (prompt.isEmpty() || active == null || _uiState.value.isBusy) return
 
+        if (ThermalGuard.shouldPause(_uiState.value.thermalLevel)) {
+            _uiState.update {
+                it.copy(
+                    notice = "The phone is too hot to run the model right now. " +
+                        "Give it a moment to cool down.",
+                )
+            }
+            return
+        }
+
         val userMessage = ChatMessage(nextId++, Author.USER, prompt)
         val replyId = nextId++
         val placeholder = ChatMessage(replyId, Author.MODEL, "", isGenerating = true)
@@ -248,10 +291,37 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val current = settingsStore.settings.value
         viewModelScope.launch(Dispatchers.IO) {
+            // Match decode threads to the current thermal state before starting.
+            (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
+
+            var grounding = ""
+            if (current.webSearchEnabled) {
+                _uiState.update { it.copy(searchStatus = "Searching the web…") }
+                val outcome = runCatching {
+                    webSearch.search(prompt, current.voiceLanguageTag)
+                }.getOrNull()
+
+                grounding = SearchQuery.buildContext(prompt, outcome?.results.orEmpty())
+                val sources = SearchQuery.toSources(outcome?.results.orEmpty())
+                _uiState.update { state ->
+                    state.copy(
+                        searchStatus = null,
+                        notice = outcome?.problem ?: state.notice,
+                        messages = state.messages.map {
+                            if (it.id == replyId) it.copy(sources = sources) else it
+                        },
+                    )
+                }
+            }
+
+            val fullSystem = listOf(current.systemPrompt, grounding)
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n")
+
             try {
                 active.generate(
                     prompt = prompt,
-                    systemPrompt = current.systemPrompt,
+                    systemPrompt = fullSystem,
                     thinkingEnabled = current.thinkingEnabled,
                 ) { thinking, answer, done ->
                     appendDelta(replyId, thinking, answer, done)
@@ -524,6 +594,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
+        thermalGuard.stop()
         speech.release()
         audioPlayer.release()
         systemTts.release()

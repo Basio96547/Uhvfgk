@@ -35,6 +35,12 @@ data class AppSettings(
     val autoSpeakReplies: Boolean = false,
     val speakingRate: Float = 1.0f,
     val pitch: Float = 1.0f,
+    // ---- Web grounding ----
+    /**
+     * Off by default: the app is offline-first, and enabling this sends the
+     * question to third-party servers. The user opts in explicitly.
+     */
+    val webSearchEnabled: Boolean = false,
 )
 
 /** Small SharedPreferences-backed settings store exposed as a StateFlow. */
@@ -57,6 +63,7 @@ class SettingsStore(context: Context) {
         autoSpeakReplies = prefs.getBoolean(KEY_AUTO_SPEAK, false),
         speakingRate = prefs.getFloat(KEY_SPEAKING_RATE, 1.0f),
         pitch = prefs.getFloat(KEY_PITCH, 1.0f),
+        webSearchEnabled = prefs.getBoolean(KEY_WEB_SEARCH, false),
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -71,6 +78,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
             .putFloat(KEY_PITCH, updated.pitch)
+            .putBoolean(KEY_WEB_SEARCH, updated.webSearchEnabled)
             .apply()
     }
 
@@ -83,5 +91,6 @@ class SettingsStore(context: Context) {
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"
         const val KEY_PITCH = "pitch"
+        const val KEY_WEB_SEARCH = "webSearchEnabled"
     }
 }

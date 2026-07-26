@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.FilterChip
@@ -74,6 +76,53 @@ fun SettingsScreen(
             Caption(
                 "Detected from <think>…</think> in the model's output. Mark a model " +
                     "as reasoning-capable on the Models screen."
+            )
+        }
+
+        SectionCard(
+            icon = Icons.Filled.Language,
+            title = "Web search",
+            subtitle = "Ground answers in live sources",
+            tint = MaterialTheme.colorScheme.secondary,
+        ) {
+            ToggleRow(
+                label = "Search the web",
+                description = "Look up the question before answering, and cite sources.",
+                checked = settings.webSearchEnabled,
+                onChange = { v -> viewModel.updateSettings { it.copy(webSearchEnabled = v) } },
+            )
+            Spacer(Modifier.height(Space.sm))
+            Caption(
+                if (settings.webSearchEnabled) {
+                    "Your questions are sent to DuckDuckGo and Wikipedia. This is the " +
+                        "only feature that leaves your device — everything else stays " +
+                        "offline. Results are used as context and cited under each reply."
+                } else {
+                    "Off. The model answers from its own weights and nothing leaves " +
+                        "your device. Turning this on sends your questions to " +
+                        "DuckDuckGo and Wikipedia."
+                },
+                isWarning = settings.webSearchEnabled,
+            )
+        }
+
+        SectionCard(
+            icon = Icons.Filled.Thermostat,
+            title = "Performance",
+            subtitle = "Heat and battery",
+            tint = MaterialTheme.colorScheme.tertiary,
+        ) {
+            Caption(
+                if (viewModel.thermalSupported) {
+                    "The app watches the phone's thermal state and lowers the number " +
+                        "of compute threads as it warms up, pausing if it gets too " +
+                        "hot. Sustained performance mode is requested so clocks stay " +
+                        "steady instead of spiking then throttling."
+                } else {
+                    "This Android version doesn't report thermal state, so a " +
+                        "conservative thread count is used at all times. Sustained " +
+                        "performance mode is still requested."
+                }
             )
         }
 

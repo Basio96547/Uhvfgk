@@ -3,6 +3,8 @@ package com.example.ondevicellm.llm
 import android.content.Context
 import com.example.ondevicellm.core.DeviceCapabilities
 import com.example.ondevicellm.core.DeviceSnapshot
+import com.example.ondevicellm.core.ThermalGuard
+import com.example.ondevicellm.core.ThermalLevel
 import com.example.ondevicellm.core.formatBytes
 import com.example.ondevicellm.model.BackendPref
 import com.example.ondevicellm.model.ModelSpec
@@ -16,6 +18,7 @@ internal class LlamaBridge {
     external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int): Long
     external fun nativeFree(handle: Long)
     external fun nativeStop(handle: Long)
+    external fun nativeSetThreads(handle: Long, nThreads: Int)
     external fun nativeResetContext(handle: Long)
 
     external fun nativeGenerate(
@@ -73,6 +76,23 @@ class LlamaCppEngine private constructor(
 
     @Volatile
     private var closed = false
+
+    /** Threads currently configured, so we only cross JNI when it changes. */
+    private var activeThreads = 0
+
+    /**
+     * Retunes the decode thread count for the current thermal state. Called
+     * before each turn and whenever the device heats up mid-generation.
+     */
+    fun applyThermalLevel(level: ThermalLevel) {
+        if (closed) return
+        val cores = Runtime.getRuntime().availableProcessors()
+        val threads = ThermalGuard.threadBudget(cores, level)
+        if (threads != activeThreads) {
+            bridge.nativeSetThreads(handle, threads)
+            activeThreads = threads
+        }
+    }
 
     override fun generate(
         prompt: String,
@@ -168,9 +188,9 @@ class LlamaCppEngine private constructor(
             val bridge = LlamaBridge()
             bridge.nativeInit()
 
-            // Leave two cores for the UI and audio; more threads than physical
-            // big cores usually makes decode slower, not faster.
-            val threads = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(2, 8)
+            // Deliberately below the core count: see ThermalGuard.threadBudget.
+            val cores = Runtime.getRuntime().availableProcessors()
+            val threads = ThermalGuard.threadBudget(cores, ThermalLevel.NORMAL)
             val contextTokens = maxOf(DEFAULT_CONTEXT_TOKENS, spec.maxTokens * 2)
 
             val handle = bridge.nativeLoadModel(spec.path, contextTokens, threads)
@@ -193,6 +213,7 @@ class LlamaCppEngine private constructor(
             )
 
             return LlamaCppEngine(spec, backend, bridge, handle)
+                .also { it.activeThreads = threads }
         }
 
         /**

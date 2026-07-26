@@ -189,6 +189,17 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeFree(JNIEnv *, jobject, jlong
     delete session;
 }
 
+/// Retunes the thread count on a live context so the app can back off as the
+/// device heats up, without unloading the model.
+JNIEXPORT void JNICALL
+Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(
+    JNIEnv *, jobject, jlong handle, jint n_threads) {
+    auto *session = reinterpret_cast<Session *>(handle);
+    if (session == nullptr || session->ctx == nullptr) return;
+    if (n_threads < 1) return;
+    llama_set_n_threads(session->ctx, n_threads, n_threads);
+}
+
 JNIEXPORT void JNICALL
 Java_com_example_ondevicellm_llm_LlamaBridge_nativeStop(JNIEnv *, jobject, jlong handle) {
     auto *session = reinterpret_cast<Session *>(handle);

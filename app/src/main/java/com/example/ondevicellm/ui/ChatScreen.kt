@@ -39,7 +39,10 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,6 +64,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +76,8 @@ import com.example.ondevicellm.Author
 import com.example.ondevicellm.ChatMessage
 import com.example.ondevicellm.ChatViewModel
 import com.example.ondevicellm.ModelStatus
+import com.example.ondevicellm.core.ThermalLevel
+import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.ui.theme.Gradients
 import com.example.ondevicellm.ui.theme.Space
 import com.example.ondevicellm.ui.theme.hairlineColor
@@ -100,6 +106,7 @@ fun ChatScreen(
                 modelName = state.activeModel?.displayName.orEmpty(),
                 backendLabel = backend.actualLabel,
                 note = backend.note,
+                thermalLevel = state.thermalLevel,
             )
         }
 
@@ -202,6 +209,36 @@ fun ChatScreen(
         }
 
         AnimatedVisibility(
+            visible = state.searchStatus != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            state.searchStatus?.let { status ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Space.xl, vertical = Space.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Language,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(Space.sm))
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(Space.sm))
+                    TypingIndicator(dotColor = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+
+        AnimatedVisibility(
             visible = state.notice != null,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically(),
@@ -223,7 +260,12 @@ fun ChatScreen(
  * than a full-width bar so it reads as ambient status, not a warning.
  */
 @Composable
-private fun ModelChip(modelName: String, backendLabel: String, note: String) {
+private fun ModelChip(
+    modelName: String,
+    backendLabel: String,
+    note: String,
+    thermalLevel: ThermalLevel,
+) {
     var expanded by remember { mutableStateOf(false) }
     val hasNote = note.isNotEmpty()
 
@@ -261,6 +303,20 @@ private fun ModelChip(modelName: String, backendLabel: String, note: String) {
             )
             Spacer(Modifier.width(Space.sm))
             StatusPill(backendLabel, icon = Icons.Filled.Bolt)
+
+            // Only shown once the device is warm — silence means all is well.
+            if (thermalLevel != ThermalLevel.NORMAL) {
+                Spacer(Modifier.width(6.dp))
+                StatusPill(
+                    thermalLevel.label,
+                    icon = Icons.Filled.Thermostat,
+                    color = if (thermalLevel == ThermalLevel.CRITICAL) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        Color(0xFFE08A00)
+                    },
+                )
+            }
 
             if (hasNote) {
                 val rotation by animateFloatAsState(
@@ -320,6 +376,11 @@ private fun MessageRow(
 
             Bubble(message = message, isUser = isUser)
 
+            if (message.sources.isNotEmpty()) {
+                Spacer(Modifier.height(Space.sm))
+                SourceList(message.sources)
+            }
+
             if (!isUser && !message.isGenerating && message.text.isNotBlank()) {
                 Row(
                     modifier = Modifier.padding(top = Space.xs, start = Space.xs),
@@ -342,6 +403,46 @@ private fun MessageRow(
                         onClick = onSaveAudio,
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Numbered, tappable citations matching the [1], [2] markers in the answer. */
+@Composable
+private fun SourceList(sources: List<SearchSource>) {
+    val uriHandler = LocalUriHandler.current
+    Column(Modifier.fillMaxWidth()) {
+        sources.forEach { source ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .clickable { runCatching { uriHandler.openUri(source.url) } }
+                    .padding(horizontal = Space.sm, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "[${source.index}]",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    source.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

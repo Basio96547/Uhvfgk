@@ -1,6 +1,8 @@
 package com.example.ondevicellm
 
+import android.content.Context
 import android.os.Bundle
+import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -82,7 +84,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        enableSustainedPerformance()
         setContent { App() }
+    }
+
+    /**
+     * Caps peak clocks at a level the phone can hold indefinitely.
+     *
+     * Generating tokens keeps the CPU busy for minutes at a time. Without this
+     * the SoC boosts hard, overheats, and is then throttled well below the
+     * sustainable rate — so the burst costs more than it buys. Asking for
+     * sustained mode trades a slightly slower start for steady speed and a
+     * cooler device.
+     */
+    private fun enableSustainedPerformance() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        if (powerManager.isSustainedPerformanceModeSupported) {
+            runCatching { window.setSustainedPerformanceMode(true) }
+        }
     }
 }
 
