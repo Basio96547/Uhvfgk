@@ -26,6 +26,8 @@ producing a real result. Everything else says what is still unproven.
 | **NPU execution** | **Façade, and honest about it.** Detected, reported, never used. |
 | Custom TTS models | Runtime is packaged now, so the path is reachable. **Never run against a real voice model** — and good Arabic voices are ONNX, not `.tflite` (see 2c). |
 | Cloud voice | Real code, real endpoints, real request format. **Never sent a request** — no key in the sandbox. |
+| Terminal | Real `ProcessBuilder` against `/system/bin/sh`. **Never run on a device** — no Android here to run it on. |
+| Tools / skills | Real registry, real parser, real execution path. **No model has ever emitted a call into it.** |
 
 ---
 
@@ -124,6 +126,32 @@ checkbox.
 
 ---
 
+## 2e. Tools, and the one thing that will decide whether they work
+
+The terminal and the skills around it are built: a shell, files, search, a
+clock, arithmetic, device facts, all described to the model from the live
+registry so the prompt cannot drift from the code.
+
+**The risk is not the tools. It is whether a 4B model calls them at all.**
+Tool use is the capability that degrades fastest as models get smaller: a 4B
+model will call a tool when the example is right in front of it and then, three
+turns later, answer from memory instead. The mitigations that are in:
+
+- Every call shape a model actually emits is parsed, not just the documented
+  one — `<tool_call>` tags, fenced JSON, a bare object, four vocabularies for
+  "name" and "arguments", trailing commas, single quotes.
+- The house rules name the specific failure: never guess a value a tool can
+  give you.
+- A failed call comes back as a labelled failure, not silence, so the model
+  can try something else instead of inventing a result.
+
+**What is not measured:** how often it actually calls one, on a real model. A
+device session should count tool calls attempted, parsed and succeeded. Until
+that number exists, "the model can use tools" means the app can, not that it
+does.
+
+---
+
 ## 3. Prove the pieces that are written but unproven
 
 Nothing new to build; these need a device and a model.
@@ -135,6 +163,7 @@ Nothing new to build; these need a device and a model.
 - **Thermal** behaviour under a sustained decode — does the thread budget
   actually keep it off the throttle?
 - **Studio**: whether a 4B model produces a page that runs.
+- **Tools**: whether a 4B model emits a parseable call, and how often — see 2e.
 
 **How:** a diagnostics screen already exists. It should record a decode's
 tokens/second, peak memory and thermal level per turn, so a device session
@@ -173,3 +202,4 @@ actually in hand.
 - That search works, until it has returned a live result.
 - That a voice is better, until it has been heard.
 - That the cloud voice works, until a real key has returned real audio.
+- That the model can use tools, until one has been seen to call one.

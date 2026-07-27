@@ -243,7 +243,7 @@ platform API with no dependency at all.
 
 ```
 app/src/main/java/com/example/ondevicellm/
-├── MainActivity.kt           Bottom-nav shell (Chat / Models / Device / Settings)
+├── MainActivity.kt           Bottom-nav shell (Chat / Studio / Terminal / Models / Device / Settings)
 ├── ChatViewModel.kt          App state: models, chat, voice, memory
 ├── core/
 │   ├── DeviceCapabilities.kt SoC + accelerator probing, /proc/meminfo & RAM Plus
@@ -256,10 +256,24 @@ app/src/main/java/com/example/ondevicellm/
 │   ├── InferenceEngine.kt    MediaPipe wrapper, memory guard, streaming
 │   ├── BackendResolver.kt    CPU/GPU/NPU resolution + NpuRuntime hook
 │   └── ThinkingStreamParser.kt  Splits <think> reasoning from the answer
+├── agent/
+│   ├── AgentTool.kt          Tool contract, call/result types, per-turn registry
+│   ├── ToolCallParser.kt     Reads a tool call out of whatever the model emitted
+│   ├── ToolPrompt.kt         Generates the tools section of the system prompt
+│   ├── Tools.kt              The skills: shell, files, search, clock, calc, device
+│   ├── CommandPolicy.kt      What the terminal refuses, and what it asks about
+│   ├── Calc.kt               Arithmetic, because a 4B model cannot do it
+│   ├── SandboxPaths.kt       Keeps writes inside the workspace
+│   └── MiniJson.kt           Forgiving JSON reader (org.json is untestable here)
+├── terminal/
+│   ├── Shell.kt              Real command execution, app sandbox, no root
+│   └── TerminalSession.kt    Scrollback shared by the page and the shell tool
 ├── audio/
 │   ├── SpeechInput.kt        Speech-to-text + AudioTranscriber hook
 │   ├── SpeechSynthesizer.kt  Text-to-speech contract (options, results)
 │   ├── SystemTtsSynthesizer.kt  Android TTS engine
+│   ├── CloudTts.kt           Hosted-TTS request building (Azure / ElevenLabs)
+│   ├── CloudTtsSynthesizer.kt   Sends it and plays back raw PCM
 │   ├── ModelTtsSynthesizer.kt   LiteRT-backed TTS model runner
 │   ├── TtsTokenizer.kt       Vocabulary handling + sidecar loading
 │   ├── AudioPlayer.kt        AudioTrack PCM playback

@@ -38,6 +38,8 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
 | Studio | ✅ Builds and ships; extractor covered by 13 tests — **no page has ever been generated or rendered** |
 | Cloud voice (Azure / ElevenLabs) | ⚠️ Request building covered by 17 tests — **no request has ever been sent; no key exists here** |
+| Terminal | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device** |
+| Tools / skills | ⚠️ Parser covered by 19 tests against real model output shapes — **no model has ever called one** |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -527,6 +529,93 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 10 — 2026-07-27 · a terminal, and skills to go with it
+
+48. **A real terminal.** `ProcessBuilder` against `/system/bin/sh`, its own page
+    in the app, and the limits stated on the page rather than discovered: no
+    root, Android's toybox rather than GNU coreutils, and each command its own
+    process. `cd` is therefore interpreted by `Shell` instead of passed
+    through, because a `cd` inside a process that is about to exit does
+    nothing.
+
+    Two details that are not decoration: stdout and stderr are drained on
+    separate threads — reading one to the end first deadlocks the moment a
+    command writes more to the other than the pipe buffer holds, which `find /`
+    does immediately — and output is capped at 24 k characters, which is about
+    the context window, not about memory.
+
+49. **Skills, chosen from what a small model is bad at.** Not from what sounds
+    impressive: it cannot multiply (`calc`), does not know the date and will
+    invent one (`now`), knows nothing after its cut-off (`web_search`), cannot
+    see the device it runs on (`device_info`), cannot remember between turns
+    (`read_file` / `write_file` / `list_files`), and cannot do anything outside
+    the conversation at all (`shell`).
+
+50. **The tools section of the prompt is generated from the live registry.** A
+    hand-written list goes stale the first time a tool is renamed, and the
+    failure is silent — the model calls something that no longer exists and the
+    turn dies unexplained. The registry is also rebuilt per turn from settings,
+    so the model is never told about a tool the user has switched off.
+
+51. **The parser accepts every shape a model actually emits.** There is no
+    single format: Qwen writes `<tool_call>` tags, others fence it as ```json
+    or emit a bare object, and one 4B model does all three across a
+    conversation. Four vocabularies for "which tool", four for "with what",
+    plus trailing commas, unquoted keys and single quotes — because a parser
+    that accepts only the documented shape rejects most real calls, and a
+    rejected call is not an error anyone sees, it is a turn that silently went
+    back to guessing. 19 tests, including the ones that must **not** parse: a
+    CSS block, an object with no tool name, ordinary prose.
+
+52. **`MiniJson`, because `org.json` cannot be tested here.** The build asks
+    for default return values rather than Robolectric, so every `org.json` call
+    in a unit test silently answers null. Tool-call parsing is the single point
+    of failure for the whole feature; it could not be the one part with no
+    tests.
+
+53. **Two shells would have made the page a demo.** The terminal page and the
+    model's `shell` tool share one `TerminalSession`, so `cd logs` from the
+    model leaves the user standing in that directory looking at the same
+    output. The model's commands are tinted differently — on a page that mixes
+    both, "who ran this" is the first thing you need.
+
+54. **`CommandPolicy` refuses a short list and classifies the rest.** The
+    request was that the model might need anything, and a terminal that runs
+    nine approved commands is a menu. So there is no allowlist. There is a
+    refusal list of things that hang the phone or destroy with no undo — a fork
+    bomb needs no privileges — and everything else is classified READ_ONLY /
+    WRITES / DANGEROUS so writes and system commands have their own switches.
+    Worth saying plainly: the real protection is the sandbox. This runs as the
+    app's uid, so `rm -rf /` is already permission-denied on nearly everything.
+
+55. **Four bugs found by reading, and fixed.**
+    - `WebSearchService.fetch` read the response with a single `read()`. A
+      `BufferedReader` stops as soon as the socket has nothing already
+      buffered, so a 50–150 KB results page arrived cut off mid-tag, the parser
+      found nothing, and search failed as "no results" at random depending on
+      timing. Now it loops to the cap.
+    - `HtmlExtract` paired snippets with titles by list index. Anchors are
+      dropped — ads, tracking links — and the snippet list does not lose the
+      matching entry, so one sponsored link at the top shifted every snippet
+      onto the wrong result. Now paired by document position, which cannot
+      drift.
+    - Pressing Stop did not stop MediaPipe: it has no cancel API, so the next
+      token flipped the spinner back on and carried on appending text the user
+      had stopped — and with `isBusy` already false they could send again,
+      running two generations over one non-thread-safe session. A reply epoch
+      now drops tokens that belong to nobody.
+    - Loading model B while A was still loading reverted the UI to A and leaked
+      B's native memory. `cancel()` was never going to help: `EngineFactory.load`
+      blocks with no suspension point, so a cancelled load runs to completion
+      and then assigns itself. A load generation now discards and closes the
+      stale one.
+
+56. **Six tabs, asserted rather than eyeballed.** Adding a tab is exactly the
+    change that broke the navigation row before, so `LayoutTest` checks the
+    sixth clears the 48 dp touch target on both reference sizes.
+
+---
+
 ### Session 9 — 2026-07-26 · the hosted voice, and two bugs it uncovered
 
 43. **A cloud voice, because it is the honest answer.** Asked for the most
@@ -616,6 +705,9 @@ design choices):
   and `HtmlExtractTest` will catch a regression once markup samples are updated.
 
 **Not done**
+- No model has ever emitted a tool call into the parser. The shapes are tested
+  against saved output; how *often* a 4B model calls a tool is unmeasured.
+- The terminal has never run a command on a device — there is no Android here.
 - The cloud voice has never sent a request — no key exists in the sandbox.
 - GGUF runs CPU-only; no GPU backend compiled into llama.cpp.
 - No conversation persistence — history dies with the process.

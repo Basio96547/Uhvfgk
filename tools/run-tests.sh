@@ -53,6 +53,13 @@ SOURCES=(
     app/src/main/java/com/example/ondevicellm/ui/theme/Layout.kt
     app/src/main/java/com/example/ondevicellm/audio/VoicePicker.kt
     app/src/main/java/com/example/ondevicellm/audio/CloudTts.kt
+    app/src/main/java/com/example/ondevicellm/agent/MiniJson.kt
+    app/src/main/java/com/example/ondevicellm/agent/AgentTool.kt
+    app/src/main/java/com/example/ondevicellm/agent/ToolCallParser.kt
+    app/src/main/java/com/example/ondevicellm/agent/ToolPrompt.kt
+    app/src/main/java/com/example/ondevicellm/agent/CommandPolicy.kt
+    app/src/main/java/com/example/ondevicellm/agent/Calc.kt
+    app/src/main/java/com/example/ondevicellm/agent/SandboxPaths.kt
     app/src/test/java/com/example/ondevicellm/core/StringsTest.kt
     app/src/test/java/com/example/ondevicellm/llm/QueryRouterTest.kt
     app/src/test/java/com/example/ondevicellm/llm/BackendPlannerTest.kt
@@ -65,6 +72,12 @@ SOURCES=(
     app/src/test/java/com/example/ondevicellm/ui/theme/LayoutTest.kt
     app/src/test/java/com/example/ondevicellm/audio/VoicePickerTest.kt
     app/src/test/java/com/example/ondevicellm/audio/CloudTtsTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/MiniJsonTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/ToolCallParserTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/ToolPromptTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/CommandPolicyTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/CalcTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/SandboxPathsTest.kt
 )
 CLASSES=(
     com.example.ondevicellm.core.StringsTest
@@ -79,6 +92,12 @@ CLASSES=(
     com.example.ondevicellm.ui.theme.LayoutTest
     com.example.ondevicellm.audio.VoicePickerTest
     com.example.ondevicellm.audio.CloudTtsTest
+    com.example.ondevicellm.agent.MiniJsonTest
+    com.example.ondevicellm.agent.ToolCallParserTest
+    com.example.ondevicellm.agent.ToolPromptTest
+    com.example.ondevicellm.agent.CommandPolicyTest
+    com.example.ondevicellm.agent.CalcTest
+    com.example.ondevicellm.agent.SandboxPathsTest
 )
 
 # BackendPlanner references BackendPref, which lives in a file that imports

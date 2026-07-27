@@ -60,6 +60,49 @@ class HtmlExtractTest {
         assertEquals("Snippet two here", results[1].snippet)
     }
 
+    /** The same page with the advert on top, which is where they actually are. */
+    private val adFirst = """
+        <div class="result result--ad">
+          <a class="result__a" href="//duckduckgo.com/y.js?ad=1">An advert</a>
+          <a class="result__snippet">Buy things</a>
+        </div>
+        <div class="result results_links">
+          <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fa">First</a>
+          <a class="result__snippet">Snippet for first</a>
+        </div>
+        <div class="result results_links">
+          <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fb">Second</a>
+          <a class="result__snippet">Snippet for second</a>
+        </div>
+    """.trimIndent()
+
+    @Test
+    fun `a skipped ad does not shift every snippet onto the wrong result`() {
+        // Snippets are found by where they sit in the document, not by counting
+        // matches: the ad's anchor is dropped but its snippet is not, so index
+        // pairing handed "Buy things" to the first real result and shifted the
+        // rest down by one.
+        val results = HtmlExtract.parseDuckDuckGoResults(adFirst)
+        assertEquals(2, results.size)
+        assertEquals("First", results[0].title)
+        assertEquals("Snippet for first", results[0].snippet)
+        assertEquals("Second", results[1].title)
+        assertEquals("Snippet for second", results[1].snippet)
+    }
+
+    @Test
+    fun `a result with no snippet does not borrow the next one's`() {
+        val html = """
+            <a class="result__a" href="https://a.example/1">Bare</a>
+            <a class="result__a" href="https://a.example/2">Has one</a>
+            <a class="result__snippet">Belongs to the second</a>
+        """.trimIndent()
+        val results = HtmlExtract.parseDuckDuckGoResults(html)
+        assertEquals(2, results.size)
+        assertEquals("", results[0].snippet)
+        assertEquals("Belongs to the second", results[1].snippet)
+    }
+
     @Test
     fun `resolves usable URLs and rejects the rest`() {
         assertEquals("https://a.com/x", HtmlExtract.resolveUrl("https://a.com/x"))

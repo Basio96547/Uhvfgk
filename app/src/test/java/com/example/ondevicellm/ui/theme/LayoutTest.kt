@@ -56,6 +56,17 @@ class LayoutTest {
     }
 
     @Test
+    fun `six tabs fit, on both reference sizes`() {
+        // The Terminal tab is the sixth. Adding a tab is exactly the change
+        // that broke this row before, so the number is asserted rather than
+        // eyeballed on one screenshot.
+        for ((w, _) in listOf(s25Ultra, smallPhone)) {
+            assertTrue("six tabs on ${w}dp", Layout.navFitsComfortably(w, 6))
+            assertTrue(Layout.navItemWidth(w, 6) * 6 <= w - Layout.NAV_ROW_PADDING_DP * 2)
+        }
+    }
+
+    @Test
     fun `no tabs does not divide by zero`() {
         assertTrue(Layout.navPillPadding(411, 0) > 0)
     }

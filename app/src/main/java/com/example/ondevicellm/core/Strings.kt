@@ -404,6 +404,83 @@ interface AppStrings {
     fun studioCreateTurn(request: String): String
     fun studioEditTurn(code: String, request: String): String
 
+
+    // ------------------------------------------------------ terminal & tools
+    val navTerminal: String
+    val terminalSubtitle: String
+    val terminalHint: String
+    val terminalClear: String
+    val terminalRun: String
+    val terminalEmpty: String
+    val terminalWorkspaceNote: String
+    val terminalLimitsNote: String
+    val terminalEmptyCommand: String
+    val terminalRefused: String
+    val terminalTimedOut: String
+    val terminalTruncated: String
+    val terminalCouldNotStart: String
+    fun terminalExitCode(code: Int): String
+
+    /** How the model is told to call a tool. Generated from the live registry. */
+    val toolsHeader: String
+    val toolsRules: String
+    val toolsAvailable: String
+    val toolsOptional: String
+    val toolResultLabel: String
+    val toolFailedLabel: String
+    val toolNoOutput: String
+    val toolContinueInstruction: String
+    fun toolUnknown(name: String): String
+    fun toolMissingArg(name: String): String
+    fun toolNotPermitted(risk: String): String
+    fun toolRunning(name: String): String
+    val toolStepLimitReached: String
+
+    val toolShellSummary: String
+    val toolShellCommandParam: String
+    val toolReadFileSummary: String
+    val toolPathParam: String
+    val toolLinesParam: String
+    val toolMoreLines: String
+    fun toolNoSuchFile(path: String): String
+    fun toolIsDirectory(path: String): String
+    fun toolReadFailed(path: String): String
+    val toolWriteFileSummary: String
+    val toolWritePathParam: String
+    val toolContentParam: String
+    val toolAppendParam: String
+    fun toolOutsideWorkspace(path: String): String
+    fun toolWroteBytes(path: String, bytes: Int): String
+    fun toolWriteFailed(path: String): String
+    val toolListFilesSummary: String
+    val toolListPathParam: String
+    val toolEmptyDirectory: String
+    fun toolNotADirectory(path: String): String
+    fun toolCannotList(path: String): String
+    val toolWebSearchSummary: String
+    val toolQueryParam: String
+    val toolSearchFailed: String
+    val toolNowSummary: String
+    val toolCalcSummary: String
+    val toolExpressionParam: String
+    fun toolBadExpression(expression: String): String
+    val toolDeviceSummary: String
+
+    // Settings for the above.
+    val toolsTitle: String
+    val toolsSettingsSubtitle: String
+    val toolsEnable: String
+    val toolsEnableDesc: String
+    val toolsAllowShell: String
+    val toolsAllowShellDesc: String
+    val toolsAllowWrites: String
+    val toolsAllowWritesDesc: String
+    val toolsAllowDangerous: String
+    val toolsAllowDangerousDesc: String
+    val toolsSteps: String
+    val toolsStepsNote: String
+    val toolsCostNote: String
+
     // -------------------------------------------------------- routing modes
     val modeAuto: String
     val modeAlways: String
@@ -900,6 +977,106 @@ object EnglishStrings : AppStrings {
     override fun studioEditTurn(code: String, request: String) =
         "Here is the current page:\n\n```html\n$code\n```\n\n" +
             "Apply this change and return the whole updated file:\n\n$request"
+
+
+    override val navTerminal = "Terminal"
+    override val terminalSubtitle = "A real shell, and what the model runs in it"
+    override val terminalHint = "Type a command"
+    override val terminalClear = "Clear"
+    override val terminalRun = "Run"
+    override val terminalEmpty = "Nothing has run yet. Try `ls`, `getprop ro.product.model`, " +
+        "or `cat /proc/cpuinfo`."
+    override val terminalWorkspaceNote = "Commands run in this app's private workspace, as this " +
+        "app's user. `cd` is remembered between commands; nothing else is."
+    override val terminalLimitsNote = "No root, and Android's toybox rather than GNU tools — so " +
+        "no bash, python, curl or git unless you installed one, and some flags differ. " +
+        "`pm`, `settings` and most of `dumpsys` will answer permission denied. That is Android, " +
+        "not a missing feature here."
+    override val terminalEmptyCommand = "Nothing to run."
+    override val terminalRefused = "Refused: this either hangs the device or destroys something " +
+        "with no undo. It is the one short list the terminal will not run."
+    override val terminalTimedOut = "Stopped: took too long."
+    override val terminalTruncated = "Output was cut — too long to keep."
+    override val terminalCouldNotStart = "Could not start that command."
+    override fun terminalExitCode(code: Int) = "Finished with exit code $code and no output."
+
+    override val toolsHeader = "You can use tools. When a tool answers better than guessing, " +
+        "emit exactly one call, alone, with no other text:"
+    override val toolsRules = """
+        Rules:
+        - One call per reply. Stop after it; the result comes back and you continue.
+        - Never guess a value a tool can give you: the date, a sum, a file's contents,
+          anything about this device, anything after your training cut-off.
+        - Never invent a tool result. If a call fails, say so and try something else.
+        - When you already know the answer, just answer. A tool call is a cost, not a ritual.
+        - After the result arrives, answer the person in their language. Do not
+          repeat the raw output at them unless they asked to see it.
+    """.trimIndent()
+    override val toolsAvailable = "Available tools:"
+    override val toolsOptional = "optional"
+    override val toolResultLabel = "TOOL RESULT"
+    override val toolFailedLabel = "(the call failed)"
+    override val toolNoOutput = "(no output)"
+    override val toolContinueInstruction = "Now answer the person, using this result. " +
+        "Call another tool only if you genuinely still need one."
+    override fun toolUnknown(name: String) = "There is no tool called \"$name\"."
+    override fun toolMissingArg(name: String) = "Missing required argument: $name."
+    override fun toolNotPermitted(risk: String) =
+        "Not allowed: commands of this kind ($risk) are switched off in Settings."
+    override fun toolRunning(name: String) = "Running $name…"
+    override val toolStepLimitReached = "Stopped after the tool-step limit. Answer with what " +
+        "you have."
+
+    override val toolShellSummary = "Run a shell command on this device and read its output."
+    override val toolShellCommandParam = "the command, exactly as you would type it"
+    override val toolReadFileSummary = "Read a text file."
+    override val toolPathParam = "path to the file"
+    override val toolLinesParam = "how many lines to read (default 200)"
+    override val toolMoreLines = "… more lines follow; read again with a larger \"lines\"."
+    override fun toolNoSuchFile(path: String) = "No such file: $path"
+    override fun toolIsDirectory(path: String) = "$path is a directory — use list_files."
+    override fun toolReadFailed(path: String) = "Could not read $path."
+    override val toolWriteFileSummary = "Write a text file in the workspace."
+    override val toolWritePathParam = "path inside the workspace"
+    override val toolContentParam = "the full text to write"
+    override val toolAppendParam = "\"true\" to add to the end instead of replacing"
+    override fun toolOutsideWorkspace(path: String) =
+        "$path is outside the workspace. Writing is confined to it."
+    override fun toolWroteBytes(path: String, bytes: Int) = "Wrote $bytes bytes to $path."
+    override fun toolWriteFailed(path: String) = "Could not write $path."
+    override val toolListFilesSummary = "List what is in a directory."
+    override val toolListPathParam = "directory (default: current)"
+    override val toolEmptyDirectory = "(empty)"
+    override fun toolNotADirectory(path: String) = "$path is not a directory."
+    override fun toolCannotList(path: String) = "Could not list $path."
+    override val toolWebSearchSummary = "Search the web for something you do not know."
+    override val toolQueryParam = "what to search for"
+    override val toolSearchFailed = "The search did not go through."
+    override val toolNowSummary = "The current date and time. Use it instead of guessing."
+    override val toolCalcSummary = "Evaluate an arithmetic expression exactly."
+    override val toolExpressionParam = "e.g. 25 * 17, (3+4)^2"
+    override fun toolBadExpression(expression: String) =
+        "Not an arithmetic expression: $expression"
+    override val toolDeviceSummary = "Facts about the phone this is running on."
+
+    override val toolsTitle = "Tools"
+    override val toolsSettingsSubtitle = "What the model may do besides talk"
+    override val toolsEnable = "Let the model use tools"
+    override val toolsEnableDesc = "It can look things up, do arithmetic, read files and run " +
+        "commands, instead of guessing."
+    override val toolsAllowShell = "Terminal"
+    override val toolsAllowShellDesc = "Let it run shell commands. Everything it runs is shown " +
+        "on the Terminal page."
+    override val toolsAllowWrites = "Allow writes"
+    override val toolsAllowWritesDesc = "Let commands change files. Off means read-only."
+    override val toolsAllowDangerous = "Allow system commands"
+    override val toolsAllowDangerousDesc = "pm, settings, recursive delete. Most need root and " +
+        "will fail anyway — but leave this off unless you have a reason."
+    override val toolsSteps = "Tool steps per answer"
+    override val toolsStepsNote = "How many times it may call a tool before it has to answer. " +
+        "Each step is a full generation, so this is the main cost."
+    override val toolsCostNote = "Describing the tools costs context on every message, so this " +
+        "is off by default. Turn it on when you want the model to act, not only answer."
 
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
@@ -1400,6 +1577,103 @@ object ArabicStrings : AppStrings {
     override fun studioEditTurn(code: String, request: String) =
         "هذه الصفحة الحالية:\n\n```html\n$code\n```\n\n" +
             "طبّق هذا التغيير وأعد الملف كاملًا:\n\n$request"
+
+
+    override val navTerminal = "الطرفية"
+    override val terminalSubtitle = "طرفية حقيقية، وما ينفّذه النموذج فيها"
+    override val terminalHint = "اكتب أمرًا"
+    override val terminalClear = "مسح"
+    override val terminalRun = "نفّذ"
+    override val terminalEmpty = "لم يُنفَّذ شيء بعد. جرّب `ls` أو `getprop ro.product.model` " +
+        "أو `cat /proc/cpuinfo`."
+    override val terminalWorkspaceNote = "تُنفَّذ الأوامر في مساحة هذا التطبيق الخاصة، وبصلاحية " +
+        "مستخدمه. الأمر `cd` يُحفظ بين الأوامر، وما عداه لا."
+    override val terminalLimitsNote = "لا صلاحية جذر، وأدوات أندرويد (toybox) لا أدوات جنو — " +
+        "فلا bash ولا python ولا curl ولا git ما لم تُثبّتها، وبعض الخيارات مختلفة. " +
+        "و`pm` و`settings` ومعظم `dumpsys` سترد برفض الصلاحية. هذا سلوك أندرويد، لا نقص هنا."
+    override val terminalEmptyCommand = "لا شيء لتنفيذه."
+    override val terminalRefused = "مرفوض: هذا إمّا يُعلّق الجهاز أو يُتلف شيئًا بلا رجعة. " +
+        "وهي القائمة القصيرة الوحيدة التي لا تنفّذها الطرفية."
+    override val terminalTimedOut = "أُوقف: استغرق وقتًا طويلًا."
+    override val terminalTruncated = "قُطع الخرج — أطول من أن يُحفظ."
+    override val terminalCouldNotStart = "تعذّر تشغيل هذا الأمر."
+    override fun terminalExitCode(code: Int) = "انتهى برمز خروج $code وبلا خرج."
+
+    override val toolsHeader = "لديك أدوات. حين تكون الأداة أفضل من التخمين، أصدر نداءً " +
+        "واحدًا فقط، وحده، بلا أي نص آخر:"
+    override val toolsRules = """
+        القواعد:
+        - نداء واحد في الرد. توقّف بعده؛ ستصلك النتيجة ثم تُكمل.
+        - لا تخمّن قيمة تستطيع أداة أن تعطيك إياها: التاريخ، ناتج عملية حسابية،
+          محتوى ملف، أي شيء عن هذا الجهاز، أي شيء بعد تاريخ تدريبك.
+        - لا تختلق نتيجة أداة أبدًا. إن أخفق النداء فقل ذلك وجرّب طريقًا آخر.
+        - إن كنت تعرف الجواب أصلًا فأجب مباشرة. نداء الأداة كلفة لا طقس.
+        - بعد وصول النتيجة، أجب الشخص بلغته. ولا تُعِد عليه الخرج الخام
+          إلا إن طلب رؤيته.
+    """.trimIndent()
+    override val toolsAvailable = "الأدوات المتاحة:"
+    override val toolsOptional = "اختياري"
+    override val toolResultLabel = "نتيجة الأداة"
+    override val toolFailedLabel = "(أخفق النداء)"
+    override val toolNoOutput = "(بلا خرج)"
+    override val toolContinueInstruction = "الآن أجب الشخص مستعينًا بهذه النتيجة. " +
+        "ولا تنادِ أداة أخرى إلا إن كنت فعلًا ما زلت تحتاجها."
+    override fun toolUnknown(name: String) = "لا توجد أداة باسم «$name»."
+    override fun toolMissingArg(name: String) = "ينقص وسيط مطلوب: $name."
+    override fun toolNotPermitted(risk: String) =
+        "غير مسموح: الأوامر من هذا النوع ($risk) معطّلة في الإعدادات."
+    override fun toolRunning(name: String) = "ينفّذ $name…"
+    override val toolStepLimitReached = "توقّف عند حد خطوات الأدوات. أجب بما لديك."
+
+    override val toolShellSummary = "نفّذ أمرًا في طرفية هذا الجهاز واقرأ خرجه."
+    override val toolShellCommandParam = "الأمر كما تكتبه تمامًا"
+    override val toolReadFileSummary = "اقرأ ملفًا نصيًا."
+    override val toolPathParam = "مسار الملف"
+    override val toolLinesParam = "كم سطرًا تقرأ (الافتراضي ٢٠٠)"
+    override val toolMoreLines = "… وهناك أسطر أخرى؛ أعد القراءة بقيمة \"lines\" أكبر."
+    override fun toolNoSuchFile(path: String) = "لا يوجد ملف: $path"
+    override fun toolIsDirectory(path: String) = "$path مجلد — استخدم list_files."
+    override fun toolReadFailed(path: String) = "تعذّرت قراءة $path."
+    override val toolWriteFileSummary = "اكتب ملفًا نصيًا داخل مساحة العمل."
+    override val toolWritePathParam = "مسار داخل مساحة العمل"
+    override val toolContentParam = "النص الكامل المراد كتابته"
+    override val toolAppendParam = "\"true\" للإضافة في النهاية بدل الاستبدال"
+    override fun toolOutsideWorkspace(path: String) =
+        "$path خارج مساحة العمل. الكتابة محصورة داخلها."
+    override fun toolWroteBytes(path: String, bytes: Int) = "كُتب $bytes بايت في $path."
+    override fun toolWriteFailed(path: String) = "تعذّرت الكتابة في $path."
+    override val toolListFilesSummary = "اعرض ما في مجلد."
+    override val toolListPathParam = "المجلد (الافتراضي: الحالي)"
+    override val toolEmptyDirectory = "(فارغ)"
+    override fun toolNotADirectory(path: String) = "$path ليس مجلدًا."
+    override fun toolCannotList(path: String) = "تعذّر عرض محتوى $path."
+    override val toolWebSearchSummary = "ابحث في الويب عمّا لا تعرفه."
+    override val toolQueryParam = "ما الذي تبحث عنه"
+    override val toolSearchFailed = "لم يتم البحث."
+    override val toolNowSummary = "التاريخ والوقت الحاليان. استخدمها بدل التخمين."
+    override val toolCalcSummary = "احسب تعبيرًا حسابيًا بدقة."
+    override val toolExpressionParam = "مثل 25 * 17 أو (3+4)^2"
+    override fun toolBadExpression(expression: String) = "ليس تعبيرًا حسابيًا: $expression"
+    override val toolDeviceSummary = "حقائق عن الهاتف الذي يعمل عليه."
+
+    override val toolsTitle = "الأدوات"
+    override val toolsSettingsSubtitle = "ما يستطيع النموذج فعله غير الكلام"
+    override val toolsEnable = "اسمح للنموذج باستخدام الأدوات"
+    override val toolsEnableDesc = "يستطيع أن يبحث ويحسب ويقرأ الملفات وينفّذ الأوامر، " +
+        "بدل أن يخمّن."
+    override val toolsAllowShell = "الطرفية"
+    override val toolsAllowShellDesc = "اسمح له بتنفيذ أوامر الطرفية. كل ما ينفّذه يظهر في " +
+        "صفحة الطرفية."
+    override val toolsAllowWrites = "اسمح بالكتابة"
+    override val toolsAllowWritesDesc = "اسمح للأوامر بتغيير الملفات. عند الإيقاف تكون القراءة فقط."
+    override val toolsAllowDangerous = "اسمح بأوامر النظام"
+    override val toolsAllowDangerousDesc = "مثل pm و settings والحذف المتكرر. أكثرها يحتاج " +
+        "صلاحية جذر وسيخفق أصلًا — لكن اتركه مطفأً ما لم يكن لديك سبب."
+    override val toolsSteps = "خطوات الأدوات لكل إجابة"
+    override val toolsStepsNote = "كم مرة يجوز له أن ينادي أداة قبل أن يجيب. كل خطوة توليد " +
+        "كامل، وهي الكلفة الأساسية."
+    override val toolsCostNote = "وصف الأدوات يكلّف سياقًا في كل رسالة، لذا فهي مطفأة افتراضيًا. " +
+        "شغّلها حين تريد من النموذج أن يعمل لا أن يجيب فقط."
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

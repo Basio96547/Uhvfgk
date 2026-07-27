@@ -223,12 +223,23 @@ class WebSearchService {
             if (connection.responseCode !in 200..299) {
                 throw java.io.IOException("HTTP ${connection.responseCode}")
             }
-            // Cap the read: some pages are enormous and only the first part is
-            // ever used.
+            // Read to the cap, in a loop.
+            //
+            // A single `read` looked like it filled the buffer and did not:
+            // BufferedReader stops as soon as the socket has nothing more
+            // *already* buffered, which over a network is after a few KB. A
+            // results page is 50–150 KB, so it arrived cut off mid-tag, the
+            // parser found nothing, and search failed as "no results" at
+            // random depending on timing.
             return connection.inputStream.bufferedReader().use { reader ->
-                val buffer = CharArray(MAX_RESPONSE_CHARS)
-                val read = reader.read(buffer)
-                if (read <= 0) "" else String(buffer, 0, read)
+                val buffer = CharArray(READ_CHUNK_CHARS)
+                val text = StringBuilder()
+                while (text.length < MAX_RESPONSE_CHARS) {
+                    val read = reader.read(buffer, 0, buffer.size)
+                    if (read < 0) break
+                    text.append(buffer, 0, read)
+                }
+                text.toString()
             }
         } finally {
             connection.disconnect()
@@ -240,6 +251,9 @@ class WebSearchService {
         const val MAX_WIKI = 2
         const val MAX_PAGES_TO_READ = 3
         const val MAX_RESPONSE_CHARS = 400_000
+
+        /** Per-read chunk. Small enough not to hold a 400 k array for a 2 k page. */
+        const val READ_CHUNK_CHARS = 16 * 1024
 
         const val CONNECT_TIMEOUT_MS = 6_000
         const val READ_TIMEOUT_MS = 8_000

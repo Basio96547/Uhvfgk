@@ -4,6 +4,20 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ondevicellm.agent.AgentTool
+import com.example.ondevicellm.agent.CalcTool
+import com.example.ondevicellm.agent.ClockTool
+import com.example.ondevicellm.agent.CommandRisk
+import com.example.ondevicellm.agent.DeviceTool
+import com.example.ondevicellm.agent.ListFilesTool
+import com.example.ondevicellm.agent.ReadFileTool
+import com.example.ondevicellm.agent.ShellTool
+import com.example.ondevicellm.agent.ToolCallParser
+import com.example.ondevicellm.agent.ToolPrompt
+import com.example.ondevicellm.agent.ToolRegistry
+import com.example.ondevicellm.agent.ToolResult
+import com.example.ondevicellm.agent.WebSearchTool
+import com.example.ondevicellm.agent.WriteFileTool
 import com.example.ondevicellm.audio.AudioPlayer
 import com.example.ondevicellm.audio.CloudTts
 import com.example.ondevicellm.audio.CloudTtsSynthesizer
@@ -39,6 +53,8 @@ import com.example.ondevicellm.studio.StudioProject
 import com.example.ondevicellm.studio.StudioSession
 import com.example.ondevicellm.studio.StudioStore
 import com.example.ondevicellm.studio.StudioUiState
+import com.example.ondevicellm.terminal.TerminalSession
+import com.example.ondevicellm.terminal.TerminalUiState
 import com.example.ondevicellm.web.SearchQuery
 import com.example.ondevicellm.web.SearchSource
 import com.example.ondevicellm.web.SearchDepth
@@ -102,6 +118,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val webSearch = WebSearchService()
     private val audioPlayer = AudioPlayer()
     private val systemTts = SystemTtsSynthesizer(app)
+
+    /**
+     * One shell for the whole app.
+     *
+     * The Terminal page and the model's `shell` tool share it on purpose: if
+     * the model runs `cd logs`, opening the terminal should put you in that
+     * directory, looking at the output it saw.
+     */
+    private val terminal = TerminalSession(java.io.File(app.filesDir, "workspace"))
+    val terminalState: StateFlow<TerminalUiState> = terminal.state
     private var modelTts: ModelTtsSynthesizer? = null
 
     // One model in memory means generation has to stay serialised, so Studio
@@ -129,6 +155,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private var engine: TextEngine? = null
     private var loadJob: Job? = null
+    /** Bumped per load request; a load that finishes stale discards itself. */
+    private var loadGeneration = 0
+
+    /**
+     * Bumped whenever the current reply stops being the current reply — the
+     * user pressed Stop, cleared the chat, or swapped the model.
+     *
+     * `TextEngine.stop()` is best-effort, and for MediaPipe it is documented as
+     * doing nothing at all: there is no cancel API for a generation in flight.
+     * Without this, pressing Stop set `isGenerating = false` and the very next
+     * token set it back to true and carried on appending text the user had
+     * explicitly stopped — and because `isBusy` was already false they could
+     * send again, running two generations over one non-thread-safe session.
+     */
+    private var replyGeneration = 0
     private var importJob: Job? = null
     private var speakJob: Job? = null
     private var nextId = 0L
@@ -177,9 +218,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadModel(spec: ModelSpec) {
         loadJob?.cancel()
+        // Cancelling is not enough. EngineFactory.load blocks with no
+        // suspension point, so a cancelled load runs to completion anyway and
+        // then assigns itself over the newer one — reverting the UI to the
+        // model the user had already moved on from and leaking the newer
+        // engine's native memory, because nothing was left holding it.
+        val generation = ++loadGeneration
+        // The engine under the current reply is about to be closed; anything it
+        // still emits belongs to a model that no longer exists.
+        replyGeneration++
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             _uiState.update {
-                it.copy(status = ModelStatus.LOADING, errorMessage = null, activeModel = spec)
+                it.copy(
+                    status = ModelStatus.LOADING,
+                    errorMessage = null,
+                    activeModel = spec,
+                    isBusy = false,
+                )
             }
             engine?.close()
             engine = null
@@ -187,6 +242,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
             try {
                 val loaded = EngineFactory.load(getApplication<Application>(), spec, _device.value)
+                if (generation != loadGeneration) {
+                    // A newer load has taken over. Close what we just opened;
+                    // it is gigabytes of mapped model and nothing else will.
+                    runCatching { loaded.close() }
+                    return@launch
+                }
                 engine = loaded
                 registry.select(spec)
                 _uiState.update {
@@ -199,6 +260,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             } catch (e: Throwable) {
+                if (generation != loadGeneration) return@launch
                 ErrorLog.report("Model", "Failed to load \"${spec.displayName}\"", e)
                 _uiState.update {
                     it.copy(
@@ -355,6 +417,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
+        val epoch = ++replyGeneration
+
         viewModelScope.launch(Dispatchers.IO) {
             // Match decode threads to the current thermal state before starting.
             (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
@@ -394,9 +458,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // conversation: the language instruction and whatever the user set.
             // A multilingual model left to itself answers an Arabic question in
             // English about as often as not, so that is stated outright.
+            val registry = buildToolRegistry(current)
             val fullSystem = listOf(
                 Localization.strings.replyLanguageInstruction,
                 if (current.guidanceEnabled) Localization.strings.assistantGuidance else "",
+                // Generated from the live registry, so the model is never told
+                // about a tool it cannot call.
+                ToolPrompt.render(registry, Localization.strings),
                 current.systemPrompt,
             )
                 .filter { it.isNotBlank() }
@@ -417,22 +485,199 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             activeSystemPrompt = fullSystem
 
             try {
-                active.generate(
-                    prompt = groundedPrompt,
+                runTurn(
+                    active = active,
+                    registry = registry,
+                    firstPrompt = groundedPrompt,
                     systemPrompt = fullSystem,
-                    thinkingEnabled = decision.think,
-                    maxTokens = decision.maxTokens,
-                ) { thinking, answer, done ->
-                    appendDelta(replyId, thinking, answer, done)
-                }
+                    decision = decision,
+                    replyId = replyId,
+                    epoch = epoch,
+                    maxSteps = if (registry.isEmpty) 0 else current.toolMaxSteps.coerceIn(0, 6),
+                )
             } catch (e: Throwable) {
                 ErrorLog.report("Generation", "Generation failed", e)
-                appendDelta(replyId, "", "\n[error: ${e.message}]", done = true)
+                appendDelta(replyId, "", "\n[error: ${e.message}]", done = true, epoch = epoch)
+                finishTurn(replyId, epoch)
             }
         }
     }
 
-    private fun appendDelta(id: Long, thinking: String, answer: String, done: Boolean) {
+    /**
+     * One user turn, including any tool calls it takes to answer.
+     *
+     * The loop is here rather than inside the engine because a tool result has
+     * to go back through the chat template as a turn — there is no side channel
+     * in a llama.cpp or MediaPipe session, and inventing one would mean
+     * maintaining a second prompt format per model family.
+     *
+     * The model's tool call is generated into the visible bubble and then taken
+     * back out. That is deliberate: streaming into a hidden buffer and swapping
+     * it in at the end would leave the screen frozen for the length of a whole
+     * generation, and a user watching a spinner cannot tell that from a hang.
+     */
+    private suspend fun runTurn(
+        active: TextEngine,
+        registry: ToolRegistry,
+        firstPrompt: String,
+        systemPrompt: String,
+        decision: RoutingDecision,
+        replyId: Long,
+        epoch: Int,
+        maxSteps: Int,
+    ) {
+        var turnPrompt = firstPrompt
+        var step = 0
+
+        while (true) {
+            // What the bubble already holds from earlier steps. Rewriting it
+            // below has to keep this: the tool call being removed belongs to
+            // the newest generation only, and replacing the whole text with
+            // that generation's leftovers would erase the answer so far.
+            val prefix = textOf(replyId)
+
+            val collected = StringBuilder()
+            active.generate(
+                prompt = turnPrompt,
+                systemPrompt = systemPrompt,
+                thinkingEnabled = decision.think,
+                maxTokens = decision.maxTokens,
+            ) { thinking, answer, _ ->
+                collected.append(answer)
+                // Never final here: a turn can span several generations, and
+                // finishTurn is what ends it.
+                appendDelta(replyId, thinking, answer, done = false, epoch = epoch)
+            }
+
+            if (epoch != replyGeneration) return
+
+            val reply = collected.toString()
+            val call = if (step < maxSteps) ToolCallParser.parse(reply) else null
+            if (call == null) {
+                // No tool wanted, or no steps left. Close the turn.
+                if (step >= maxSteps && ToolCallParser.looksLikeCall(reply)) {
+                    // It still wanted a tool and has run out of steps. Say so
+                    // rather than leaving a JSON fragment as the final answer.
+                    replaceText(
+                        replyId,
+                        join(prefix, ToolCallParser.strip(reply)) + "\n\n" +
+                            Localization.strings.toolStepLimitReached,
+                    )
+                }
+                finishTurn(replyId, epoch)
+                return
+            }
+
+            // The call itself is machinery. Left in the bubble it reads as
+            // gibberish, and the speech engine reads it aloud.
+            replaceText(replyId, join(prefix, ToolCallParser.strip(reply)))
+            _uiState.update {
+                it.copy(searchStatus = Localization.strings.toolRunning(call.name))
+            }
+
+            val tool = registry.find(call.name)
+            val result = if (tool == null) {
+                ToolResult.failed(ToolPrompt.unknownTool(call.name, registry, Localization.strings))
+            } else {
+                runCatching { tool.run(call) }.getOrElse { error ->
+                    ErrorLog.report("Tool", "${call.name} failed", error, Severity.WARNING)
+                    ToolResult.failed(error.message ?: call.name)
+                }
+            }
+
+            _uiState.update { it.copy(searchStatus = null) }
+            if (epoch != replyGeneration) return
+
+            turnPrompt = ToolPrompt.observation(call, result, Localization.strings)
+            step++
+        }
+    }
+
+    /** The reply's text as it currently stands. */
+    private fun textOf(id: Long): String =
+        _uiState.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
+
+    /** Joins two parts of one answer without stacking blank lines. */
+    private fun join(before: String, after: String): String = when {
+        before.isBlank() -> after.trim()
+        after.isBlank() -> before.trimEnd()
+        else -> "${before.trimEnd()}\n\n${after.trim()}"
+    }
+
+    /** Replaces a reply's text wholesale — used to take a tool call back out. */
+    private fun replaceText(id: Long, text: String) {
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map {
+                    if (it.id == id) it.copy(text = text) else it
+                }
+            )
+        }
+    }
+
+    private fun finishTurn(replyId: Long, epoch: Int) {
+        if (epoch != replyGeneration) return
+        _uiState.update { state ->
+            state.copy(
+                isBusy = false,
+                messages = state.messages.map {
+                    if (it.id == replyId) it.copy(isGenerating = false) else it
+                },
+            )
+        }
+        refreshMemory()
+        if (settingsStore.settings.value.autoSpeakReplies) {
+            val reply = _uiState.value.messages.firstOrNull { it.id == replyId }
+            if (reply != null && reply.text.isNotBlank()) speak(replyId, reply.text)
+        }
+    }
+
+    /**
+     * The tools available for this message.
+     *
+     * Rebuilt per turn rather than held, because every switch that gates a
+     * tool lives in settings and a stale registry would describe a tool the
+     * user has since turned off — which the model would then call and be
+     * refused by, wasting a whole generation on it.
+     */
+    private fun buildToolRegistry(current: AppSettings): ToolRegistry {
+        if (!current.toolsEnabled) return ToolRegistry(emptyList())
+
+        val strings = { Localization.strings }
+        val tools = mutableListOf<AgentTool>(
+            ClockTool(strings),
+            CalcTool(strings),
+            DeviceTool({ _device.value }, strings),
+            ReadFileTool(terminal.shell, strings),
+            ListFilesTool(terminal.shell, strings),
+        )
+        if (current.toolAllowWrites) tools += WriteFileTool(terminal.shell, strings)
+        if (current.webSearchEnabled) {
+            tools += WebSearchTool(webSearch, { settingsStore.settings.value.voiceLanguageTag }, strings)
+        }
+        if (current.toolShellEnabled) {
+            tools += ShellTool(terminal, strings) { risk ->
+                when (risk) {
+                    CommandRisk.READ_ONLY -> true
+                    CommandRisk.WRITES -> current.toolAllowWrites
+                    CommandRisk.DANGEROUS -> current.toolAllowDangerous
+                }
+            }
+        }
+        return ToolRegistry(tools)
+    }
+
+    private fun appendDelta(
+        id: Long,
+        thinking: String,
+        answer: String,
+        done: Boolean,
+        epoch: Int,
+    ) {
+        // A generation the user walked away from keeps emitting tokens on some
+        // backends. They belong to nobody, so they are dropped here rather than
+        // fought at every call site.
+        if (epoch != replyGeneration) return
         val budget = _uiState.value.activeModel?.thinkingBudgetChars ?: 0
         _uiState.update { state ->
             val messages = state.messages.map { message ->
@@ -449,20 +694,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     isGenerating = !done,
                 )
             }
-            state.copy(messages = messages, isBusy = if (done) false else state.isBusy)
-        }
-        if (done) {
-            refreshMemory()
-            if (settingsStore.settings.value.autoSpeakReplies) {
-                val reply = _uiState.value.messages.firstOrNull { it.id == id }
-                if (reply != null && reply.text.isNotBlank()) speak(id, reply.text)
-            }
+            state.copy(messages = messages)
         }
     }
 
     /** Interrupts the reply being generated and keeps whatever arrived so far. */
     fun stopGeneration() {
         if (!_uiState.value.isBusy) return
+        // Before stop(), not after: whatever the engine emits from here on is
+        // no longer this reply's, whether or not stop() could do anything.
+        replyGeneration++
         engine?.stop()
         _uiState.update { state ->
             state.copy(
@@ -486,6 +727,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearConversation() {
         if (_uiState.value.isBusy) return
+        replyGeneration++
         engine?.resetSession()
         activeSystemPrompt = null
         _uiState.update { it.copy(messages = emptyList()) }
@@ -545,6 +787,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Installed speech engines, for the picker in Settings. */
     fun systemVoiceEngines(): List<com.example.ondevicellm.audio.TtsEngineOption> =
         systemTts.availableEngines()
+
+    // ------------------------------------------------------------- terminal
+
+    /** Runs a command the user typed. Serialised: one shell, one at a time. */
+    fun runTerminalCommand(command: String) {
+        viewModelScope.launch(Dispatchers.IO) { terminal.submit(command) }
+    }
+
+    fun clearTerminal() = terminal.clear()
+
+    /** Where commands run, shown so the sandbox is not a mystery. */
+    val terminalWorkspace: String get() = terminal.shell.root.path
 
     fun studioToggleView() = studio.toggleView()
     fun studioRun() = studio.run()

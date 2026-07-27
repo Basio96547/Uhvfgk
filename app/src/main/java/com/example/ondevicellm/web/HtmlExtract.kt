@@ -54,13 +54,16 @@ object HtmlExtract {
     /**
      * Pulls organic results out of a DuckDuckGo HTML response.
      *
-     * Titles and snippets are paired by position: the endpoint emits them in
-     * matching order, and pairing by index survives markup changes that
-     * renaming-based parsing would not.
+     * A title takes the snippet that sits between it and the next title in the
+     * document. Pairing the two match lists by index instead looks simpler and
+     * is wrong: anchors are dropped here — ads, tracking links, blank titles —
+     * and the snippet list does not lose the matching entry, so one sponsored
+     * link at the top shifted every snippet onto the wrong result. Positions
+     * cannot drift that way.
      */
     fun parseDuckDuckGoResults(html: String, limit: Int = 6): List<SearchResult> {
         val anchors = RESULT_ANCHOR.findAll(html).toList()
-        val snippets = SNIPPET.findAll(html).map { toPlainText(it.groupValues[1]) }.toList()
+        val snippets = SNIPPET.findAll(html).toList()
 
         val results = mutableListOf<SearchResult>()
         for ((index, match) in anchors.withIndex()) {
@@ -70,9 +73,16 @@ object HtmlExtract {
             val title = toPlainText(match.groupValues[2])
             if (title.isBlank()) continue
 
+            // Everything up to the next result anchor belongs to this one.
+            val blockEnd = anchors.getOrNull(index + 1)?.range?.first ?: html.length
+            val snippet = snippets
+                .firstOrNull { it.range.first in (match.range.last + 1) until blockEnd }
+                ?.let { toPlainText(it.groupValues[1]) }
+                .orEmpty()
+
             results += SearchResult(
                 title = title,
-                snippet = snippets.getOrNull(index).orEmpty(),
+                snippet = snippet,
                 url = url,
                 provider = "DuckDuckGo",
             )

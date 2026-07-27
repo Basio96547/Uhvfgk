@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -215,6 +216,73 @@ fun SettingsScreen(
                     s.thermalUnsupportedNote
                 }
             )
+        }
+
+        SectionCard(
+            icon = Icons.Filled.Terminal,
+            title = s.toolsTitle,
+            subtitle = s.toolsSettingsSubtitle,
+            tint = MaterialTheme.colorScheme.tertiary,
+        ) {
+            ToggleRow(
+                label = s.toolsEnable,
+                description = s.toolsEnableDesc,
+                checked = settings.toolsEnabled,
+                onChange = { v -> viewModel.updateSettings { it.copy(toolsEnabled = v) } },
+            )
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.toolsCostNote)
+
+            if (settings.toolsEnabled) {
+                SoftDivider()
+                ToggleRow(
+                    label = s.toolsAllowShell,
+                    description = s.toolsAllowShellDesc,
+                    checked = settings.toolShellEnabled,
+                    onChange = { v ->
+                        viewModel.updateSettings { it.copy(toolShellEnabled = v) }
+                    },
+                )
+                Spacer(Modifier.height(Space.sm))
+                ToggleRow(
+                    label = s.toolsAllowWrites,
+                    description = s.toolsAllowWritesDesc,
+                    checked = settings.toolAllowWrites,
+                    onChange = { v ->
+                        viewModel.updateSettings { it.copy(toolAllowWrites = v) }
+                    },
+                )
+                Spacer(Modifier.height(Space.sm))
+                ToggleRow(
+                    label = s.toolsAllowDangerous,
+                    description = s.toolsAllowDangerousDesc,
+                    checked = settings.toolAllowDangerous,
+                    onChange = { v ->
+                        viewModel.updateSettings { it.copy(toolAllowDangerous = v) }
+                    },
+                )
+
+                SoftDivider()
+                GroupLabel(s.toolsSteps)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Each step is a whole generation, so this is the setting
+                    // that decides whether an answer takes seconds or minutes.
+                    listOf(1, 2, 3, 4, 5).forEach { steps ->
+                        FilterChip(
+                            selected = settings.toolMaxSteps == steps,
+                            onClick = {
+                                viewModel.updateSettings { it.copy(toolMaxSteps = steps) }
+                            },
+                            label = { Text("$steps") },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(Space.sm))
+                Caption(s.toolsStepsNote)
+
+                SoftDivider()
+                Caption(s.terminalLimitsNote, isWarning = true)
+            }
         }
 
         SectionCard(

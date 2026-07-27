@@ -84,6 +84,23 @@ data class AppSettings(
     val searchMode: RoutingMode = RoutingMode.AUTO,
     /** Snippets only, or open the top pages and read them. */
     val searchDepth: SearchDepth = SearchDepth.QUICK,
+    // ---- Tools ----
+    /**
+     * Whether the model may act rather than only answer.
+     *
+     * Off by default, and not out of caution: describing the tools costs
+     * context on every single message, and a model that does not need them
+     * pays that anyway. It is worth paying when you want it to do things.
+     */
+    val toolsEnabled: Boolean = false,
+    /** The shell tool specifically — the broadest one, so it has its own switch. */
+    val toolShellEnabled: Boolean = true,
+    /** Let commands change files. Off leaves the model able to look, not touch. */
+    val toolAllowWrites: Boolean = false,
+    /** `pm`, `settings`, recursive delete. Almost all of it needs root and fails. */
+    val toolAllowDangerous: Boolean = false,
+    /** Tool calls allowed before the model has to answer. Each one is a full generation. */
+    val toolMaxSteps: Int = 3,
 )
 
 /** Small SharedPreferences-backed settings store exposed as a StateFlow. */
@@ -124,6 +141,11 @@ class SettingsStore(context: Context) {
         searchMode = RoutingMode.entries
             .firstOrNull { it.name == prefs.getString(KEY_SEARCH_MODE, null) }
             ?: RoutingMode.AUTO,
+        toolsEnabled = prefs.getBoolean(KEY_TOOLS_ENABLED, false),
+        toolShellEnabled = prefs.getBoolean(KEY_TOOL_SHELL, true),
+        toolAllowWrites = prefs.getBoolean(KEY_TOOL_WRITES, false),
+        toolAllowDangerous = prefs.getBoolean(KEY_TOOL_DANGEROUS, false),
+        toolMaxSteps = prefs.getInt(KEY_TOOL_STEPS, 3),
         searchDepth = SearchDepth.entries
             .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) }
             ?: SearchDepth.QUICK,
@@ -149,6 +171,11 @@ class SettingsStore(context: Context) {
             .putString(KEY_CLOUD_REGION, updated.cloudRegion)
             .putString(KEY_CLOUD_VOICE, updated.cloudVoice)
             .putString(KEY_TTS_ENGINE, updated.ttsEngine.name)
+            .putBoolean(KEY_TOOLS_ENABLED, updated.toolsEnabled)
+            .putBoolean(KEY_TOOL_SHELL, updated.toolShellEnabled)
+            .putBoolean(KEY_TOOL_WRITES, updated.toolAllowWrites)
+            .putBoolean(KEY_TOOL_DANGEROUS, updated.toolAllowDangerous)
+            .putInt(KEY_TOOL_STEPS, updated.toolMaxSteps)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
             .putFloat(KEY_PITCH, updated.pitch)
@@ -173,6 +200,11 @@ class SettingsStore(context: Context) {
         const val KEY_CLOUD_REGION = "cloudRegion"
         const val KEY_CLOUD_VOICE = "cloudVoice"
         const val KEY_TTS_ENGINE = "ttsEngine"
+        const val KEY_TOOLS_ENABLED = "toolsEnabled"
+        const val KEY_TOOL_SHELL = "toolShellEnabled"
+        const val KEY_TOOL_WRITES = "toolAllowWrites"
+        const val KEY_TOOL_DANGEROUS = "toolAllowDangerous"
+        const val KEY_TOOL_STEPS = "toolMaxSteps"
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"
         const val KEY_PITCH = "pitch"
