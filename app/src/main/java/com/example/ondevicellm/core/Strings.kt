@@ -497,6 +497,9 @@ interface AppStrings {
     fun documentUnreadablePages(count: Int): String
     fun documentAttachedNotice(name: String): String
     /** Said in place of a code block when a reply is read aloud. */
+    fun ggufGpuOffload(devices: String): String
+    val ggufNoGpuDevice: String
+    val ggufGpuFellBack: String
     val spokenCodeBlock: String
     val nothingToSpeak: String
     val documentTextLayer: String
@@ -1146,6 +1149,11 @@ object EnglishStrings : AppStrings {
     override fun documentUnreadablePages(count: Int) = "$count pages could not be read"
     override fun documentAttachedNotice(name: String) =
         "Questions will now be answered from \"$name\"."
+    override fun ggufGpuOffload(devices: String) =
+        "Layers are on the GPU via OpenCL ($devices). "
+    override val ggufNoGpuDevice = "No OpenCL device answered on this phone, so this runs on " +
+        "the CPU. "
+    override val ggufGpuFellBack = "The GPU refused this model, so it loaded on the CPU instead. "
     override val spokenCodeBlock = "a block of code"
     override val nothingToSpeak = "There is nothing here to read aloud."
     override val documentTextLayer = "Text layer"
@@ -1798,6 +1806,11 @@ object ArabicStrings : AppStrings {
     override fun documentUnreadablePages(count: Int) = "تعذّرت قراءة $count صفحة"
     override fun documentAttachedNotice(name: String) =
         "ستُجاب الأسئلة الآن من «$name»."
+    override fun ggufGpuOffload(devices: String) =
+        "الطبقات تعمل على كرت الرسوميات عبر OpenCL ($devices). "
+    override val ggufNoGpuDevice = "لم يستجب أي جهاز OpenCL على هذا الهاتف، فالتشغيل على " +
+        "المعالج. "
+    override val ggufGpuFellBack = "رفض كرت الرسوميات هذا النموذج، فحُمّل على المعالج بدلًا منه. "
     override val spokenCodeBlock = "مقطع برمجي"
     override val nothingToSpeak = "لا يوجد هنا ما يُقرأ بصوت."
     override val documentTextLayer = "طبقة نصية"

@@ -22,7 +22,7 @@ producing a real result. Everything else says what is still unproven.
 | Studio | Real. Never generated a page. |
 | Thermal management | Real API calls. Never observed throttling. |
 | System speech | Engine and voice are chosen deliberately now. **Never heard by me.** |
-| **GPU execution** | **Façade.** The Backend picker offers GPU; GGUF ignores it entirely and runs on CPU. |
+| **GPU execution** | **Backend compiled in.** OpenCL builds; offload happens when the user picks GPU and a driver answers. **Never run on a device.** |
 | **NPU execution** | **Façade, and honest about it.** Detected, reported, never used. |
 | Custom TTS models | Runtime is packaged now, so the path is reachable. **Never run against a real voice model** — and good Arabic voices are ONNX, not `.tflite` (see 2c). |
 | Cloud voice | Real code, real endpoints, real request format. **Never sent a request** — no key in the sandbox. |
@@ -34,11 +34,24 @@ producing a real result. Everything else says what is still unproven.
 
 ---
 
-## 1. GPU acceleration for GGUF — the biggest real win available
+## 1. GPU acceleration for GGUF — built, unproven
 
-**Now:** `GGML_OPENCL=OFF`. Every GGUF token is decoded on the CPU. The
-"GPU" backend option does nothing for the format the user actually runs, and
-the app says so, but saying so is not the same as doing it.
+**Done at the build level.** `GGML_OPENCL=ON` with the Adreno kernels embedded,
+and OpenCL-Headers plus the Khronos ICD loader fetched and built from source
+because the NDK ships neither a `libOpenCL.so` to link against nor a `CL/cl.h`
+to include. The loader is static, so there is nothing extra to package.
+
+**What actually changes at runtime:** the app reads back the devices ggml
+registered rather than guessing, offloads only when the user picks GPU *and* a
+device answered, and a GPU load that fails retries on the CPU instead of
+refusing the model. AUTO stays on the CPU until this has been proven on real
+hardware.
+
+**Still unproven, and this is the important part.** Nothing here has run on a
+phone. Adreno OpenCL drivers vary by vendor build; some refuse quantisations
+the CPU path handles. The three outcomes the UI can now tell apart — offloaded,
+no device answered, the GPU refused this model — exist precisely because I
+cannot tell which one a given phone will give.
 
 **Why it matters more than anything else here:** llama.cpp has an OpenCL
 backend written specifically for Adreno, and the S25 Ultra's Adreno 830 is
@@ -249,6 +262,7 @@ actually in hand.
 ## What will not be claimed
 
 - That anything is fast, until a token rate has been measured on the device.
+- That the GPU path works, until a phone has reported layers on it.
 - That search works, until it has returned a live result.
 - That a voice is better, until it has been heard.
 - That the cloud voice works, until a real key has returned real audio.

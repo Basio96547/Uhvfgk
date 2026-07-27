@@ -3,6 +3,8 @@ package com.example.ondevicellm.terminal
 import com.example.ondevicellm.core.ErrorLog
 import com.example.ondevicellm.core.Severity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -52,7 +54,18 @@ data class ShellResult(
  */
 class Shell(root: File) {
 
+    /**
+     * One command at a time.
+     *
+     * The terminal page and the model's `shell` tool share this object and both
+     * dispatch on IO, so a `cd` from one could land between another's
+     * `directory(workingDirectory)` and its `start()` — starting a process in
+     * a directory nobody asked for, sometimes.
+     */
+    private val lock = Mutex()
+
     /** Where commands run. Starts at the workspace and moves with `cd`. */
+    @Volatile
     var workingDirectory: File = root
         private set
 
@@ -66,7 +79,12 @@ class Shell(root: File) {
      * `cd` is stateful and a process is not, so it is interpreted here.
      * Returns null on success, or the reason it failed.
      */
-    fun changeDirectory(path: String): String? {
+    suspend fun changeDirectory(path: String): String? = lock.withLock {
+        changeDirectoryLocked(path)
+    }
+
+    /** Caller already holds [lock]; Mutex is not reentrant. */
+    private fun changeDirectoryLocked(path: String): String? {
         val target = when {
             path.isBlank() || path == "~" -> root
             path.startsWith("/") -> File(path)
@@ -81,14 +99,18 @@ class Shell(root: File) {
 
     suspend fun run(command: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): ShellResult =
         withContext(Dispatchers.IO) {
+            lock.withLock { runLocked(command, timeoutMs) }
+        }
+
+    private fun runLocked(command: String, timeoutMs: Long): ShellResult {
             val started = System.currentTimeMillis()
 
             // `cd` alone, or `cd x && rest`, has to be handled before exec or
             // it changes a directory in a process that is about to exit.
             val trimmed = command.trim()
             if (trimmed == "cd" || trimmed.startsWith("cd ")) {
-                val problem = changeDirectory(trimmed.removePrefix("cd").trim())
-                return@withContext ShellResult(
+                val problem = changeDirectoryLocked(trimmed.removePrefix("cd").trim())
+                return ShellResult(
                     command = command,
                     exitCode = if (problem == null) 0 else 1,
                     stdout = if (problem == null) workingDirectory.path else "",
@@ -127,7 +149,7 @@ class Shell(root: File) {
                 errReader.join(STREAM_JOIN_MS)
 
                 val truncated = out.length >= MAX_OUTPUT_CHARS || err.length >= MAX_OUTPUT_CHARS
-                ShellResult(
+                return ShellResult(
                     command = command,
                     exitCode = if (finished) process.exitValue() else TIMEOUT_EXIT_CODE,
                     stdout = out.toString().trimEnd(),
@@ -138,7 +160,7 @@ class Shell(root: File) {
                 )
             } catch (e: Throwable) {
                 ErrorLog.report("Terminal", "Could not run: $command", e, Severity.WARNING)
-                ShellResult(
+                return ShellResult(
                     command = command,
                     exitCode = LAUNCH_FAILED_EXIT_CODE,
                     stdout = "",
@@ -150,7 +172,7 @@ class Shell(root: File) {
             } finally {
                 runCatching { process?.destroy() }
             }
-        }
+    }
 
     /** Reads a stream on its own thread, stopping at the cap. */
     private fun drain(stream: java.io.InputStream, into: StringBuilder): Thread =

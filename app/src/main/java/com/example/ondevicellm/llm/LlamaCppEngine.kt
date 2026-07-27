@@ -23,7 +23,14 @@ internal class LlamaBridge {
     /** 0 = finished the turn, 1 = hit the token cap, 2 = stopped. */
     external fun nativeLastStopReason(): Int
 
-    external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int): Long
+    /** @param nGpuLayers layers to offload; 0 keeps everything on the CPU. */
+    external fun nativeLoadModel(path: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long
+
+    /** Compute devices ggml really registered, e.g. "CPU, GPUOpenCL". */
+    external fun nativeBackends(): String
+
+    /** Layers that actually ended up on the GPU. 0 means the load fell back. */
+    external fun nativeGpuLayersUsed(): Int
     external fun nativeFree(handle: Long)
     external fun nativeStop(handle: Long)
     external fun nativeSetThreads(handle: Long, nThreads: Int)
@@ -209,6 +216,15 @@ class LlamaCppEngine private constructor(
          */
         private const val DEFAULT_CONTEXT_TOKENS = 6144
 
+        /**
+         * "Offload everything you can."
+         *
+         * llama.cpp clamps this to the model's real layer count, so a number
+         * far above it means "all of them" without having to read the GGUF
+         * header first.
+         */
+        private const val ALL_LAYERS = 999
+
         fun load(context: Context, spec: ModelSpec, device: DeviceSnapshot): LlamaCppEngine {
             if (!LlamaBridge.isAvailable()) {
                 throw ModelLoadException(Localization.strings.ggufRuntimeMissing)
@@ -229,31 +245,50 @@ class LlamaCppEngine private constructor(
             val threads = ThermalGuard.threadBudget(cores, ThermalLevel.NORMAL)
             val contextTokens = maxOf(DEFAULT_CONTEXT_TOKENS, spec.maxTokens * 2)
 
-            val handle = bridge.nativeLoadModel(spec.path, contextTokens, threads)
+            // Which devices ggml registered — not what the phone could in
+            // principle do. The OpenCL backend appears here only when the ICD
+            // loader found a vendor driver and that driver enumerated a device.
+            val devices = runCatching { bridge.nativeBackends() }.getOrDefault("")
+            val gpuPresent = devices.contains("opencl", ignoreCase = true) ||
+                devices.contains("gpu", ignoreCase = true)
+
+            // Offload only when the user asked and a device is actually there.
+            // AUTO stays on the CPU until the GPU path has been proven on real
+            // hardware: a wrong answer fast is worse than a right answer slow.
+            val wantsGpu = spec.backend == BackendPref.GPU
+            val requestedLayers = if (wantsGpu && gpuPresent) ALL_LAYERS else 0
+
+            val handle = bridge.nativeLoadModel(spec.path, contextTokens, threads, requestedLayers)
             if (handle == 0L) {
                 val detail = bridge.nativeLastError().ifBlank { "Unknown error." }
                 throw ModelLoadException(Localization.strings.ggufLoadFailed(detail))
             }
 
-            // llama.cpp runs on the CPU here: no GPU backend is compiled in, so
-            // report that honestly rather than echoing the user's preference —
-            // but say which SIMD kernels are live, because that is what
-            // actually decides how fast this model runs.
+            // What ran, read back from the loader rather than assumed: a GPU
+            // load that failed silently falls back to CPU inside the bridge,
+            // and reporting the request would then be a lie.
+            val gpuLayers = runCatching { bridge.nativeGpuLayersUsed() }.getOrDefault(0)
             val features = runCatching { bridge.nativeCpuFeatures() }.getOrDefault("")
             val strings = Localization.strings
+
             val note = buildString {
-                if (spec.backend != BackendPref.CPU && spec.backend != BackendPref.AUTO) {
-                    append(strings.ggufBackendIgnored(spec.backend.label(strings)))
+                when {
+                    gpuLayers > 0 -> append(strings.ggufGpuOffload(devices))
+                    wantsGpu && !gpuPresent -> append(strings.ggufNoGpuDevice)
+                    wantsGpu -> append(strings.ggufGpuFellBack)
+                    spec.backend != BackendPref.CPU && spec.backend != BackendPref.AUTO ->
+                        append(strings.ggufBackendIgnored(spec.backend.label(strings)))
                 }
                 append(strings.threadsOfCores(threads, cores))
                 if (features.isNotBlank()) append(" · $features")
                 append(".")
             }
             val backend = ResolvedBackend(
-                actualLabel = if (features.contains("i8mm") || features.contains("dotprod")) {
-                    "CPU · llama.cpp (accelerated)"
-                } else {
-                    "CPU · llama.cpp"
+                actualLabel = when {
+                    gpuLayers > 0 -> "GPU · llama.cpp (OpenCL)"
+                    features.contains("i8mm") || features.contains("dotprod") ->
+                        "CPU · llama.cpp (accelerated)"
+                    else -> "CPU · llama.cpp"
                 },
                 note = note,
             )

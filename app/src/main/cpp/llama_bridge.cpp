@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "llama.h"
 
@@ -82,6 +83,10 @@ std::string g_last_error;
 // silent failure that reads as the model being stupid.
 enum StopReason { STOP_END_OF_TURN = 0, STOP_TOKEN_CAP = 1, STOP_CANCELLED = 2 };
 std::atomic<int> g_stop_reason{STOP_END_OF_TURN};
+
+/// Layers that ended up on the GPU. Set by the loader, read by the UI so it
+/// can say what ran instead of what was requested.
+std::atomic<int> g_gpu_layers_used{0};
 
 std::string jstring_to_utf8(JNIEnv *env, jstring value) {
     if (value == nullptr) return {};
@@ -201,6 +206,33 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastStopReason(JNIEnv *, jobj
     return static_cast<jint>(g_stop_reason.load());
 }
 
+/// Compute devices ggml actually registered, e.g. "CPU, GPUOpenCL".
+///
+/// Read from the backend registry rather than from what was asked for: the
+/// OpenCL backend only appears here when the loader found a vendor driver and
+/// that driver enumerated a device, which is the question the Settings screen
+/// has been guessing at.
+JNIEXPORT jstring JNICALL
+Java_com_example_ondevicellm_llm_LlamaBridge_nativeBackends(JNIEnv *env, jobject) {
+    std::string names;
+    const size_t count = ggml_backend_dev_count();
+    for (size_t i = 0; i < count; i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (dev == nullptr) continue;
+        const char *name = ggml_backend_dev_name(dev);
+        if (name == nullptr) continue;
+        if (!names.empty()) names += ", ";
+        names += name;
+    }
+    return env->NewStringUTF(names.c_str());
+}
+
+/// Layers that ended up on the GPU for the model currently loaded. 0 = all CPU.
+JNIEXPORT jint JNICALL
+Java_com_example_ondevicellm_llm_LlamaBridge_nativeGpuLayersUsed(JNIEnv *, jobject) {
+    return static_cast<jint>(g_gpu_layers_used.load());
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobject) {
     std::string features;
@@ -220,15 +252,14 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobj
 
 JNIEXPORT jlong JNICALL
 Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
-    JNIEnv *env, jobject, jstring path_, jint n_ctx, jint n_threads) {
+    JNIEnv *env, jobject, jstring path_, jint n_ctx, jint n_threads, jint n_gpu_layers) {
 
     g_last_error.clear();
+    g_gpu_layers_used.store(0);
     const std::string path = jstring_to_utf8(env, path_);
 
     llama_model_params mparams = llama_model_default_params();
-    // No GPU offload: Android GPU backends aren't built here, so all layers
-    // stay on the CPU.
-    mparams.n_gpu_layers = 0;
+    mparams.n_gpu_layers = n_gpu_layers > 0 ? n_gpu_layers : 0;
     // Memory-map rather than mlock: keeps resident memory down and lets the
     // kernel page weights in and out, which is what makes a multi-gigabyte
     // model usable on a phone — and is why free RAM Plus counts toward the
@@ -236,12 +267,25 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
     mparams.load_mode = LLAMA_LOAD_MODE_MMAP;
 
     llama_model *model = llama_model_load_from_file(path.c_str(), mparams);
+
+    if (model == nullptr && mparams.n_gpu_layers > 0) {
+        // Offload failed. Adreno OpenCL drivers vary by vendor and Android
+        // build, and some refuse quantisation types the CPU path handles
+        // fine — so the model still loads, on the CPU, and the UI is told
+        // that is what happened. Refusing the model outright would make a
+        // GPU that does not work look like a model that does not work.
+        LOGE("GPU offload failed, retrying on CPU: %s", path.c_str());
+        mparams.n_gpu_layers = 0;
+        model = llama_model_load_from_file(path.c_str(), mparams);
+    }
+
     if (model == nullptr) {
         g_last_error = "llama.cpp could not read this GGUF file. It may be "
                        "corrupt, truncated, or use an unsupported quantisation.";
         LOGE("failed to load model: %s", path.c_str());
         return 0;
     }
+    g_gpu_layers_used.store(mparams.n_gpu_layers);
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = static_cast<uint32_t>(n_ctx);

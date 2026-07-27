@@ -845,9 +845,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun importDocument(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val current = settingsStore.settings.value
+            val recognizer = ocrRecognizer(current)
             val doc = pdfIngestor.ingest(
                 uri = uri,
-                recognizer = ocrRecognizer(current),
+                recognizer = recognizer,
                 languageTag = current.voiceLanguageTag,
             )
             if (doc == null) {
@@ -859,9 +860,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     attachedDocumentId = if (doc.isReadable) doc.id else state.attachedDocumentId,
                     notice = when {
                         doc.problem != null -> doc.problem
-                        // Worth saying rather than leaving to be discovered by
-                        // a wrong answer: some pages went in blank.
-                        doc.unreadablePageCount > 0 && !current.ocrEnabled ->
+                        // Whether OCR *ran*, not whether its switch is on: with
+                        // the switch on and no key yet, it does not run, and
+                        // saying "attached" would hide that whole pages of the
+                        // document went in blank.
+                        doc.unreadablePageCount > 0 && recognizer == null ->
                             Localization.strings.pdfNeedsOcr
                         else -> Localization.strings.documentAttachedNotice(doc.name)
                     },

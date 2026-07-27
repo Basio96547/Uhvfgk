@@ -538,6 +538,58 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 13 — 2026-07-27 · the GPU, and six bugs found by review
+
+71. **The OpenCL backend is compiled in.** `GGML_OPENCL=ON` with Adreno kernels
+    embedded — embedded rather than loose `.cl` files, because loose kernels
+    are looked up by path at runtime and an APK has no paths. OpenCL-Headers
+    and the Khronos ICD loader are fetched and built from source: the NDK ships
+    neither a `libOpenCL.so` to link against nor a `CL/cl.h` to include. The
+    loader links statically, so nothing extra is packaged.
+
+    Designed so the worst case is no change at all: `n_gpu_layers` stays 0
+    unless the user picks GPU *and* a device answered, and a failed GPU load
+    retries on the CPU rather than refusing the model. The UI now reads back
+    what ggml registered and what the loader actually did, so "offloaded", "no
+    device answered" and "the GPU refused this model" are three different
+    messages instead of one guess. **Never run on a phone.**
+
+72. **A redirect was hiding dangerous commands.** `CommandPolicy.classify`
+    returned WRITES the moment it saw `>`, before the loop that marks `pm`,
+    `settings` and `rm -rf` as DANGEROUS. So `rm -rf work > /dev/null` was
+    classified as an ordinary write and ran with only the writes switch on —
+    walking straight past the switch that exists to stop it. The redirect is a
+    floor now, not an answer.
+
+73. **Page numbers in Arabic did not parse.** `PageRange` called `toIntOrNull`
+    on text that had not been digit-folded, and Kotlin's parser takes ASCII
+    only. The model answers in the user's language, so it asks for `صفحة ٥` —
+    both bounds came back null, the page was dropped, and the user was told "no
+    such document" about a document and a page that both exist.
+
+74. **A form feed in extracted text could shuffle a whole document.** Page text
+    is stored separated by U+000C, and `tidy` never stripped control
+    characters — which the quality check tolerates up to a third of. One stray
+    form feed from a broken font map splits into an extra segment on load and
+    misaligns every later page's text against its number, permanently. Control
+    characters are now stripped first.
+
+75. **"Attached" was reported when whole pages had gone in blank.** The notice
+    checked whether the OCR *switch* was on, not whether OCR could run — and
+    with the switch on and no key entered yet it cannot. Now it reports on the
+    recognizer, which is the thing that either read the page or did not.
+
+76. **The shell had a race between the terminal page and the model.** Both
+    share one `Shell` and both dispatch on IO, so a `cd` from one could land
+    between the other's `directory(workingDirectory)` and its `start()`,
+    launching a process somewhere nobody asked for. Serialised with a mutex.
+
+77. **A failed import left an empty directory behind for ever.** Asking for the
+    target path creates the directory as a side effect, and the `null` stream
+    path returned before the cleanup that only ran on a thrown exception.
+
+---
+
 ### Session 12 — 2026-07-27 · the first real device report since session 2
 
 65. **The composer had 171dp to type in, and I did that.** Adding the attach
@@ -824,6 +876,7 @@ design choices):
   and `HtmlExtractTest` will catch a regression once markup samples are updated.
 
 **Not done**
+- The GPU path has never run on a phone. It compiles; that is all that is known.
 - No PDF has been opened on a device; there is no Android here to open one.
 - Arabic OCR needs a Cloud Vision key and a connection. There is no offline
   path, and PLAN 2f says exactly why and what would change it.

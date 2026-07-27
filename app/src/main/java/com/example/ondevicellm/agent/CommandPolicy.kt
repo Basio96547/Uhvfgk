@@ -84,10 +84,16 @@ object CommandPolicy {
         val text = command.trim()
         if (text.isEmpty()) return CommandRisk.READ_ONLY
 
-        // Anything with a redirect writes, whatever the verb in front of it is.
-        if (Regex("""(^|[^0-9<>])>>?[^>]""").containsMatchIn(text)) return CommandRisk.WRITES
-
-        var worst = CommandRisk.READ_ONLY
+        // A redirect means it writes, whatever the verb in front of it is —
+        // but it is a *floor*, not an answer. Returning here was a real hole:
+        // `rm -rf work > /dev/null` and `settings put global x 1 > /dev/null`
+        // both came back WRITES, so a redirect appended to a system command
+        // walked straight past the switch that exists to stop it.
+        var worst = if (Regex("""(^|[^0-9<>])>>?[^>]""").containsMatchIn(text)) {
+            CommandRisk.WRITES
+        } else {
+            CommandRisk.READ_ONLY
+        }
         for (segment in split(text)) {
             val verb = verbOf(segment) ?: continue
             val risk = when {

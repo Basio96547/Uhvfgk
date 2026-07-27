@@ -99,6 +99,25 @@ class CommandPolicyTest {
     }
 
     @Test
+    fun `a redirect never hides a dangerous command`() {
+        // The hole this closes: the redirect check returned WRITES on the spot,
+        // so appending "> /dev/null" to a system command walked straight past
+        // the switch that exists to stop it.
+        assertEquals(
+            CommandRisk.DANGEROUS,
+            CommandPolicy.classify("settings put global adb_enabled 0 > /dev/null")
+        )
+        assertEquals(CommandRisk.DANGEROUS, CommandPolicy.classify("rm -rf work > /dev/null"))
+        assertEquals(CommandRisk.DANGEROUS, CommandPolicy.classify("pm uninstall x >> log.txt"))
+    }
+
+    @Test
+    fun `a redirect still raises a read to a write`() {
+        assertEquals(CommandRisk.WRITES, CommandPolicy.classify("cat a.txt > b.txt"))
+        assertEquals(CommandRisk.WRITES, CommandPolicy.classify("ls > listing"))
+    }
+
+    @Test
     fun `the worst segment decides`() {
         // A read chained to a system change is not a read.
         assertEquals(CommandRisk.DANGEROUS, CommandPolicy.classify("ls && pm uninstall x"))

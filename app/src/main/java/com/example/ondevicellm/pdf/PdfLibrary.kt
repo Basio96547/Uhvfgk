@@ -57,9 +57,17 @@ class PdfLibrary(private val context: Context) {
         val name = displayNameOf(uri) ?: "document.pdf"
         val target = fileOf(id)
         try {
-            context.contentResolver.openInputStream(uri)?.use { input ->
+            val opened = context.contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
-            } ?: return@withContext null
+                true
+            }
+            if (opened != true) {
+                // Nothing was written, and asking for the target already made
+                // the directory. Returning here without this leaves an empty
+                // one behind on every revoked permission, for ever.
+                runCatching { dirOf(id).deleteRecursively() }
+                return@withContext null
+            }
             id to name
         } catch (e: Throwable) {
             ErrorLog.report("PDF", "Could not import document", e)

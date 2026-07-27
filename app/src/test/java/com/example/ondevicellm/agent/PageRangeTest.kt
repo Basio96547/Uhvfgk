@@ -43,6 +43,17 @@ class PageRangeTest {
     }
 
     @Test
+    fun `arabic-indic digits are page numbers too`() {
+        // The model answers in the user's language, so it asks for صفحة ٥.
+        // toIntOrNull takes ASCII only, and the page was silently dropped —
+        // surfacing as "no such document" for one that exists.
+        assertEquals(listOf(5), PageRange.parse("٥", pageCount = 10))
+        assertEquals(listOf(2, 3, 4), PageRange.parse("٢-٤", pageCount = 10))
+        assertEquals(listOf(5), PageRange.parse("صفحة ٥", pageCount = 10))
+        assertEquals(listOf(1, 7), PageRange.parse("١، ٧", pageCount = 10))
+    }
+
+    @Test
     fun `a backwards range is read the right way round`() {
         assertEquals(listOf(2, 3, 4), PageRange.parse("4-2", pageCount = 10))
     }

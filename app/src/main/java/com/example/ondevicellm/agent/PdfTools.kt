@@ -1,6 +1,7 @@
 package com.example.ondevicellm.agent
 
 import com.example.ondevicellm.core.AppStrings
+import com.example.ondevicellm.llm.QueryRouter
 import com.example.ondevicellm.pdf.DocumentIndex
 import com.example.ondevicellm.pdf.PdfDoc
 import com.example.ondevicellm.pdf.TextSource
@@ -27,7 +28,11 @@ object PageRange {
      */
     fun parse(spec: String?, pageCount: Int, defaultCount: Int = 3): List<Int> {
         if (pageCount <= 0) return emptyList()
-        val text = spec?.trim().orEmpty()
+        // The model answers in the user's language, so it asks for صفحة ٥ with
+        // Arabic-Indic digits. toIntOrNull takes ASCII only, so both bounds
+        // came back null and the page was silently dropped — reported to the
+        // user as "no such document" for a document and page that both exist.
+        val text = QueryRouter.foldDigits(spec?.trim().orEmpty())
         if (text.isEmpty()) return (1..minOf(defaultCount, pageCount)).toList()
 
         val out = linkedSetOf<Int>()

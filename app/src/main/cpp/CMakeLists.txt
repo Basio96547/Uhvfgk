@@ -63,8 +63,72 @@ message(STATUS "ggml CPU kernels: -march=${LLAMA_ARM_ARCH}")
 # don't build cleanly for android arm64 — ggml's own NEON path is used instead.
 set(GGML_OPENMP            OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE         OFF CACHE BOOL "" FORCE)
-set(GGML_OPENCL            OFF CACHE BOOL "" FORCE)
 set(GGML_VULKAN            OFF CACHE BOOL "" FORCE)
+
+# --- GPU: OpenCL on Adreno ----------------------------------------------------
+#
+# The single largest speed lever available to this app. Every GGUF token was
+# being decoded on the CPU while the Adreno sat idle, and the Settings screen
+# offered a "GPU" option that did nothing for the format people actually run.
+#
+# Two dependencies have to be built from source because the NDK ships neither:
+# there is no `libOpenCL.so` to link against and no `CL/cl.h` to include. The
+# Khronos ICD loader is what resolves the vendor driver at runtime, so it is
+# built statically into libllamabridge.so — nothing extra to package, and
+# nothing to load if the device has no driver.
+#
+# Compiling the backend in does NOT move any work to the GPU on its own:
+# `n_gpu_layers` stays 0 unless the user asks for GPU, and a failed GPU load
+# falls back to CPU rather than refusing the model. So the worst case of this
+# whole block is an APK that behaves exactly as before.
+option(LLAMA_ENABLE_OPENCL "Build the Adreno OpenCL backend" ON)
+
+if (LLAMA_ENABLE_OPENCL)
+    set(OPENCL_HEADERS_TAG   "v2024.10.24" CACHE STRING "OpenCL-Headers tag")
+    set(OPENCL_LOADER_TAG    "v2024.10.24" CACHE STRING "OpenCL-ICD-Loader tag")
+
+    FetchContent_Declare(
+        opencl_headers
+        GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git
+        GIT_TAG        ${OPENCL_HEADERS_TAG}
+    )
+    set(BUILD_TESTING                     OFF CACHE BOOL "" FORCE)
+    set(OPENCL_HEADERS_BUILD_TESTING      OFF CACHE BOOL "" FORCE)
+    set(OPENCL_HEADERS_BUILD_CXX_TESTS    OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(opencl_headers)
+
+    # The loader must compile against the same headers ggml will include, or
+    # the two disagree about the ABI of a struct nobody looks at until it
+    # crashes.
+    set(OPENCL_ICD_LOADER_HEADERS_DIR "${opencl_headers_SOURCE_DIR}"
+        CACHE PATH "" FORCE)
+    set(OPENCL_ICD_LOADER_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        opencl_icd_loader
+        GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-ICD-Loader.git
+        GIT_TAG        ${OPENCL_LOADER_TAG}
+    )
+    FetchContent_MakeAvailable(opencl_icd_loader)
+
+    # ggml-opencl calls find_package(OpenCL REQUIRED) and then uses
+    # OpenCL_LIBRARIES / OpenCL_INCLUDE_DIRS directly. Pre-seeding the cache
+    # makes FindOpenCL's find_path/find_library no-ops and satisfies it without
+    # a sysroot copy of a library that does not exist on Android. "OpenCL" here
+    # is the ICD loader's own target name, which target_link_libraries resolves
+    # as a target rather than a file.
+    set(OpenCL_INCLUDE_DIR "${opencl_headers_SOURCE_DIR}" CACHE PATH "" FORCE)
+    set(OpenCL_LIBRARY     OpenCL                          CACHE STRING "" FORCE)
+
+    set(GGML_OPENCL                    ON  CACHE BOOL "" FORCE)
+    # Kernels must be compiled into the .so. Left as loose .cl files they are
+    # looked up by path at runtime, and an APK has no paths to look up.
+    set(GGML_OPENCL_EMBED_KERNELS      ON  CACHE BOOL "" FORCE)
+    set(GGML_OPENCL_USE_ADRENO_KERNELS ON  CACHE BOOL "" FORCE)
+    message(STATUS "OpenCL backend: ON (Adreno kernels, embedded)")
+else()
+    set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+    message(STATUS "OpenCL backend: OFF")
+endif()
 
 FetchContent_MakeAvailable(llama_cpp)
 
