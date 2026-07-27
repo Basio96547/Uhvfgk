@@ -49,6 +49,14 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk \
              "dist/OnDeviceLLM-debug-${GITHUB_SHA::7}.apk"
+          # A second copy under a name that never changes.
+          #
+          # The rolling release is deleted and recreated on every push, so a
+          # link to the commit-stamped file stops working the moment anything
+          # lands after it — including a documentation commit. Anyone given a
+          # link then gets a 404 through no fault of their own. This one is
+          # always the newest build and can be sent once.
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/OnDeviceLLM-latest.apk"
           ls -lh dist
 
       # Downloadable from the workflow run page (as a zip).
@@ -71,6 +79,9 @@ jobs:
           gh release create latest-debug dist/*.apk \
             --title "Latest debug build" \
             --notes "Debug APK from ${GITHUB_SHA::7} on \`${GITHUB_REF_NAME}\`.
+
+          Permanent link (always the newest build):
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-debug/OnDeviceLLM-latest.apk
 
           Install: download the .apk on your phone and allow installing from
           your browser when prompted. Debug builds are signed with the standard
