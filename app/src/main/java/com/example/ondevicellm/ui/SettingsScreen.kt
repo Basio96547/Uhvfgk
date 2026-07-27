@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Psychology
@@ -216,6 +217,59 @@ fun SettingsScreen(
                     s.thermalUnsupportedNote
                 }
             )
+        }
+
+        SectionCard(
+            icon = Icons.Filled.Description,
+            title = s.ocrTitle,
+            subtitle = s.ocrSubtitle,
+            tint = MaterialTheme.colorScheme.secondary,
+        ) {
+            ToggleRow(
+                label = s.ocrEnable,
+                description = s.ocrEnableDesc,
+                checked = settings.ocrEnabled,
+                onChange = { v -> viewModel.updateSettings { it.copy(ocrEnabled = v) } },
+            )
+            Spacer(Modifier.height(Space.sm))
+            // The gap is stated where the switch is, not in a document nobody
+            // opens: there is no offline option, and why.
+            Caption(s.ocrOfflineGap, isWarning = true)
+
+            if (settings.ocrEnabled) {
+                SoftDivider()
+                Caption(s.ocrPrivacy, isWarning = true)
+                Spacer(Modifier.height(Space.sm))
+
+                var visible by rememberSaveable { mutableStateOf(false) }
+                OutlinedTextField(
+                    value = settings.ocrApiKey,
+                    onValueChange = { v ->
+                        viewModel.updateSettings { it.copy(ocrApiKey = v.trim()) }
+                    },
+                    label = { Text(s.ocrApiKeyLabel) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.small,
+                    visualTransformation = if (visible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        TextButton(onClick = { visible = !visible }) {
+                            Text(if (visible) s.cloudHideKey else s.cloudShowKey)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Space.xs))
+                Caption(s.cloudKeyStorageNote)
+
+                if (settings.ocrApiKey.isBlank()) {
+                    Spacer(Modifier.height(Space.xs))
+                    Caption(s.ocrNeedsKey, isWarning = true)
+                }
+            }
         }
 
         SectionCard(

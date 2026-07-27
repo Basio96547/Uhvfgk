@@ -40,6 +40,8 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Cloud voice (Azure / ElevenLabs) | ⚠️ Request building covered by 17 tests — **no request has ever been sent; no key exists here** |
 | Terminal | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device** |
 | Tools / skills | ⚠️ Parser covered by 19 tests against real model output shapes — **no model has ever called one** |
+| PDF reading | ⚠️ Chunking, selection, quality checks and page ranges covered by 52 tests — **no PDF has been opened here** |
+| Arabic OCR | ⚠️ Cloud only, and the UI says so. **No offline option exists** — see PLAN 2f |
 
 **Device status:** run once on a real Galaxy S25 Ultra with `Qwen3-4B-Q8_0`.
 That run produced four bug reports — routing, a hard crash on Arabic output,
@@ -534,6 +536,73 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 11 — 2026-07-27 · reading PDFs
+
+57. **The text layer first, and only then the pixels.** PDFBox pulls the text
+    layer page by page — one stripper pass per page rather than one for the
+    document, because page boundaries are the citations a user checks and a
+    single call returns one string with nothing to align them to. Sorting by
+    position is on: without it a two-column paper comes out interleaved line by
+    line and is worthless to a model and to a person alike.
+
+58. **The check that decides everything: is this text, or does it merely look
+    like text?** An empty page is the easy case. The one that matters is a PDF
+    with subsetted fonts and no `ToUnicode` map: it yields *characters*, they
+    are the wrong ones, extraction "succeeds", and the model answers from
+    gibberish. `TextLayerQuality` measures the share of characters that carry
+    meaning and the number of letter runs, so control codes, replacement
+    characters and private-use glyphs fail the check and the page goes to OCR.
+
+59. **Only the pages that need it get rendered.** Rasterising forty pages to
+    OCR the two without a text layer turns a two-second import into a
+    two-minute one. Rendering is the platform's `PdfRenderer` rather than
+    PDFBox's software renderer — hardware-accelerated, more faithful, and
+    already what every PDF viewer on the phone uses. The bitmap is filled white
+    first: `PdfRenderer` paints only what the page paints, and an unpainted
+    background stays transparent, which encodes to black in a JPEG and hands
+    OCR a blank sheet.
+
+60. **`DocumentIndex` is what makes this work at all.** A forty-page report is
+    two hundred thousand characters; a 4B model has room for a few thousand.
+    Chunks are page-aligned so a citation is checkable, selection is by
+    distinct query-token coverage rather than raw hit count (a chunk repeating
+    one word forty times is a table of contents), and the result is re-sorted
+    into reading order — a model handed page 9 before page 2 narrates them in
+    that order. A question with no content words, which is every "summarise
+    this", falls back to the opening pages rather than returning nothing.
+
+    Arabic goes through the same normaliser as the router: أ/إ/آ, ة/ه, ى/ي fold
+    and diacritics go. Without it a word written two ordinary ways does not
+    match itself and Arabic document search barely functions.
+
+61. **Images are their own deliverable.** Embedded image objects are extracted
+    whether or not OCR ran, because a diagram on a page with perfectly good
+    text is still something that was asked for. Objects under 64 px a side are
+    skipped: rules, icons and spacers are most of the image objects in a
+    typical document and are never what anyone meant.
+
+62. **Three document skills, plus the attachment path.** Attaching answers
+    "what does this say about X" in one turn, which is what people do. The
+    tools let the model *work*: `list_documents`, `read_pdf` with a page range,
+    `search_pdf` to find which pages mention something. A model that can only
+    be handed a document cannot go and look something up in it. `PageRange`
+    parses what models actually emit — en dashes, `p. 5`, `صفحة 5`, `1, 4-6`,
+    backwards ranges — and caps a request for the whole book, which is
+    otherwise how one call blows the context window.
+
+63. **Arabic OCR is cloud-only, and the switch says so.** ML Kit does not read
+    Arabic; Tesseract does but is JitPack-only and could not be verified from
+    here. Cloud Vision is one POST with a key and reads Arabic properly, so
+    that is what is built — with the privacy cost stated above the key field
+    and the missing offline option named on the switch itself rather than
+    buried in a document nobody opens.
+
+64. **A bug in my own page-range parser, caught by its test.** Prefixes were
+    stripped shortest-first, so `page 5` became `age 5` and parsed as nothing.
+    Longest first, and only one.
+
+---
+
 ### Session 10 — 2026-07-27 · a terminal, and skills to go with it
 
 48. **A real terminal.** `ProcessBuilder` against `/system/bin/sh`, its own page
@@ -710,6 +779,9 @@ design choices):
   and `HtmlExtractTest` will catch a regression once markup samples are updated.
 
 **Not done**
+- No PDF has been opened on a device; there is no Android here to open one.
+- Arabic OCR needs a Cloud Vision key and a connection. There is no offline
+  path, and PLAN 2f says exactly why and what would change it.
 - No model has ever emitted a tool call into the parser. The shapes are tested
   against saved output; how *often* a 4B model calls a tool is unmeasured.
 - The terminal has never run a command on a device — there is no Android here.

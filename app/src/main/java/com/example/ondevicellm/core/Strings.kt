@@ -481,6 +481,54 @@ interface AppStrings {
     val toolsStepsNote: String
     val toolsCostNote: String
 
+
+    // ------------------------------------------------------------ documents
+    val documentsTitle: String
+    val documentsSubtitle: String
+    val attachDocument: String
+    val documentsEmpty: String
+    val documentsNote: String
+    val removeDocument: String
+    val documentAttached: String
+    val documentDetach: String
+    fun documentPages(count: Int): String
+    fun documentOcrPages(count: Int): String
+    fun documentImages(count: Int): String
+    fun documentUnreadablePages(count: Int): String
+    fun documentAttachedNotice(name: String): String
+    val documentTextLayer: String
+    val documentScanned: String
+
+    val pdfReadingText: String
+    val pdfReadingImages: String
+    val pdfExtractingImages: String
+    val pdfNoPages: String
+    val pdfNothingReadable: String
+    val pdfCouldNotRead: String
+    val pdfImportFailed: String
+    val pdfNeedsOcr: String
+
+    val ocrTitle: String
+    val ocrSubtitle: String
+    val ocrEnable: String
+    val ocrEnableDesc: String
+    val ocrApiKeyLabel: String
+    val ocrPrivacy: String
+    val ocrOfflineGap: String
+    val ocrNeedsKey: String
+    val ocrEncodeFailed: String
+    val ocrRequestFailed: String
+
+    val toolReadPdfSummary: String
+    val toolSearchPdfSummary: String
+    val toolListDocsSummary: String
+    val toolDocNameParam: String
+    val toolPagesParam: String
+    val toolPhraseParam: String
+    val toolNoDocuments: String
+    fun toolNoSuchDocument(name: String): String
+    fun toolNoPageMatch(phrase: String): String
+
     // -------------------------------------------------------- routing modes
     val modeAuto: String
     val modeAlways: String
@@ -1078,6 +1126,60 @@ object EnglishStrings : AppStrings {
     override val toolsCostNote = "Describing the tools costs context on every message, so this " +
         "is off by default. Turn it on when you want the model to act, not only answer."
 
+
+    override val documentsTitle = "Documents"
+    override val documentsSubtitle = "PDFs this conversation can read"
+    override val attachDocument = "Add a PDF"
+    override val documentsEmpty = "No documents yet. Add a PDF and ask about it."
+    override val documentsNote = "Text is pulled from the PDF itself where there is any, and " +
+        "read off the page as an image where there is not. Pages are kept, so you are only " +
+        "waiting once."
+    override val removeDocument = "Remove"
+    override val documentAttached = "In use"
+    override val documentDetach = "Stop using"
+    override fun documentPages(count: Int) = "$count pages"
+    override fun documentOcrPages(count: Int) = "$count read as images"
+    override fun documentImages(count: Int) = "$count images"
+    override fun documentUnreadablePages(count: Int) = "$count pages could not be read"
+    override fun documentAttachedNotice(name: String) =
+        "Questions will now be answered from \"$name\"."
+    override val documentTextLayer = "Text layer"
+    override val documentScanned = "Scanned"
+
+    override val pdfReadingText = "Reading the text…"
+    override val pdfReadingImages = "Reading the pages as images…"
+    override val pdfExtractingImages = "Saving the images…"
+    override val pdfNoPages = "This file has no pages, or is not a PDF."
+    override val pdfNothingReadable = "Nothing readable came out of this file. It is probably " +
+        "scanned — turn on image reading to get its text."
+    override val pdfCouldNotRead = "Could not read this file."
+    override val pdfImportFailed = "Could not open that file."
+    override val pdfNeedsOcr = "Some pages are images. Turn on image reading to include them."
+
+    override val ocrTitle = "Reading images"
+    override val ocrSubtitle = "For scanned pages, and pictures inside a PDF"
+    override val ocrEnable = "Read text out of images"
+    override val ocrEnableDesc = "Used only for pages that have no text of their own."
+    override val ocrApiKeyLabel = "Google Cloud Vision API key"
+    override val ocrPrivacy = "This sends a picture of each unreadable page to Google. Only " +
+        "those pages, and only while this is on."
+    override val ocrOfflineGap = "There is no offline option here yet. The on-device engines " +
+        "that ship with Android do not read Arabic, so an offline setting would work for " +
+        "everyone except the people this app is for. See PLAN.md."
+    override val ocrNeedsKey = "Enter your Cloud Vision API key first."
+    override val ocrEncodeFailed = "Could not prepare the page image."
+    override val ocrRequestFailed = "The image-reading request failed."
+
+    override val toolReadPdfSummary = "Read pages from a document the user added."
+    override val toolSearchPdfSummary = "Find which pages of a document mention something."
+    override val toolListDocsSummary = "List the documents that have been added."
+    override val toolDocNameParam = "document name, or part of it"
+    override val toolPagesParam = "a page or range, e.g. 3 or 5-8 (default: the first pages)"
+    override val toolPhraseParam = "what to look for"
+    override val toolNoDocuments = "No documents have been added."
+    override fun toolNoSuchDocument(name: String) = "No document matches \"$name\"."
+    override fun toolNoPageMatch(phrase: String) = "No page mentions \"$phrase\"."
+
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
     override val modeNever = "Never"
@@ -1674,6 +1776,59 @@ object ArabicStrings : AppStrings {
         "كامل، وهي الكلفة الأساسية."
     override val toolsCostNote = "وصف الأدوات يكلّف سياقًا في كل رسالة، لذا فهي مطفأة افتراضيًا. " +
         "شغّلها حين تريد من النموذج أن يعمل لا أن يجيب فقط."
+
+
+    override val documentsTitle = "المستندات"
+    override val documentsSubtitle = "ملفات PDF تستطيع هذه المحادثة قراءتها"
+    override val attachDocument = "أضف ملف PDF"
+    override val documentsEmpty = "لا مستندات بعد. أضف ملف PDF واسأل عنه."
+    override val documentsNote = "يُستخرَج النص من الملف نفسه حيث يوجد، ويُقرأ من الصفحة كصورة " +
+        "حيث لا يوجد. وتُحفَظ الصفحات، فالانتظار مرة واحدة فقط."
+    override val removeDocument = "حذف"
+    override val documentAttached = "قيد الاستخدام"
+    override val documentDetach = "إيقاف الاستخدام"
+    override fun documentPages(count: Int) = "$count صفحة"
+    override fun documentOcrPages(count: Int) = "قُرئت $count كصور"
+    override fun documentImages(count: Int) = "$count صورة"
+    override fun documentUnreadablePages(count: Int) = "تعذّرت قراءة $count صفحة"
+    override fun documentAttachedNotice(name: String) =
+        "ستُجاب الأسئلة الآن من «$name»."
+    override val documentTextLayer = "طبقة نصية"
+    override val documentScanned = "ممسوح ضوئيًا"
+
+    override val pdfReadingText = "يقرأ النص…"
+    override val pdfReadingImages = "يقرأ الصفحات كصور…"
+    override val pdfExtractingImages = "يحفظ الصور…"
+    override val pdfNoPages = "لا صفحات في هذا الملف، أو أنه ليس PDF."
+    override val pdfNothingReadable = "لم يخرج من هذا الملف شيء مقروء. الأرجح أنه ممسوح ضوئيًا " +
+        "— شغّل قراءة الصور لاستخراج نصه."
+    override val pdfCouldNotRead = "تعذّرت قراءة هذا الملف."
+    override val pdfImportFailed = "تعذّر فتح ذلك الملف."
+    override val pdfNeedsOcr = "بعض الصفحات صور. شغّل قراءة الصور لتضمينها."
+
+    override val ocrTitle = "قراءة الصور"
+    override val ocrSubtitle = "للصفحات الممسوحة ضوئيًا وللصور داخل الملف"
+    override val ocrEnable = "استخرج النص من الصور"
+    override val ocrEnableDesc = "يُستعمل فقط للصفحات التي لا نصّ لها."
+    override val ocrApiKeyLabel = "مفتاح Google Cloud Vision"
+    override val ocrPrivacy = "هذا يرسل صورة كل صفحة غير مقروءة إلى جوجل. تلك الصفحات وحدها، " +
+        "وفقط ما دام هذا مُشغّلًا."
+    override val ocrOfflineGap = "لا يوجد خيار يعمل دون إنترنت هنا بعد. محرّكات أندرويد المدمجة " +
+        "لا تقرأ العربية، فخيار «دون إنترنت» كان سيعمل للجميع إلا من صُنع هذا التطبيق لهم. " +
+        "انظر PLAN.md."
+    override val ocrNeedsKey = "أدخل مفتاح Cloud Vision أولًا."
+    override val ocrEncodeFailed = "تعذّر تجهيز صورة الصفحة."
+    override val ocrRequestFailed = "أخفق طلب قراءة الصورة."
+
+    override val toolReadPdfSummary = "اقرأ صفحات من مستند أضافه المستخدم."
+    override val toolSearchPdfSummary = "اعرف أي صفحات في المستند تذكر شيئًا ما."
+    override val toolListDocsSummary = "اعرض المستندات المضافة."
+    override val toolDocNameParam = "اسم المستند أو جزء منه"
+    override val toolPagesParam = "صفحة أو مدى، مثل 3 أو 5-8 (الافتراضي: الصفحات الأولى)"
+    override val toolPhraseParam = "ما الذي تبحث عنه"
+    override val toolNoDocuments = "لم تُضف أي مستندات."
+    override fun toolNoSuchDocument(name: String) = "لا مستند يطابق «$name»."
+    override fun toolNoPageMatch(phrase: String) = "لا صفحة تذكر «$phrase»."
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

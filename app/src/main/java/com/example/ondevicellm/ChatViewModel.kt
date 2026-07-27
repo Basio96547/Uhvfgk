@@ -9,7 +9,10 @@ import com.example.ondevicellm.agent.CalcTool
 import com.example.ondevicellm.agent.ClockTool
 import com.example.ondevicellm.agent.CommandRisk
 import com.example.ondevicellm.agent.DeviceTool
+import com.example.ondevicellm.agent.ListDocumentsTool
 import com.example.ondevicellm.agent.ListFilesTool
+import com.example.ondevicellm.agent.ReadPdfTool
+import com.example.ondevicellm.agent.SearchPdfTool
 import com.example.ondevicellm.agent.ReadFileTool
 import com.example.ondevicellm.agent.ShellTool
 import com.example.ondevicellm.agent.ToolCallParser
@@ -52,6 +55,13 @@ import com.example.ondevicellm.model.ModelSpec
 import com.example.ondevicellm.studio.StudioProject
 import com.example.ondevicellm.studio.StudioSession
 import com.example.ondevicellm.studio.StudioStore
+import com.example.ondevicellm.ocr.CloudOcrRecognizer
+import com.example.ondevicellm.ocr.TextRecognizer
+import com.example.ondevicellm.pdf.DocumentIndex
+import com.example.ondevicellm.pdf.PdfDoc
+import com.example.ondevicellm.pdf.PdfIngestor
+import com.example.ondevicellm.pdf.PdfLibrary
+import com.example.ondevicellm.pdf.PdfProgress
 import com.example.ondevicellm.studio.StudioUiState
 import com.example.ondevicellm.terminal.TerminalSession
 import com.example.ondevicellm.terminal.TerminalUiState
@@ -106,6 +116,8 @@ data class ChatUiState(
     /** Non-null while a web search is running, for the status line. */
     val searchStatus: String? = null,
     val thermalLevel: ThermalLevel = ThermalLevel.NORMAL,
+    /** The document questions are being answered from, if any. */
+    val attachedDocumentId: String? = null,
 )
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
@@ -128,6 +140,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val terminal = TerminalSession(java.io.File(app.filesDir, "workspace"))
     val terminalState: StateFlow<TerminalUiState> = terminal.state
+
+    private val pdfLibrary = PdfLibrary(app)
+    private val pdfIngestor = PdfIngestor(app, pdfLibrary)
+    val documents: StateFlow<List<PdfDoc>> = pdfLibrary.documents
+    val documentProgress: StateFlow<PdfProgress?> = pdfIngestor.progress
     private var modelTts: ModelTtsSynthesizer? = null
 
     // One model in memory means generation has to stay serialised, so Studio
@@ -470,14 +487,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 .filter { it.isNotBlank() }
                 .joinToString("\n\n")
 
-            // Search results belong to *this* question, not to the conversation,
-            // so they ride with the user turn. Putting them in the system prompt
-            // meant turn three was still answering with turn one's pages.
-            val groundedPrompt = if (grounding.isBlank()) {
-                prompt
-            } else {
-                "$grounding\n\n$prompt"
-            }
+            // The attached document, cut down to the part that answers *this*
+            // question. A forty-page report is two hundred thousand characters
+            // and the model has room for a few thousand, so handing it the
+            // opening pages would answer questions about the title page.
+            val documentContext = documentContextFor(prompt)
+
+            // Grounding belongs to *this* question, not to the conversation, so
+            // it rides with the user turn. In the system prompt, turn three was
+            // still answering with turn one's pages.
+            val groundedPrompt = listOf(documentContext, grounding, prompt)
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n")
 
             if (activeSystemPrompt != null && activeSystemPrompt != fullSystem) {
                 active.resetSession()
@@ -604,6 +625,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         else -> "${before.trimEnd()}\n\n${after.trim()}"
     }
 
+    /** The attached document's relevant extracts, or "" when nothing is attached. */
+    private fun documentContextFor(question: String): String {
+        val doc = _uiState.value.attachedDocumentId?.let { pdfLibrary.find(it) } ?: return ""
+        if (!doc.isReadable) return ""
+        val chunks = DocumentIndex.select(DocumentIndex.chunk(doc.pages), question)
+        return DocumentIndex.buildContext(doc.name, question, chunks, doc.pageCount)
+    }
+
     /** Replaces a reply's text wholesale — used to take a tool call back out. */
     private fun replaceText(id: Long, text: String) {
         _uiState.update { state ->
@@ -652,6 +681,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ListFilesTool(terminal.shell, strings),
         )
         if (current.toolAllowWrites) tools += WriteFileTool(terminal.shell, strings)
+        // Only offered once there is something to read. A tool that always
+        // answers "no documents" teaches the model to stop trying it.
+        if (pdfLibrary.documents.value.isNotEmpty()) {
+            val docs = { pdfLibrary.documents.value }
+            tools += ListDocumentsTool(docs, strings)
+            tools += ReadPdfTool(docs, strings)
+            tools += SearchPdfTool(docs, strings)
+        }
         if (current.webSearchEnabled) {
             tools += WebSearchTool(webSearch, { settingsStore.settings.value.voiceLanguageTag }, strings)
         }
@@ -787,6 +824,60 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** Installed speech engines, for the picker in Settings. */
     fun systemVoiceEngines(): List<com.example.ondevicellm.audio.TtsEngineOption> =
         systemTts.availableEngines()
+
+    // ------------------------------------------------------------ documents
+
+    /**
+     * Imports a PDF and reads it.
+     *
+     * The result is attached to the conversation, because someone who has just
+     * picked a file wants to ask about that file — making them tap it again
+     * afterwards would be a step that exists only to be dismissed.
+     */
+    fun importDocument(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = settingsStore.settings.value
+            val doc = pdfIngestor.ingest(
+                uri = uri,
+                recognizer = ocrRecognizer(current),
+                languageTag = current.voiceLanguageTag,
+            )
+            if (doc == null) {
+                _uiState.update { it.copy(notice = Localization.strings.pdfImportFailed) }
+                return@launch
+            }
+            _uiState.update { state ->
+                state.copy(
+                    attachedDocumentId = if (doc.isReadable) doc.id else state.attachedDocumentId,
+                    notice = when {
+                        doc.problem != null -> doc.problem
+                        // Worth saying rather than leaving to be discovered by
+                        // a wrong answer: some pages went in blank.
+                        doc.unreadablePageCount > 0 && !current.ocrEnabled ->
+                            Localization.strings.pdfNeedsOcr
+                        else -> Localization.strings.documentAttachedNotice(doc.name)
+                    },
+                )
+            }
+        }
+    }
+
+    fun attachDocument(id: String?) = _uiState.update { it.copy(attachedDocumentId = id) }
+
+    fun removeDocument(id: String) {
+        pdfLibrary.remove(id)
+        _uiState.update {
+            if (it.attachedDocumentId == id) it.copy(attachedDocumentId = null) else it
+        }
+    }
+
+    /** Null when reading images is off or unconfigured — the ingestor then skips it. */
+    private fun ocrRecognizer(current: AppSettings): TextRecognizer? =
+        if (current.ocrEnabled && current.ocrApiKey.isNotBlank()) {
+            CloudOcrRecognizer(current.ocrApiKey)
+        } else {
+            null
+        }
 
     // ------------------------------------------------------------- terminal
 

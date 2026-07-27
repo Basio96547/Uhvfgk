@@ -28,6 +28,9 @@ producing a real result. Everything else says what is still unproven.
 | Cloud voice | Real code, real endpoints, real request format. **Never sent a request** — no key in the sandbox. |
 | Terminal | Real `ProcessBuilder` against `/system/bin/sh`. **Never run on a device** — no Android here to run it on. |
 | Tools / skills | Real registry, real parser, real execution path. **No model has ever emitted a call into it.** |
+| PDF text | Real PDFBox extraction, real chunking and selection. **No PDF has been opened by me** — there is no Android here. |
+| PDF images | Real: embedded objects pulled out, pages rendered by the platform renderer. Never run. |
+| **Arabic OCR offline** | **Not available.** Cloud only, and the reason is below. |
 
 ---
 
@@ -152,6 +155,51 @@ does.
 
 ---
 
+## 2f. Reading PDFs, and the one honest gap in it
+
+The pipeline is ordered by what is cheap and exact before what is slow and
+approximate:
+
+1. **The text layer**, via PDFBox. Almost every PDF that was produced rather
+   than photographed has one; it is exact, free, and works in Arabic with none
+   of OCR's caveats. This covers most real documents.
+2. **A quality check per page.** Not only "is it empty" — a page whose fonts
+   are subsetted with no `ToUnicode` map extracts as control codes or unrelated
+   glyphs. Extraction "succeeds" and the model is handed gibberish it answers
+   from confidently. That page is treated as an image.
+3. **Render and read only those pages.** Rasterising all forty to OCR the two
+   that needed it turns a two-second import into a two-minute one.
+4. **Embedded images are pulled out regardless**, because a diagram on a page
+   with perfectly good text is still something that was asked for.
+
+Then `DocumentIndex` decides what actually reaches the model: a forty-page
+report is two hundred thousand characters and a 4B model has room for a few
+thousand, so the document is chunked page-aligned and the chunks relevant to
+the question are selected. A question with no content words — "summarise this"
+— falls back to the opening pages, because that is the right answer for
+exactly those questions.
+
+### The gap: there is no offline Arabic OCR here
+
+Stated plainly because it is the one part that is not what this app wants to
+be:
+
+- **ML Kit** ships Latin, Chinese, Japanese, Korean and Devanagari. **Not
+  Arabic.** Shipping it would mean an offline setting that works for everyone
+  except the people this app is for.
+- **Tesseract** does read Arabic well, via `tesseract4android`. It is
+  **JitPack-only** — not on Maven Central — so adding it means adding JitPack
+  to the repository list, and it could not be verified from here at all. It
+  also needs `ara.traineddata` fetched at runtime.
+- **Cloud Vision** reads Arabic properly, is one synchronous POST with an API
+  key, and needs no SDK. That is what is built.
+
+So OCR costs a key and a network today. The offline path is a real project —
+JitPack, a native AAR, and a language file to manage — not a checkbox, and it
+is on the list below rather than pretended at in the UI.
+
+---
+
 ## 3. Prove the pieces that are written but unproven
 
 Nothing new to build; these need a device and a model.
@@ -194,7 +242,9 @@ actually in hand.
 5. **Instrument the diagnostics** — turn a device session into evidence.
 6. **ONNX + Piper for Arabic speech** — a fully on-device answer to "more
    human", so the cloud stops being the only good option.
-7. **QNN/NPU** — only with the SDK in hand.
+7. **Offline Arabic OCR** — Tesseract via JitPack plus `ara.traineddata`, so
+   reading a scanned Arabic page stops costing a key and a connection.
+8. **QNN/NPU** — only with the SDK in hand.
 
 ## What will not be claimed
 
@@ -203,3 +253,4 @@ actually in hand.
 - That a voice is better, until it has been heard.
 - That the cloud voice works, until a real key has returned real audio.
 - That the model can use tools, until one has been seen to call one.
+- That a PDF can be read, until one has been opened on a device.

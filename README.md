@@ -265,6 +265,15 @@ app/src/main/java/com/example/ondevicellm/
 │   ├── Calc.kt               Arithmetic, because a 4B model cannot do it
 │   ├── SandboxPaths.kt       Keeps writes inside the workspace
 │   └── MiniJson.kt           Forgiving JSON reader (org.json is untestable here)
+├── pdf/
+│   ├── PdfExtractor.kt       PDFBox text + embedded images; platform page rendering
+│   ├── TextLayerQuality.kt   Is this text, or does it only look like text?
+│   ├── DocumentIndex.kt      Chunking and relevance selection into a context window
+│   ├── PdfIngestor.kt        Text layer → quality check → render + OCR → images
+│   └── PdfLibrary.kt         Imported documents and their extracted text
+├── ocr/
+│   ├── CloudOcr.kt           Cloud Vision request building and response reading
+│   └── TextRecognizer.kt     Recognizer contract + the cloud implementation
 ├── terminal/
 │   ├── Shell.kt              Real command execution, app sandbox, no root
 │   └── TerminalSession.kt    Scrollback shared by the page and the shell tool

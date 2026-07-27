@@ -131,6 +131,14 @@ dependencies {
     // them here rather than going back to compileOnly.
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
+    // PDFBox for Android — the text layer and the embedded image objects.
+    //
+    // Android itself has no API for either: PdfRenderer draws a page and
+    // cannot report a single character on it, so reading a PDF means parsing
+    // one. This is the maintained port of Apache PDFBox, and text extraction
+    // is the part of it this app uses.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // Test
     testImplementation("junit:junit:4.13.2")
     // StringsTest walks every AppStrings property by reflection rather than

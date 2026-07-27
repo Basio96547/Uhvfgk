@@ -60,6 +60,11 @@ SOURCES=(
     app/src/main/java/com/example/ondevicellm/agent/CommandPolicy.kt
     app/src/main/java/com/example/ondevicellm/agent/Calc.kt
     app/src/main/java/com/example/ondevicellm/agent/SandboxPaths.kt
+    app/src/main/java/com/example/ondevicellm/pdf/PdfModels.kt
+    app/src/main/java/com/example/ondevicellm/pdf/TextLayerQuality.kt
+    app/src/main/java/com/example/ondevicellm/pdf/DocumentIndex.kt
+    app/src/main/java/com/example/ondevicellm/agent/PdfTools.kt
+    app/src/main/java/com/example/ondevicellm/ocr/CloudOcr.kt
     app/src/test/java/com/example/ondevicellm/core/StringsTest.kt
     app/src/test/java/com/example/ondevicellm/llm/QueryRouterTest.kt
     app/src/test/java/com/example/ondevicellm/llm/BackendPlannerTest.kt
@@ -78,6 +83,10 @@ SOURCES=(
     app/src/test/java/com/example/ondevicellm/agent/CommandPolicyTest.kt
     app/src/test/java/com/example/ondevicellm/agent/CalcTest.kt
     app/src/test/java/com/example/ondevicellm/agent/SandboxPathsTest.kt
+    app/src/test/java/com/example/ondevicellm/pdf/TextLayerQualityTest.kt
+    app/src/test/java/com/example/ondevicellm/pdf/DocumentIndexTest.kt
+    app/src/test/java/com/example/ondevicellm/agent/PageRangeTest.kt
+    app/src/test/java/com/example/ondevicellm/ocr/CloudOcrTest.kt
 )
 CLASSES=(
     com.example.ondevicellm.core.StringsTest
@@ -98,6 +107,10 @@ CLASSES=(
     com.example.ondevicellm.agent.CommandPolicyTest
     com.example.ondevicellm.agent.CalcTest
     com.example.ondevicellm.agent.SandboxPathsTest
+    com.example.ondevicellm.pdf.TextLayerQualityTest
+    com.example.ondevicellm.pdf.DocumentIndexTest
+    com.example.ondevicellm.agent.PageRangeTest
+    com.example.ondevicellm.ocr.CloudOcrTest
 )
 
 # BackendPlanner references BackendPref, which lives in a file that imports

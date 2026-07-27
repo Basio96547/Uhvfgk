@@ -33,7 +33,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -97,7 +101,10 @@ fun ChatScreen(
     val s = LocalStrings.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val documents by viewModel.documents.collectAsStateWithLifecycle()
+    val documentProgress by viewModel.documentProgress.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    var showDocuments by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
         if (state.messages.isNotEmpty()) {
@@ -251,6 +258,23 @@ fun ChatScreen(
             state.notice?.let { NoticeBar(it, viewModel::dismissNotice) }
         }
 
+        // Only when there is one. An empty document bar on every conversation
+        // is a permanent reminder of a feature most messages don't use.
+        AnimatedVisibility(
+            visible = documentProgress != null || state.attachedDocumentId != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            DocumentBar(
+                name = documentProgress?.name
+                    ?: documents.firstOrNull { it.id == state.attachedDocumentId }?.name.orEmpty(),
+                stage = documentProgress?.stage,
+                fraction = documentProgress?.fraction,
+                onOpen = { showDocuments = true },
+                onDetach = { viewModel.attachDocument(null) },
+            )
+        }
+
         MessageInput(
             viewModel = viewModel,
             enabled = state.status == ModelStatus.READY && !state.isBusy,
@@ -260,7 +284,88 @@ fun ChatScreen(
             onToggleSearch = {
                 viewModel.updateSettings { it.copy(webSearchEnabled = !it.webSearchEnabled) }
             },
+            onOpenDocuments = { showDocuments = true },
         )
+    }
+
+    if (showDocuments) {
+        DocumentsDialog(viewModel = viewModel, onDismiss = { showDocuments = false })
+    }
+}
+
+/**
+ * The document in use, above the composer.
+ *
+ * It sits here rather than in a menu because it changes what every answer is
+ * based on: a user who has forgotten a PDF is attached will read a grounded
+ * answer as the model's own knowledge.
+ */
+@Composable
+private fun DocumentBar(
+    name: String,
+    stage: String?,
+    fraction: Float?,
+    onOpen: () -> Unit,
+    onDetach: () -> Unit,
+) {
+    val s = LocalStrings.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Space.lg, vertical = Space.xs)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .panel(shape = RoundedCornerShape(14.dp))
+                .clickable(onClick = onOpen)
+                .padding(horizontal = Space.md, vertical = Space.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Description,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(Space.sm))
+            Text(
+                name,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (stage != null) {
+                Text(
+                    stage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDetach),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = s.documentDetach,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        if (fraction != null) {
+            Spacer(Modifier.height(Space.xs))
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+            )
+        }
     }
 }
 
@@ -677,6 +782,7 @@ private fun MessageInput(
     voiceDraft: String,
     searchEnabled: Boolean,
     onToggleSearch: () -> Unit,
+    onOpenDocuments: () -> Unit,
 ) {
     val s = LocalStrings.current
     var text by remember { mutableStateOf("") }
@@ -710,6 +816,11 @@ private fun MessageInput(
             // Web grounding is a per-question decision, so it belongs next to
             // the question rather than buried in settings.
             SearchToggle(enabled = searchEnabled, onClick = onToggleSearch)
+
+            // Where everyone looks for it. Opens the list rather than the file
+            // picker directly, because "which PDF am I asking about" is the
+            // question more often than "add another one".
+            AttachButton(onClick = onOpenDocuments)
 
             if (viewModel.speechAvailable) {
                 MicButton(
@@ -779,6 +890,25 @@ private fun BareTextField(
             ),
             cursorBrush = Gradients.accent,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun AttachButton(onClick: () -> Unit) {
+    val s = LocalStrings.current
+    Box(
+        modifier = Modifier
+            .size(Layout.TOUCH_TARGET_DP.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.AttachFile,
+            contentDescription = s.documentsTitle,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

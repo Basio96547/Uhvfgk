@@ -101,6 +101,16 @@ data class AppSettings(
     val toolAllowDangerous: Boolean = false,
     /** Tool calls allowed before the model has to answer. Each one is a full generation. */
     val toolMaxSteps: Int = 3,
+    // ---- Reading images ----
+    /**
+     * Read text out of pages that have none of their own.
+     *
+     * Off by default because it is the one part of reading a PDF that leaves
+     * the device: a picture of each unreadable page is sent to be read.
+     */
+    val ocrEnabled: Boolean = false,
+    /** Google Cloud Vision key, stored in app-private storage. */
+    val ocrApiKey: String = "",
 )
 
 /** Small SharedPreferences-backed settings store exposed as a StateFlow. */
@@ -146,6 +156,8 @@ class SettingsStore(context: Context) {
         toolAllowWrites = prefs.getBoolean(KEY_TOOL_WRITES, false),
         toolAllowDangerous = prefs.getBoolean(KEY_TOOL_DANGEROUS, false),
         toolMaxSteps = prefs.getInt(KEY_TOOL_STEPS, 3),
+        ocrEnabled = prefs.getBoolean(KEY_OCR_ENABLED, false),
+        ocrApiKey = prefs.getString(KEY_OCR_KEY, "").orEmpty(),
         searchDepth = SearchDepth.entries
             .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) }
             ?: SearchDepth.QUICK,
@@ -176,6 +188,8 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_TOOL_WRITES, updated.toolAllowWrites)
             .putBoolean(KEY_TOOL_DANGEROUS, updated.toolAllowDangerous)
             .putInt(KEY_TOOL_STEPS, updated.toolMaxSteps)
+            .putBoolean(KEY_OCR_ENABLED, updated.ocrEnabled)
+            .putString(KEY_OCR_KEY, updated.ocrApiKey)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
             .putFloat(KEY_SPEAKING_RATE, updated.speakingRate)
             .putFloat(KEY_PITCH, updated.pitch)
@@ -205,6 +219,8 @@ class SettingsStore(context: Context) {
         const val KEY_TOOL_WRITES = "toolAllowWrites"
         const val KEY_TOOL_DANGEROUS = "toolAllowDangerous"
         const val KEY_TOOL_STEPS = "toolMaxSteps"
+        const val KEY_OCR_ENABLED = "ocrEnabled"
+        const val KEY_OCR_KEY = "ocrApiKey"
         const val KEY_AUTO_SPEAK = "autoSpeakReplies"
         const val KEY_SPEAKING_RATE = "speakingRate"
         const val KEY_PITCH = "pitch"
