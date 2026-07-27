@@ -76,7 +76,9 @@ tests" but unproven in practice.
 | 26 | `5412a85` | ✅ proved the tensorflow-lite `implementation` flip causes no clash |
 | 27 | `16fc614` | ✅ dead-code sweep |
 | 28 | `063f1b5` | ✅ cloud voice + engine-picker fixes |
-| 29 | `3c85d15` | ✅ current — terminal, tools, four bug fixes |
+| 29 | `3c85d15` | ✅ terminal, tools, four bug fixes |
+| 30 | `1197a58` | ✅ |
+| 31 | `2c35971` | ✅ current — PDF reading; PDFBox resolves and links |
 
 Runs 13 and 14 are worth keeping in view: both were caused by the local checks
 being *weaker* than CI, not by the code being wrong in some subtle way. A brace
