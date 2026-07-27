@@ -111,12 +111,55 @@ class WebSearchService {
 
     // ------------------------------------------------------------- providers
 
-    /** Organic results — the part that makes this an actual search engine. */
-    private fun webResults(query: String, region: String): List<SearchResult> =
-        HtmlExtract.parseDuckDuckGoResults(
-            fetch(HtmlExtract.duckDuckGoHtmlUrl(query, region), accept = ACCEPT_HTML),
-            limit = MAX_ORGANIC,
+    /**
+     * Organic results — the part that makes this an actual search engine.
+     *
+     * Three ways of asking, in order, because the first one stopped being
+     * reliable and a search that returns nothing tells nobody why:
+     *
+     *  1. **POST to the HTML endpoint.** The form post is what a browser
+     *     sends; a bare GET is what a scraper sends, and it is the one that
+     *     gets a challenge page instead of results.
+     *  2. **GET the same endpoint**, which still works often enough to try.
+     *  3. **The lite frontend**, which has far less in front of it.
+     *
+     * A page that parses to zero results is recorded with its size and its
+     * opening, so the next time this fails the reason is in the diagnostics
+     * screen instead of being guessed at from here.
+     */
+    private fun webResults(query: String, region: String): List<SearchResult> {
+        val attempts = listOf<Triple<String, String, String?>>(
+            Triple(
+                "html POST",
+                HtmlExtract.DUCKDUCKGO_HTML_ENDPOINT,
+                HtmlExtract.duckDuckGoFormBody(query, region),
+            ),
+            Triple("html GET", HtmlExtract.duckDuckGoHtmlUrl(query, region), null),
+            Triple("lite GET", HtmlExtract.duckDuckGoLiteUrl(query, region), null),
         )
+
+        for ((label, url, body) in attempts) {
+            val page = try {
+                fetch(url, accept = ACCEPT_HTML, formBody = body)
+            } catch (e: Exception) {
+                ErrorLog.report("Web search", "$label: ${e.message}", e, Severity.WARNING)
+                continue
+            }
+
+            val results = HtmlExtract.parseDuckDuckGoResults(page, limit = MAX_ORGANIC)
+            if (results.isNotEmpty()) return results
+
+            // The fetch worked and the parse found nothing. That is either a
+            // challenge page or markup that has moved, and the two look
+            // identical from here — so record enough to tell them apart.
+            ErrorLog.report(
+                "Web search",
+                "$label: 0 results from ${page.length} chars — ${page.take(200)}",
+                severity = Severity.WARNING,
+            )
+        }
+        return emptyList()
+    }
 
     private fun duckDuckGo(query: String): List<SearchResult> {
         val json = JSONObject(fetch(SearchQuery.duckDuckGoUrl(query)))
@@ -206,9 +249,14 @@ class WebSearchService {
 
     // ------------------------------------------------------------------ http
 
-    private fun fetch(url: String, accept: String = ACCEPT_JSON): String {
+    private fun fetch(
+        url: String,
+        accept: String = ACCEPT_JSON,
+        /** Non-null makes this a form POST, which is what a browser sends. */
+        formBody: String? = null,
+    ): String {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
+            requestMethod = if (formBody == null) "GET" else "POST"
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
             instanceFollowRedirects = true
@@ -217,9 +265,19 @@ class WebSearchService {
             setRequestProperty("User-Agent", USER_AGENT)
             setRequestProperty("Accept", accept)
             setRequestProperty("Accept-Language", "*")
+            if (formBody != null) {
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                // Sent by every browser and checked by some front ends.
+                setRequestProperty("Origin", "https://duckduckgo.com")
+                setRequestProperty("Referer", "https://duckduckgo.com/")
+            }
         }
 
         try {
+            if (formBody != null) {
+                connection.outputStream.use { it.write(formBody.toByteArray(Charsets.UTF_8)) }
+            }
             if (connection.responseCode !in 200..299) {
                 throw java.io.IOException("HTTP ${connection.responseCode}")
             }

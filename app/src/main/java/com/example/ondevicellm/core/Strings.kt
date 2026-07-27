@@ -496,6 +496,9 @@ interface AppStrings {
     fun documentImages(count: Int): String
     fun documentUnreadablePages(count: Int): String
     fun documentAttachedNotice(name: String): String
+    /** Said in place of a code block when a reply is read aloud. */
+    val spokenCodeBlock: String
+    val nothingToSpeak: String
     val documentTextLayer: String
     val documentScanned: String
 
@@ -1143,6 +1146,8 @@ object EnglishStrings : AppStrings {
     override fun documentUnreadablePages(count: Int) = "$count pages could not be read"
     override fun documentAttachedNotice(name: String) =
         "Questions will now be answered from \"$name\"."
+    override val spokenCodeBlock = "a block of code"
+    override val nothingToSpeak = "There is nothing here to read aloud."
     override val documentTextLayer = "Text layer"
     override val documentScanned = "Scanned"
 
@@ -1793,6 +1798,8 @@ object ArabicStrings : AppStrings {
     override fun documentUnreadablePages(count: Int) = "تعذّرت قراءة $count صفحة"
     override fun documentAttachedNotice(name: String) =
         "ستُجاب الأسئلة الآن من «$name»."
+    override val spokenCodeBlock = "مقطع برمجي"
+    override val nothingToSpeak = "لا يوجد هنا ما يُقرأ بصوت."
     override val documentTextLayer = "طبقة نصية"
     override val documentScanned = "ممسوح ضوئيًا"
 

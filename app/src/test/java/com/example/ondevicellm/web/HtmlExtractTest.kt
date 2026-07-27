@@ -1,6 +1,7 @@
 package com.example.ondevicellm.web
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -101,6 +102,61 @@ class HtmlExtractTest {
         assertEquals(2, results.size)
         assertEquals("", results[0].snippet)
         assertEquals("Belongs to the second", results[1].snippet)
+    }
+
+    /**
+     * DuckDuckGo's lite frontend, verbatim in shape: single-quoted classes,
+     * and `href` written *before* `class`.
+     */
+    private val liteMarkup = """
+        <table>
+          <tr><td>1.&nbsp;</td><td>
+            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fa.example%2F1" class='result-link'>First lite result</a>
+          </td></tr>
+          <tr><td class='result-snippet'>Lite snippet one</td></tr>
+          <tr><td>2.&nbsp;</td><td>
+            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fb.example%2F2" class='result-link'>Second lite result</a>
+          </td></tr>
+          <tr><td class='result-snippet'>Lite snippet two</td></tr>
+        </table>
+    """.trimIndent()
+
+    @Test
+    fun `the lite frontend parses too`() {
+        // The old pattern required class before href and double quotes, and
+        // lite gives neither — so it matched nothing on a page full of results.
+        val results = HtmlExtract.parseDuckDuckGoResults(liteMarkup)
+        assertEquals(2, results.size)
+        assertEquals("First lite result", results[0].title)
+        assertEquals("https://a.example/1", results[0].url)
+        assertEquals("Lite snippet one", results[0].snippet)
+        assertEquals("Lite snippet two", results[1].snippet)
+    }
+
+    @Test
+    fun `attributes are read whatever they are quoted with`() {
+        assertEquals("x", HtmlExtract.attribute(" class=\"x\" ", "class"))
+        assertEquals("x", HtmlExtract.attribute(" class='x' ", "class"))
+        assertEquals("x", HtmlExtract.attribute(" class=x ", "class"))
+        assertNull(HtmlExtract.attribute(" id='y' ", "class"))
+    }
+
+    @Test
+    fun `attribute order does not matter`() {
+        val tag = """ rel="nofollow" href="https://a.example" class='result-link' """
+        assertEquals("https://a.example", HtmlExtract.attribute(tag, "href"))
+        assertTrue(HtmlExtract.hasClass(tag, listOf("result-link")))
+        assertFalse(HtmlExtract.hasClass(tag, listOf("result__snippet")))
+    }
+
+    @Test
+    fun `both endpoints carry the query and the region`() {
+        assertTrue(HtmlExtract.duckDuckGoLiteUrl("kotlin", "xa-ar").contains("lite.duckduckgo"))
+        assertTrue(HtmlExtract.duckDuckGoLiteUrl("kotlin", "xa-ar").contains("kl=xa-ar"))
+        val body = HtmlExtract.duckDuckGoFormBody("android 16", "xa-ar")
+        assertTrue(body.startsWith("q="))
+        assertTrue(body.contains("kl=xa-ar"))
+        assertFalse("a form body is not a query string", body.contains("?"))
     }
 
     @Test

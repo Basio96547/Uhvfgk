@@ -60,6 +60,34 @@ object Layout {
         navItemWidth(widthDp, tabs) >= TOUCH_TARGET_DP
 
     /**
+     * Room left for typing when the composer keeps its actions on the same
+     * row as the field.
+     *
+     * @param actionCount buttons sharing the row, including Send.
+     */
+    fun composerFieldWidth(widthDp: Int, actionCount: Int): Int {
+        val panel = widthDp - COMPOSER_OUTER_PADDING_DP * 2 - COMPOSER_PANEL_PADDING_DP * 2
+        return panel - actionCount * TOUCH_TARGET_DP - COMPOSER_FIELD_PADDING_DP * 2
+    }
+
+    /**
+     * Narrowest a text field can be and still be worth typing in.
+     *
+     * Below this an Arabic sentence scrolls after about twenty characters, so
+     * you cannot see what you wrote while writing it.
+     */
+    const val MIN_FIELD_DP = 220
+
+    /** True when the field still has room to type in at that many inline actions. */
+    fun composerFieldIsUsable(widthDp: Int, actionCount: Int): Boolean =
+        composerFieldWidth(widthDp, actionCount) >= MIN_FIELD_DP
+
+    /** Padding around the composer panel, and inside it. */
+    const val COMPOSER_OUTER_PADDING_DP = 12
+    const val COMPOSER_PANEL_PADDING_DP = 4
+    const val COMPOSER_FIELD_PADDING_DP = 8
+
+    /**
      * Widest a chat bubble may be.
      *
      * A proportion, not a constant: 340 dp was 83% of a 411 dp screen and 96%

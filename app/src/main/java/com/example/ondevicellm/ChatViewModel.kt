@@ -28,6 +28,7 @@ import com.example.ondevicellm.audio.ModelTtsSynthesizer
 import com.example.ondevicellm.audio.SpeechInput
 import com.example.ondevicellm.audio.SpeechOptions
 import com.example.ondevicellm.audio.SpeechSynthesizer
+import com.example.ondevicellm.audio.SpeechText
 import com.example.ondevicellm.audio.SynthesisResult
 import com.example.ondevicellm.audio.SystemTtsSynthesizer
 import com.example.ondevicellm.audio.WavWriter
@@ -519,7 +520,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Throwable) {
                 ErrorLog.report("Generation", "Generation failed", e)
                 appendDelta(replyId, "", "\n[error: ${e.message}]", done = true, epoch = epoch)
-                finishTurn(replyId, epoch)
+            } finally {
+                // However this turn ended — an answer, a throw, a tool loop
+                // that gave up — it is over. Any path that leaves isBusy set
+                // freezes the app with no way back short of killing it, and
+                // "it stopped suddenly" is exactly what that looks like.
+                if (epoch == replyGeneration && _uiState.value.isBusy) {
+                    finishTurn(replyId, epoch)
+                }
             }
         }
     }
@@ -952,7 +960,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         speak(messageId, text)
     }
 
-    private fun speak(messageId: Long, text: String) {
+    private fun speak(messageId: Long, rawText: String) {
+        // What the model wrote is Markdown, and a speech engine says all of it
+        // out loud: asterisks, bullets, brackets, the whole of a URL, every
+        // line of a code block. That is most of what "the voice is annoying
+        // and inaccurate" is — not the voice mispronouncing Arabic, but the
+        // voice pronouncing things nobody meant to be said.
+        val text = SpeechText.forSpeech(rawText, Localization.strings.spokenCodeBlock)
+        if (!SpeechText.hasSomethingToSay(text)) {
+            _uiState.update { it.copy(notice = Localization.strings.nothingToSpeak) }
+            return
+        }
+
         speakJob?.cancel()
         stopSpeaking()
 
@@ -1035,16 +1054,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 speakerId = registry.selectedTtsModel?.ttsSpeakerId ?: 0,
                 voiceName = current.systemVoiceName,
             )
+            val spoken = SpeechText.forSpeech(text, Localization.strings.spokenCodeBlock)
 
             val saved = when (current.ttsEngine) {
                 // The system engine writes its own WAV; everything else hands
                 // back samples, which is the same file one step later.
                 TtsEngine.SYSTEM ->
                     systemTts.prepare(current.systemVoiceEngine) &&
-                        systemTts.synthesizeToFile(text, options, target)
+                        systemTts.synthesizeToFile(spoken, options, target)
 
                 TtsEngine.MODEL, TtsEngine.CLOUD -> {
-                    when (val result = resolveSynthesizer()?.speak(text, options)) {
+                    when (val result = resolveSynthesizer()?.speak(spoken, options)) {
                         is SynthesisResult.Pcm -> {
                             WavWriter.write(target, result.samples, result.sampleRateHz)
                             true

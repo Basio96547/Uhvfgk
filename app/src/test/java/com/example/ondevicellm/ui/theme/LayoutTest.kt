@@ -1,5 +1,6 @@
 package com.example.ondevicellm.ui.theme
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,6 +70,35 @@ class LayoutTest {
     @Test
     fun `no tabs does not divide by zero`() {
         assertTrue(Layout.navPillPadding(411, 0) > 0)
+    }
+
+    // ---- the composer ------------------------------------------------------
+
+    @Test
+    fun `four actions on the field's own row leave it unusable`() {
+        // This is the bug the stacked composer exists for: four 48dp targets
+        // and their padding leave 171dp of a 411dp screen to type in.
+        val (w, _) = s25Ultra
+        assertEquals(171, Layout.composerFieldWidth(w, actionCount = 4))
+        assertFalse(Layout.composerFieldIsUsable(w, actionCount = 4))
+    }
+
+    @Test
+    fun `the field on its own row is usable on both reference sizes`() {
+        for ((w, _) in listOf(s25Ultra, smallPhone)) {
+            assertTrue("${w}dp", Layout.composerFieldIsUsable(w, actionCount = 0))
+        }
+    }
+
+    @Test
+    fun `more buttons never make the field wider`() {
+        val (w, _) = s25Ultra
+        var previous = Layout.composerFieldWidth(w, 0)
+        for (n in 1..4) {
+            val width = Layout.composerFieldWidth(w, n)
+            assertTrue("$n actions", width < previous)
+            previous = width
+        }
     }
 
     // ---- proportions, not constants ---------------------------------------

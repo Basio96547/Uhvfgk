@@ -803,7 +803,15 @@ private fun MessageInput(
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = Space.md, vertical = Space.md)
     ) {
-        Row(
+        // Field above, actions below.
+        //
+        // They shared one row until the fourth button went in, and the
+        // arithmetic is unforgiving: four 48dp targets and their padding leave
+        // 171dp of a 411dp screen to type in — about twenty Arabic characters
+        // before the text starts scrolling out of sight while you write it.
+        // Stacked, the field gets the whole 363dp and the buttons keep their
+        // full touch targets. See Layout.composerFieldWidth.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .panel(
@@ -811,35 +819,7 @@ private fun MessageInput(
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                 )
                 .padding(Space.xs),
-            verticalAlignment = Alignment.Bottom,
         ) {
-            // Web grounding is a per-question decision, so it belongs next to
-            // the question rather than buried in settings.
-            SearchToggle(enabled = searchEnabled, onClick = onToggleSearch)
-
-            // Where everyone looks for it. Opens the list rather than the file
-            // picker directly, because "which PDF am I asking about" is the
-            // question more often than "add another one".
-            AttachButton(onClick = onOpenDocuments)
-
-            if (viewModel.speechAvailable) {
-                MicButton(
-                    isListening = isListening,
-                    enabled = enabled || isListening,
-                    onClick = {
-                        if (isListening) {
-                            viewModel.stopListening()
-                        } else {
-                            val granted = ContextCompat.checkSelfPermission(
-                                context, Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (granted) viewModel.startListening()
-                            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                )
-            }
-
             // Borderless field: the surrounding panel already is the input.
             BareTextField(
                 value = text,
@@ -847,19 +827,53 @@ private fun MessageInput(
                 enabled = enabled,
                 placeholder = if (isListening) s.listening else s.askAnything,
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .padding(horizontal = Space.sm, vertical = 10.dp),
             )
 
-            SendButton(
-                enabled = enabled && text.isNotBlank(),
-                onClick = {
-                    if (text.isNotBlank()) {
-                        viewModel.sendMessage(text)
-                        text = ""
-                    }
-                },
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Web grounding is a per-question decision, so it belongs next
+                // to the question rather than buried in settings.
+                SearchToggle(enabled = searchEnabled, onClick = onToggleSearch)
+
+                // Where everyone looks for it. Opens the list rather than the
+                // file picker directly, because "which PDF am I asking about"
+                // is the question more often than "add another one".
+                AttachButton(onClick = onOpenDocuments)
+
+                if (viewModel.speechAvailable) {
+                    MicButton(
+                        isListening = isListening,
+                        enabled = enabled || isListening,
+                        onClick = {
+                            if (isListening) {
+                                viewModel.stopListening()
+                            } else {
+                                val granted = ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (granted) viewModel.startListening()
+                                else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
+                    )
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                SendButton(
+                    enabled = enabled && text.isNotBlank(),
+                    onClick = {
+                        if (text.isNotBlank()) {
+                            viewModel.sendMessage(text)
+                            text = ""
+                        }
+                    },
+                )
+            }
         }
     }
 }

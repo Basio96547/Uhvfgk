@@ -19,23 +19,80 @@ object HtmlExtract {
      *   Arabic query sent without it comes back ranked for an English-speaking
      *   audience, which is the wrong half of the web for the question asked.
      */
+    /** The endpoint on its own, for a form POST that carries the query in its body. */
+    const val DUCKDUCKGO_HTML_ENDPOINT = "https://html.duckduckgo.com/html/"
+
     fun duckDuckGoHtmlUrl(query: String, region: String = ""): String = buildString {
-        append("https://html.duckduckgo.com/html/?q=")
+        append(DUCKDUCKGO_HTML_ENDPOINT).append("?q=")
         append(SearchQuery.encode(query))
         if (region.isNotBlank()) append("&kl=").append(region)
     }
 
-    // Result anchors carry one of these classes depending on which frontend
-    // answered; both shapes are accepted so a change to one doesn't kill search.
-    private val RESULT_ANCHOR = Regex(
-        """<a[^>]*class="[^"]*result(?:__a|-link)[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>""",
+    /**
+     * The lite frontend, as a second try.
+     *
+     * Plainer markup, far less machinery in front of it, and it answers when
+     * the main HTML endpoint decides a request looks automated. Same parser:
+     * the class names differ but both are now handled.
+     */
+    const val DUCKDUCKGO_LITE_ENDPOINT = "https://lite.duckduckgo.com/lite/"
+
+    fun duckDuckGoLiteUrl(query: String, region: String = ""): String = buildString {
+        append(DUCKDUCKGO_LITE_ENDPOINT).append("?q=")
+        append(SearchQuery.encode(query))
+        if (region.isNotBlank()) append("&kl=").append(region)
+    }
+
+    /** Form body for a POST to either endpoint. */
+    fun duckDuckGoFormBody(query: String, region: String = ""): String = buildString {
+        append("q=").append(SearchQuery.encode(query))
+        if (region.isNotBlank()) append("&kl=").append(region)
+    }
+
+    /**
+     * Any anchor, and any cell that could be a snippet.
+     *
+     * Attributes are pulled out afterwards rather than matched inline. The
+     * previous pattern required `class` to come *before* `href` and both to be
+     * double-quoted — and DuckDuckGo's lite frontend writes
+     * `<a rel="nofollow" href="…" class='result-link'>`, which satisfies
+     * neither. It matched nothing there, which is one way search returns no
+     * results on a page full of them.
+     */
+    private val ANCHOR = Regex(
+        """<a\b([^>]*)>(.*?)</a>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
     )
 
-    private val SNIPPET = Regex(
-        """<(?:a|td)[^>]*class="[^"]*result(?:__snippet|-snippet)[^"]*"[^>]*>(.*?)</(?:a|td)>""",
+    private val SNIPPET_TAG = Regex(
+        """<(a|td)\b([^>]*)>(.*?)</\1>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
     )
+
+    /** Class names the organic result link has carried across frontends. */
+    private val RESULT_LINK_CLASSES = listOf("result__a", "result-link")
+
+    private val SNIPPET_CLASSES = listOf("result__snippet", "result-snippet")
+
+    /**
+     * One attribute's value, whatever it is quoted with — or not quoted at all.
+     */
+    internal fun attribute(tag: String, name: String): String? {
+        val pattern = Regex(
+            """\b$name\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))""",
+            RegexOption.IGNORE_CASE,
+        )
+        val match = pattern.find(tag) ?: return null
+        return (match.groupValues[2].takeIf { it.isNotEmpty() }
+            ?: match.groupValues[3].takeIf { it.isNotEmpty() }
+            ?: match.groupValues[4]).takeIf { it.isNotEmpty() }
+    }
+
+    /** True when the tag's class list contains any of [names]. */
+    internal fun hasClass(tag: String, names: List<String>): Boolean {
+        val classes = attribute(tag, "class") ?: return false
+        return names.any { classes.contains(it, ignoreCase = true) }
+    }
 
     private val SCRIPT_OR_STYLE = Regex(
         """<(script|style|noscript|svg)[^>]*>.*?</\1>""",
@@ -62,14 +119,20 @@ object HtmlExtract {
      * cannot drift that way.
      */
     fun parseDuckDuckGoResults(html: String, limit: Int = 6): List<SearchResult> {
-        val anchors = RESULT_ANCHOR.findAll(html).toList()
-        val snippets = SNIPPET.findAll(html).toList()
+        val anchors = ANCHOR.findAll(html)
+            .filter { hasClass(it.groupValues[1], RESULT_LINK_CLASSES) }
+            .toList()
+
+        val snippets = SNIPPET_TAG.findAll(html)
+            .filter { hasClass(it.groupValues[2], SNIPPET_CLASSES) }
+            .toList()
 
         val results = mutableListOf<SearchResult>()
         for ((index, match) in anchors.withIndex()) {
             if (results.size >= limit) break
 
-            val url = resolveUrl(match.groupValues[1]) ?: continue
+            val href = attribute(match.groupValues[1], "href") ?: continue
+            val url = resolveUrl(href) ?: continue
             val title = toPlainText(match.groupValues[2])
             if (title.isBlank()) continue
 
@@ -77,7 +140,7 @@ object HtmlExtract {
             val blockEnd = anchors.getOrNull(index + 1)?.range?.first ?: html.length
             val snippet = snippets
                 .firstOrNull { it.range.first in (match.range.last + 1) until blockEnd }
-                ?.let { toPlainText(it.groupValues[1]) }
+                ?.let { toPlainText(it.groupValues[3]) }
                 .orEmpty()
 
             results += SearchResult(

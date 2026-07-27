@@ -53,6 +53,7 @@ SOURCES=(
     app/src/main/java/com/example/ondevicellm/ui/theme/Layout.kt
     app/src/main/java/com/example/ondevicellm/audio/VoicePicker.kt
     app/src/main/java/com/example/ondevicellm/audio/CloudTts.kt
+    app/src/main/java/com/example/ondevicellm/audio/SpeechText.kt
     app/src/main/java/com/example/ondevicellm/agent/MiniJson.kt
     app/src/main/java/com/example/ondevicellm/agent/AgentTool.kt
     app/src/main/java/com/example/ondevicellm/agent/ToolCallParser.kt
@@ -77,6 +78,7 @@ SOURCES=(
     app/src/test/java/com/example/ondevicellm/ui/theme/LayoutTest.kt
     app/src/test/java/com/example/ondevicellm/audio/VoicePickerTest.kt
     app/src/test/java/com/example/ondevicellm/audio/CloudTtsTest.kt
+    app/src/test/java/com/example/ondevicellm/audio/SpeechTextTest.kt
     app/src/test/java/com/example/ondevicellm/agent/MiniJsonTest.kt
     app/src/test/java/com/example/ondevicellm/agent/ToolCallParserTest.kt
     app/src/test/java/com/example/ondevicellm/agent/ToolPromptTest.kt
@@ -101,6 +103,7 @@ CLASSES=(
     com.example.ondevicellm.ui.theme.LayoutTest
     com.example.ondevicellm.audio.VoicePickerTest
     com.example.ondevicellm.audio.CloudTtsTest
+    com.example.ondevicellm.audio.SpeechTextTest
     com.example.ondevicellm.agent.MiniJsonTest
     com.example.ondevicellm.agent.ToolCallParserTest
     com.example.ondevicellm.agent.ToolPromptTest

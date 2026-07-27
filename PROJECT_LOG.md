@@ -538,6 +538,49 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 12 — 2026-07-27 · the first real device report since session 2
+
+65. **The composer had 171dp to type in, and I did that.** Adding the attach
+    button made four 48dp targets share one row with the field: on a 411dp
+    screen that leaves 171dp, about twenty Arabic characters before the text
+    scrolls out from under you while you write. Field on its own row, actions
+    beneath — 363dp. `Layout.composerFieldWidth` and its test pin the number so
+    the next button cannot quietly take it back.
+
+66. **The navigation bar sat between the composer and the keyboard.** The root
+    already applies `imePadding`, so the bar was squeezed into the little
+    vertical room left on the one screen where every line counts. Hidden while
+    the keyboard is open.
+
+67. **The speech engine was reading Markdown out loud.** This is most of what
+    "the Arabic voice is annoying and inaccurate" actually is — not the voice
+    mispronouncing Arabic, but the voice pronouncing `**` as "نجمة نجمة",
+    spelling out every character of a URL, reading `[صفحة 3]` as brackets, and
+    narrating a whole code block. `SpeechText` strips all of it, keeps Arabic
+    punctuation because it is heard as pauses, and says "مقطع برمجي" in place
+    of code rather than silence. 15 tests, each one something that was being
+    said aloud.
+
+68. **The result parser could not read DuckDuckGo's lite frontend at all.** The
+    pattern required `class` before `href` and both double-quoted; lite writes
+    `<a rel="nofollow" href="…" class='result-link'>` — neither. It matched
+    nothing on a page full of results. Attributes are now parsed properly,
+    order and quote style irrelevant.
+
+69. **Search asks three ways and says why when all three fail.** POST to the
+    HTML endpoint first, because a form post is what a browser sends and a bare
+    GET is what a scraper sends; then GET; then lite. A page that fetches fine
+    and parses to zero results now records its size and its opening in the
+    diagnostics log — a challenge page and moved markup look identical from
+    here otherwise.
+
+70. **A turn can no longer leave the UI stuck busy.** Every path out of
+    `sendMessage` now clears the flag in a `finally`. "It stopped suddenly" is
+    exactly what a stuck `isBusy` looks like, and it needed the app killed to
+    recover.
+
+---
+
 ### Session 11 — 2026-07-27 · reading PDFs
 
 57. **The text layer first, and only then the pixels.** PDFBox pulls the text

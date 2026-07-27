@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -211,10 +214,16 @@ private fun AppContent(viewModel: ChatViewModel) {
                 }
             }
 
-            BottomBar(
-                selected = destination,
-                onSelect = { destination = it },
-            )
+            // Hidden while the keyboard is up. The root already applies
+            // imePadding, so the bar would otherwise sit squeezed between the
+            // composer and the keyboard, taking about seventy dp of the little
+            // vertical room left — on the one screen where every line counts.
+            if (!isKeyboardOpen()) {
+                BottomBar(
+                    selected = destination,
+                    onSelect = { destination = it },
+                )
+            }
         }
     }
 
@@ -222,6 +231,11 @@ private fun AppContent(viewModel: ChatViewModel) {
         DiagnosticsDialog(onDismiss = { showDiagnostics = false })
     }
 }
+
+/** True while the soft keyboard is showing. */
+@Composable
+private fun isKeyboardOpen(): Boolean =
+    WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
 @Composable
 private fun AppHeader(
