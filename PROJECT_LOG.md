@@ -78,7 +78,10 @@ tests" but unproven in practice.
 | 28 | `063f1b5` | ✅ cloud voice + engine-picker fixes |
 | 29 | `3c85d15` | ✅ terminal, tools, four bug fixes |
 | 30 | `1197a58` | ✅ |
-| 31 | `2c35971` | ✅ current — PDF reading; PDFBox resolves and links |
+| 31 | `2c35971` | ✅ PDF reading; PDFBox resolves and links |
+| 32 | `5d74ea9` | ✅ |
+| 33 | `8626c45` | ✅ device fixes: composer, spoken text, search |
+| 34 | `36822ad` | ✅ current — **OpenCL cross-compiles**; APK 52.4 → 54.9 MB |
 
 Runs 13 and 14 are worth keeping in view: both were caused by the local checks
 being *weaker* than CI, not by the code being wrong in some subtle way. A brace
@@ -584,7 +587,12 @@ layouts should be tuned for that screen.
     between the other's `directory(workingDirectory)` and its `start()`,
     launching a process somewhere nobody asked for. Serialised with a mutex.
 
-77. **A failed import left an empty directory behind for ever.** Asking for the
+77. **CI run 34 proves the OpenCL build.** Not by its green tick alone — the
+    APK went from 52.4 MB to 54.9 MB, and 2.5 MB is the size of the backend
+    plus its embedded Adreno kernels. A silently skipped `if` would have
+    changed nothing.
+
+78. **A failed import left an empty directory behind for ever.** Asking for the
     target path creates the directory as a side effect, and the `null` stream
     path returned before the cleanup that only ran on a thrown exception.
 
