@@ -232,16 +232,46 @@ produces evidence instead of impressions.
 
 ---
 
-## 4. NPU — say what is true, and leave the door open
+## 4. NPU — this changed, and the old entry here was wrong
 
-Running an LLM on the Hexagon NPU needs Qualcomm's QNN/Genie runtime and a
-model recompiled into a QNN context binary for that exact Hexagon version.
-Neither is a Maven dependency, and the model artifact is not interchangeable
-with GGUF.
+**What this section used to say:** that running an LLM on the Hexagon NPU needs
+Qualcomm's QNN/Genie runtime and a model recompiled into a QNN context binary
+for that exact Hexagon version, that GGUF is not interchangeable with that
+artifact, and that it was therefore not on the near list.
 
-This is not on the near list. `NpuRuntime` is the integration point and the UI
-already refuses to pretend. That is the correct state until the SDK is
-actually in hand.
+**That is now out of date.** llama.cpp has a `GGML_HEXAGON` backend that runs
+**GGUF directly** on the Hexagon NPU over FastRPC — no conversion, no QNN
+context binary, no separate model file. Verified by reading
+`ggml/src/ggml-hexagon/` on master rather than from memory.
+
+### What it actually requires
+
+1. **The Hexagon SDK.** `ggml/src/ggml-hexagon/CMakeLists.txt` opens with a
+   `FATAL_ERROR` if `HEXAGON_SDK_ROOT` is not a directory. The SDK is a
+   registration-walled Qualcomm download of several gigabytes whose licence
+   does not allow redistribution — so it cannot be fetched in CI, and CI is the
+   only place this project has ever produced a working build.
+2. **A second toolchain.** The backend cross-compiles a DSP "skel"
+   (`libggml-htp`) with the Hexagon compiler, which is not the Android NDK.
+   Two cross-compiles in one build, targeting two different processors.
+3. **Signing.** There is a `HEXAGON_HTP_CERT` option for signing the HTP
+   library. A retail, non-rooted phone will not load an unsigned library onto
+   the DSP. This is the part that could make the whole thing moot on a shop
+   handset even after the first two are solved.
+
+### What it would buy, and for which models
+
+Supported weight types are narrow — `Q4_0`, `Q4_1`, `Q8_0`, `IQ4_NL`, `MXFP4`.
+**Not `Q4_K_M` or `Q6_K`**, which is what most GGUF downloads are. Worth noting
+for this project specifically: the model this app has actually been run with is
+`Qwen3-4B-Q8_0`, which *is* on that list.
+
+### Where this leaves it
+
+Blocked on item 1, and that is a licence and distribution problem rather than
+an engineering one. The honest position: it is possible, it is no longer
+"needs a different model format", and it cannot be built from here. `NpuRuntime`
+stays as the integration point and the UI keeps refusing to pretend.
 
 ---
 
@@ -257,7 +287,8 @@ actually in hand.
    human", so the cloud stops being the only good option.
 7. **Offline Arabic OCR** — Tesseract via JitPack plus `ara.traineddata`, so
    reading a scanned Arabic page stops costing a key and a connection.
-8. **QNN/NPU** — only with the SDK in hand.
+8. **Hexagon NPU via `GGML_HEXAGON`** — only with the Hexagon SDK in hand, and
+   only if a retail device will load the signed skel. See 4.
 
 ## What will not be claimed
 
