@@ -24,7 +24,8 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 
 | Area | State |
 |---|---|
-| Kotlin/Compose app | ✅ Compiles, APK built and published |
+| Kotlin/Compose app | ✅ Compiles, APK built and published — **and CI is watched now**: runs 43–48 failed unnoticed for a day |
+| APK size | ✅ **Measured**: 52.3 → 32.1 MiB with R8 shrinking (54,874,191 → 33,671,348 bytes) |
 | Unit tests | ✅ Passing in CI |
 | MediaPipe `.task` path | ✅ Compiles against the real AAR in CI — **never run against a real model** |
 | TTS model path | ⚠️ Tensor handling rewritten for real VITS/Piper layouts — **untested against an actual voice model** |
@@ -608,6 +609,10 @@ layouts should be tuned for that screen.
      `Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel`. Let R8 rename that
      class and the build compiles, installs, and fails every native call at
      runtime. `-dontobfuscate` is correctness here, not caution.
+
+     Measured, once run 53 finally went green: **54,874,191 → 33,671,348
+     bytes**, 52.3 MiB down to 32.1. Thirty-nine per cent, without renaming a
+     single class.
 
 111. **`TurnMetrics` — the app measures itself now.** Every performance claim
      in this project has been hedged with "never measured on a device", and
