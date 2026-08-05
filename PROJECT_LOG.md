@@ -569,7 +569,7 @@ layouts should be tuned for that screen.
      `assets/fonts/`, which still ships it — the licence has to travel with
      the font.
 
-109. **`tools/check-calls.sh`, because the gap was structural.**
+109. **`tools/check-refs.sh`, because the gap was structural.**
      `check-syntax.sh` only parses, so a wrong parameter name looks perfect to
      it. `run-tests.sh` compiles for real but cannot touch a file importing
      `androidx`, which is every file the bug lived in. Between them there was
@@ -581,6 +581,14 @@ layouts should be tuned for that screen.
      because guessing about Compose's overloads would produce noise instead of
      findings. Verified against the bug itself: with the old `SectionCard`
      restored it names `SettingsScreen.kt:96`, `:97` and `:98`.
+
+     It grew a second check the moment a second build failed the same way.
+     `ChatMessage` and `Author` moved to `com.basel.ai.chat` so the pure
+     harness could reach them, and `ChatScreen.kt` went on importing
+     `com.basel.ai.ChatMessage` — a stale import that parses perfectly and
+     lives in a file the harness never compiles. Every `com.basel.ai` import
+     is now checked against what the repository actually declares, and the
+     report says where the symbol really is.
 
 110. **R8 turned on, with `-dontobfuscate`.** 55 MB stopped being an
      abstraction the day it failed to download twice. Almost all of it is code
@@ -1211,10 +1219,11 @@ design choices):
 layer against real llama.cpp on the host. Run this before bumping
 `LLAMA_CPP_TAG`; it catches API drift in one step instead of a CI round trip.
 
-**Named arguments** — `tools/check-calls.sh`. Checks every named argument
-passed to a function this repo declares against that function's parameters.
-Catches the mistake that cost five CI builds: a call site using a parameter
-that does not exist, which parses fine and is invisible to every other check.
+**References** — `tools/check-refs.sh`. Two checks, no JDK or SDK needed:
+every named argument matches a parameter the function has, and every
+`com.basel.ai` import names something that exists. Between them these are the
+mistakes that cost six CI builds — both parse perfectly, and both are
+invisible to the pure test harness because it never compiles those files.
 
 **Full build** — push; CI runs tests, builds the APK, publishes the release.
 **Watch the run.** Runs 43–48 all failed and nobody looked for a full day of

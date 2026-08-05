@@ -89,8 +89,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.basel.ai.Author
-import com.basel.ai.ChatMessage
+import com.basel.ai.chat.Author
+import com.basel.ai.chat.ChatMessage
 import com.basel.ai.ChatViewModel
 import com.basel.ai.ModelStatus
 import com.basel.ai.agent.ToolRun

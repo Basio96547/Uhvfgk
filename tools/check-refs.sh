@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #
-# Checks that every named argument passed to one of *this project's own*
-# functions is a parameter that function actually has.
+# Two cheap checks against this project's own code, neither of which needs a
+# JDK, the Android SDK, or the network:
+#
+#   1. every named argument passed to a function declared here is a parameter
+#      that function actually has;
+#   2. every `import com.basel.ai....` names something that exists.
 #
 # Why this exists: the settings page called SectionCard with expanded=,
 # onToggle= and summary= at thirteen sites. SectionCard had none of them. The
@@ -11,12 +15,16 @@
 # nothing wrong — it only parses — and run-tests.sh can't touch a file that
 # imports androidx. Five CI builds failed before anyone looked.
 #
-# This is deliberately narrow. It does not type-check, it does not resolve
-# positional arguments, and it ignores every function it did not find declared
-# in this repository. It answers one question: did I pass a parameter name that
-# doesn't exist? That is the mistake that cost the five builds.
+# The second check earns its place the same way. ChatMessage moved to the
+# com.basel.ai.chat package so the pure test harness could reach it, and
+# ChatScreen kept importing com.basel.ai.ChatMessage. A stale import parses
+# perfectly and the harness never compiles that file, so it too reached CI.
 #
-# Usage:  tools/check-calls.sh
+# Both are deliberately narrow. Neither type-checks, and anything not declared
+# in this repository is ignored — guessing about Compose's overloads or
+# androidx's package layout would produce noise rather than findings.
+#
+# Usage:  tools/check-refs.sh
 # Needs:  python3. No JDK, no network, no Android SDK.
 
 set -uo pipefail
@@ -129,11 +137,69 @@ for path, text in sources.items():
                      sorted(declared[fn]))
                 )
 
-print(f"==> checking named arguments against {len(declared)} declarations "
-      f"in {len(files)} files")
+# ---- what this project imports -------------------------------------------
+# Every name declared in each package, nested ones included, so that an import
+# of an enum entry or a nested interface resolves like any other.
+in_package = {}
+for path, text in sources.items():
+    pm = re.search(rf"^package\s+([\w.]+)", text, re.MULTILINE)
+    if not pm:
+        continue
+    pkg = pm.group(1)
+    names = in_package.setdefault(pkg, set())
+    for dm in re.finditer(
+        rf"\b(?:class|interface|object|enum\s+class|annotation\s+class|typealias|fun|val|var)\s+"
+        # An optional generic parameter list, then an optional receiver type:
+        # `fun Long.formatBytes()` declares formatBytes, not Long.
+        rf"(?:<[^>]*>\s*)?(?:[\w.<>?,\s]+\.)?({NAME})", text
+    ):
+        names.add(dm.group(1))
+    # Enum entries: the first line of an `enum class X { A, B }` body.
+    for em in re.finditer(rf"\benum\s+class\s+{NAME}[^{{]*\{{([^}}]*)\}}", text):
+        for entry in em.group(1).split(","):
+            entry = entry.strip().split("(")[0].strip()
+            if re.fullmatch(NAME, entry):
+                names.add(entry)
 
-if not problems:
-    print(">>> EVERY NAMED ARGUMENT EXISTS")
+OWN = "com.basel.ai"
+bad_imports = []
+for path, text in sources.items():
+    for im in re.finditer(r"^import\s+([\w.]+)(?:\s+as\s+\w+)?\s*$", text, re.MULTILINE):
+        fqn = im.group(1)
+        if not fqn.startswith(OWN + "."):
+            continue
+        # R and BuildConfig are generated at build time; there is no source
+        # file here to find them in.
+        if fqn.split(".")[-1] in ("R", "BuildConfig") or ".R." in fqn:
+            continue
+        parts = fqn.split(".")
+        # Longest prefix that is a package we actually have; the next segment
+        # then has to be a name declared in it.
+        pkg_len = max(
+            (i for i in range(1, len(parts)) if ".".join(parts[:i]) in in_package),
+            default=0,
+        )
+        if pkg_len == 0:
+            reason = "no such package"
+        elif parts[pkg_len] in in_package[".".join(parts[:pkg_len])]:
+            continue
+        else:
+            pkg = ".".join(parts[:pkg_len])
+            where = sorted(p for p, n in in_package.items() if parts[pkg_len] in n)
+            reason = f"not in {pkg}"
+            if where:
+                reason += f" — it is in {where[0]}"
+        line = text.count("\n", 0, im.start()) + 1
+        bad_imports.append((path.relative_to(root), line, fqn, reason))
+
+print(f"==> checking named arguments against {len(declared)} declarations "
+      f"in {len(files)} files, and every {OWN} import")
+
+for rel, line, fqn, reason in bad_imports:
+    print(f"{rel}:{line}: import {fqn} — {reason}")
+
+if not problems and not bad_imports:
+    print(">>> EVERY NAMED ARGUMENT AND IMPORT RESOLVES")
     sys.exit(0)
 
 seen = set()
@@ -144,6 +210,6 @@ for rel, line, fn, arg, params in problems:
     seen.add(key)
     print(f"{rel}:{line}: {fn} has no parameter '{arg}'")
     print(f"    it takes: {', '.join(params) or '(nothing)'}")
-print(f">>> {len(seen)} bad argument name(s)")
+print(f">>> {len(seen)} bad argument name(s), {len(bad_imports)} bad import(s)")
 sys.exit(1)
 PY

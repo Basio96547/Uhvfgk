@@ -38,11 +38,12 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # Costs a second and catches the mistake that broke five builds: a call
-      # site passing a parameter the function doesn't have. Runs before Gradle
-      # so the answer arrives in seconds rather than two minutes.
-      - name: Check named arguments
-        run: ./tools/check-calls.sh
+      # Costs a second and catches two mistakes that between them broke six
+      # builds: a call site passing a parameter the function doesn't have, and
+      # an import naming a class that isn't there. Runs before Gradle so the
+      # answer arrives in seconds rather than two minutes.
+      - name: Check references
+        run: ./tools/check-refs.sh
 
       # Every Gradle step below funnels through the same shape: capture the
       # output, and on failure print *just* the errors as the last thing in the
@@ -53,11 +54,15 @@ jobs:
       # executing a task rather than of anything wrong with this code. Reading a
       # failure meant paging back through all of it. Now the last lines of a
       # failed job are the errors themselves.
+      # The `if` matters: these steps run under `bash -e`, and a bare
+      # `cmd || { report; }` still exits on the failure before the report can
+      # print. Putting the command in a condition is what makes the summary
+      # below reachable at all.
       - name: Run unit tests
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew testDebugUnitTest 2>&1 | tee /tmp/tests.log && exit 0
+          if ./gradlew testDebugUnitTest 2>&1 | tee /tmp/tests.log; then exit 0; fi
           echo "::error::unit tests failed — errors follow"
           echo "----------------------------- errors -----------------------------"
           grep -E "^e: |^\s+> There were failing tests|FAILED$" /tmp/tests.log | head -60
@@ -74,7 +79,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew assembleRelease 2>&1 | tee /tmp/build.log && exit 0
+          if ./gradlew assembleRelease 2>&1 | tee /tmp/build.log; then exit 0; fi
           echo "::error::APK build failed — errors follow"
           echo "----------------------------- errors -----------------------------"
           grep -E "^e: |^ERROR:|error: |Caused by: |^\s+> " /tmp/build.log | head -60
