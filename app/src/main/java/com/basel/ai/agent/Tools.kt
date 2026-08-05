@@ -3,7 +3,6 @@ package com.basel.ai.agent
 import com.basel.ai.core.AppStrings
 import com.basel.ai.core.DeviceSnapshot
 import com.basel.ai.terminal.Shell
-import com.basel.ai.terminal.TerminalSession
 import com.basel.ai.web.SearchDepth
 import com.basel.ai.web.SearchQuery
 import com.basel.ai.web.WebSearchService
@@ -36,12 +35,14 @@ import java.util.Locale
 /**
  * Runs a command.
  *
- * The broadest skill and the one with the real teeth, so it is also the one
- * with a policy in front of it and a visible log behind it: every command the
- * model runs appears on the terminal page, marked as the model's.
+ * The broadest skill and the one with the real teeth, so it has a policy in
+ * front of it and a visible record behind it: every command shows up in the
+ * conversation, under the reply it was run for. There is no terminal page —
+ * this is the model's tool, and what it did belongs next to what it said
+ * rather than on a screen nobody opens.
  */
 class ShellTool(
-    private val session: TerminalSession,
+    private val shell: Shell,
     private val strings: () -> AppStrings,
     /** Whether a command of this risk may run without asking. */
     private val permit: (CommandRisk) -> Boolean,
@@ -63,20 +64,12 @@ class ShellTool(
             ?: call.arg("value")
             ?: return ToolResult.failed(s.toolMissingArg("command"))
 
-        CommandPolicy.refusal(command, s)?.let {
-            session.recordAgentRefusal(command, it)
-            return ToolResult.failed(it)
-        }
+        CommandPolicy.refusal(command, s)?.let { return ToolResult.failed(it) }
 
         val risk = CommandPolicy.classify(command)
-        if (!permit(risk)) {
-            val reason = s.toolNotPermitted(risk.name.lowercase())
-            session.recordAgentRefusal(command, reason)
-            return ToolResult.failed(reason)
-        }
+        if (!permit(risk)) return ToolResult.failed(s.toolNotPermitted(risk.name.lowercase()))
 
-        val result = session.shell.run(command)
-        session.recordAgentRun(command, result)
+        val result = shell.run(command)
 
         val body = buildString {
             appendLine("exit ${result.exitCode}")

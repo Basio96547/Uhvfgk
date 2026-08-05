@@ -408,20 +408,11 @@ interface AppStrings {
 
 
     // ------------------------------------------------------ terminal & tools
-    val navTerminal: String
-    val terminalSubtitle: String
-    val terminalHint: String
-    val terminalClear: String
-    val terminalRun: String
-    val terminalEmpty: String
-    val terminalWorkspaceNote: String
     val terminalLimitsNote: String
     val terminalEmptyCommand: String
     val terminalRefused: String
     val terminalTimedOut: String
     val terminalTruncated: String
-    val terminalCouldNotStart: String
-    fun terminalExitCode(code: Int): String
 
     /** How the model is told to call a tool. Generated from the live registry. */
     val toolsHeader: String
@@ -1087,15 +1078,13 @@ object EnglishStrings : AppStrings {
             "Apply this change and return the whole updated file:\n\n$request"
 
 
-    override val navTerminal = "Terminal"
-    override val terminalSubtitle = "A real shell, and what the model runs in it"
-    override val terminalHint = "Type a command"
-    override val terminalClear = "Clear"
-    override val terminalRun = "Run"
-    override val terminalEmpty = "Nothing has run yet. Try `ls`, `getprop ro.product.model`, " +
-        "or `cat /proc/cpuinfo`."
-    override val terminalWorkspaceNote = "Commands run in this app's private workspace, as this " +
-        "app's user. `cd` is remembered between commands; nothing else is."
+
+
+
+
+
+
+
     override val terminalLimitsNote = "No root, and Android's toybox rather than GNU tools — so " +
         "no bash, python, curl or git unless you installed one, and some flags differ. " +
         "`pm`, `settings` and most of `dumpsys` will answer permission denied. That is Android, " +
@@ -1105,8 +1094,7 @@ object EnglishStrings : AppStrings {
         "with no undo. It is the one short list the terminal will not run."
     override val terminalTimedOut = "Stopped: took too long."
     override val terminalTruncated = "Output was cut — too long to keep."
-    override val terminalCouldNotStart = "Could not start that command."
-    override fun terminalExitCode(code: Int) = "Finished with exit code $code and no output."
+
 
     override val toolsHeader = "You can use tools. When a tool answers better than guessing, " +
         "emit exactly one call, alone, with no other text:"
@@ -1814,15 +1802,13 @@ object ArabicStrings : AppStrings {
             "طبّق هذا التغيير وأعد الملف كاملًا:\n\n$request"
 
 
-    override val navTerminal = "الطرفية"
-    override val terminalSubtitle = "طرفية حقيقية، وما ينفّذه النموذج فيها"
-    override val terminalHint = "اكتب أمرًا"
-    override val terminalClear = "مسح"
-    override val terminalRun = "نفّذ"
-    override val terminalEmpty = "لم يُنفَّذ شيء بعد. جرّب `ls` أو `getprop ro.product.model` " +
-        "أو `cat /proc/cpuinfo`."
-    override val terminalWorkspaceNote = "تُنفَّذ الأوامر في مساحة هذا التطبيق الخاصة، وبصلاحية " +
-        "مستخدمه. الأمر `cd` يُحفظ بين الأوامر، وما عداه لا."
+
+
+
+
+
+
+
     override val terminalLimitsNote = "لا صلاحية جذر، وأدوات أندرويد (toybox) لا أدوات جنو — " +
         "فلا bash ولا python ولا curl ولا git ما لم تُثبّتها، وبعض الخيارات مختلفة. " +
         "و`pm` و`settings` ومعظم `dumpsys` سترد برفض الصلاحية. هذا سلوك أندرويد، لا نقص هنا."
@@ -1831,8 +1817,7 @@ object ArabicStrings : AppStrings {
         "وهي القائمة القصيرة الوحيدة التي لا تنفّذها الطرفية."
     override val terminalTimedOut = "أُوقف: استغرق وقتًا طويلًا."
     override val terminalTruncated = "قُطع الخرج — أطول من أن يُحفظ."
-    override val terminalCouldNotStart = "تعذّر تشغيل هذا الأمر."
-    override fun terminalExitCode(code: Int) = "انتهى برمز خروج $code وبلا خرج."
+
 
     override val toolsHeader = "لديك أدوات. حين تكون الأداة أفضل من التخمين، أصدر نداءً " +
         "واحدًا فقط، وحده، بلا أي نص آخر:"

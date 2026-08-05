@@ -38,7 +38,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
 | Studio | ✅ Builds and ships; extractor covered by 13 tests — **no page has ever been generated or rendered** |
 | Cloud voice (Azure / ElevenLabs) | ⚠️ Request building covered by 17 tests — **no request has ever been sent; no key exists here** |
-| Terminal | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device** |
+| Terminal (the model's tool) | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device**. No user-facing page: what it ran shows in the chat |
 | Tools / skills | ⚠️ Parser covered by 19 tests against real model output shapes — **no model has ever called one** |
 | PDF reading | ⚠️ Chunking, selection, quality checks and page ranges covered by 52 tests — **no PDF has been opened here** |
 | Arabic OCR | ⚠️ Cloud only, and the UI says so. **No offline option exists** — see PLAN 2f |
@@ -540,6 +540,31 @@ layouts should be tuned for that screen.
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
+
+### Session 17 — 2026-07-27 · the terminal is the model's, not a page
+
+91. **Deleted the Terminal tab.** It was built as a screen you open and type
+    into, and that was a misreading: the shell is a *tool the model uses*, not
+    a feature anyone wants to operate by hand on a phone. So the page is gone,
+    the sixth navigation tab with it, and `TerminalSession` — which existed
+    only to hold scrollback for that page — with both.
+
+92. **What it ran moved into the conversation, which is where it belongs.** A
+    command run on this phone is part of the reply it produced. Each tool call
+    appears above the answer it fed, collapsed to one line — `shell  ls -la` —
+    and opens to show what came back. Forced left-to-right and monospaced, for
+    the same reason the terminal page was: a mirrored `ls -la` is unreadable.
+
+    This is better than the page it replaces, not merely smaller. A log on a
+    screen nobody opens is not transparency; a line under the answer is.
+
+93. **Nine strings went with it.** `navTerminal`, `terminalHint`,
+    `terminalRun`, `terminalEmpty` and the rest existed only for that page. The
+    ones still doing work — the refusal, the timeout, the truncation notice,
+    the honest note about no root and toybox — stayed, because they belong to
+    the shell rather than to the screen.
+
+---
 
 ### Session 16 — 2026-07-27 · design: the parts that were actually wrong
 

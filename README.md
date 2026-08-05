@@ -250,7 +250,7 @@ platform API with no dependency at all.
 
 ```
 app/src/main/java/com/basel/ai/
-├── MainActivity.kt           Bottom-nav shell (Chat / Studio / Terminal / Models / Device / Settings)
+├── MainActivity.kt           Bottom-nav shell (Chat / Studio / Models / Device / Settings)
 ├── ChatViewModel.kt          App state: models, chat, voice, memory
 ├── core/
 │   ├── DeviceCapabilities.kt SoC + accelerator probing, /proc/meminfo & RAM Plus
@@ -282,8 +282,7 @@ app/src/main/java/com/basel/ai/
 │   ├── CloudOcr.kt           Cloud Vision request building and response reading
 │   └── TextRecognizer.kt     Recognizer contract + the cloud implementation
 ├── terminal/
-│   ├── Shell.kt              Real command execution, app sandbox, no root
-│   └── TerminalSession.kt    Scrollback shared by the page and the shell tool
+│   └── Shell.kt              Real command execution for the model's shell tool
 ├── audio/
 │   ├── SpeechInput.kt        Speech-to-text + AudioTranscriber hook
 │   ├── SpeechSynthesizer.kt  Text-to-speech contract (options, results)

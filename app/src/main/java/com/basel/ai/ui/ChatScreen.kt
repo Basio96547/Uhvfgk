@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,24 +30,25 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -56,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,12 +72,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,15 +88,16 @@ import com.basel.ai.Author
 import com.basel.ai.ChatMessage
 import com.basel.ai.ChatViewModel
 import com.basel.ai.ModelStatus
+import com.basel.ai.agent.ToolRun
 import com.basel.ai.core.AppStrings
 import com.basel.ai.core.ThermalLevel
 import com.basel.ai.llm.QueryKind
 import com.basel.ai.llm.RoutingDecision
-import com.basel.ai.web.SearchSource
 import com.basel.ai.ui.theme.Gradients
 import com.basel.ai.ui.theme.Layout
 import com.basel.ai.ui.theme.Space
 import com.basel.ai.ui.theme.panel
+import com.basel.ai.web.SearchSource
 
 @Composable
 fun ChatScreen(
@@ -505,6 +512,13 @@ private fun MessageRow(
                 Spacer(Modifier.height(Space.sm))
             }
 
+            // Above the answer, not below it: these happened first, and the
+            // reply is written from what they returned.
+            if (message.toolRuns.isNotEmpty()) {
+                ToolRunList(message.toolRuns)
+                Spacer(Modifier.height(Space.sm))
+            }
+
             Bubble(message = message, isUser = isUser)
 
             if (message.sources.isNotEmpty()) {
@@ -562,6 +576,92 @@ private fun routingLine(decision: RoutingDecision, s: AppStrings): String {
 }
 
 /** Numbered, tappable citations matching the [1], [2] markers in the answer. */
+/**
+ * What the model did to answer, in the conversation.
+ *
+ * There is no terminal page, deliberately — a command run on this phone is
+ * part of the reply it produced, and a log on a screen nobody opens is not
+ * transparency. Collapsed to one line each, because most of the time knowing
+ * *that* it ran `ls` is enough; tap to see what came back.
+ */
+@Composable
+private fun ToolRunList(runs: List<ToolRun>) {
+    Column(Modifier.fillMaxWidth()) {
+        runs.forEach { run ->
+            var open by remember(run) { mutableStateOf(false) }
+            val accent = if (run.ok) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Space.xs)
+                    .panel(
+                        shape = MaterialTheme.shapes.small,
+                        color = accent.copy(alpha = 0.07f),
+                    )
+                    .clickable { open = !open }
+                    .padding(horizontal = Space.md, vertical = Space.sm)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (run.ok) Icons.Filled.Bolt else Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = accent,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        run.tool,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                    )
+                    if (run.detail.isNotBlank()) {
+                        Spacer(Modifier.width(Space.sm))
+                        // Monospace and left-to-right: a command is not prose,
+                        // and mirroring `ls -la` makes it unreadable.
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides LayoutDirection.Ltr
+                        ) {
+                            Text(
+                                run.detail,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+                AnimatedVisibility(visible = open) {
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Ltr
+                    ) {
+                        Text(
+                            run.output.ifBlank { "—" },
+                            modifier = Modifier
+                                .padding(top = Space.sm)
+                                .horizontalScroll(rememberScrollState()),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            softWrap = false,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SourceList(sources: List<SearchSource>) {
     val uriHandler = LocalUriHandler.current

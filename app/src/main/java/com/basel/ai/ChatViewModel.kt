@@ -19,6 +19,7 @@ import com.basel.ai.agent.ToolCallParser
 import com.basel.ai.agent.ToolPrompt
 import com.basel.ai.agent.ToolRegistry
 import com.basel.ai.agent.ToolResult
+import com.basel.ai.agent.ToolRun
 import com.basel.ai.agent.WebSearchTool
 import com.basel.ai.agent.WriteFileTool
 import com.basel.ai.audio.AudioPlayer
@@ -69,8 +70,7 @@ import com.basel.ai.pdf.PdfIngestor
 import com.basel.ai.pdf.PdfLibrary
 import com.basel.ai.pdf.PdfProgress
 import com.basel.ai.studio.StudioUiState
-import com.basel.ai.terminal.TerminalSession
-import com.basel.ai.terminal.TerminalUiState
+import com.basel.ai.terminal.Shell
 import com.basel.ai.web.SearchQuery
 import com.basel.ai.web.SearchSource
 import com.basel.ai.web.SearchDepth
@@ -99,6 +99,8 @@ data class ChatMessage(
      * so the UI can word it in the reader's language.
      */
     val routing: RoutingDecision? = null,
+    /** Tools the model ran to produce this reply, in order. */
+    val toolRuns: List<ToolRun> = emptyList(),
 )
 
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
@@ -138,14 +140,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val systemTts = SystemTtsSynthesizer(app)
 
     /**
-     * One shell for the whole app.
+     * The shell the model's `shell` tool runs in.
      *
-     * The Terminal page and the model's `shell` tool share it on purpose: if
-     * the model runs `cd logs`, opening the terminal should put you in that
-     * directory, looking at the output it saw.
+     * There is no terminal page. This is a tool the model uses, and what it
+     * ran shows up under the reply it ran it for — which is where anyone would
+     * actually look for it.
      */
-    private val terminal = TerminalSession(java.io.File(app.filesDir, "workspace"))
-    val terminalState: StateFlow<TerminalUiState> = terminal.state
+    private val shell = Shell(java.io.File(app.filesDir, "workspace"))
 
     private val pdfLibrary = PdfLibrary(app)
     private val pdfIngestor = PdfIngestor(app, pdfLibrary)
@@ -677,10 +678,32 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             _uiState.update { it.copy(searchStatus = null) }
+            recordToolRun(
+                replyId,
+                ToolRun(
+                    tool = call.name,
+                    // The command verbatim, because this is the only place a
+                    // command run on the phone becomes visible at all.
+                    detail = call.args.values.firstOrNull().orEmpty(),
+                    output = result.output,
+                    ok = result.ok,
+                ),
+            )
             if (epoch != replyGeneration) return
 
             turnPrompt = ToolPrompt.observation(call, result, Localization.strings)
             step++
+        }
+    }
+
+    /** Appends a tool call to the reply it was made for. */
+    private fun recordToolRun(id: Long, run: ToolRun) {
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages.map {
+                    if (it.id == id) it.copy(toolRuns = it.toolRuns + run) else it
+                }
+            )
         }
     }
 
@@ -747,10 +770,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ClockTool(strings),
             CalcTool(strings),
             DeviceTool({ _device.value }, strings),
-            ReadFileTool(terminal.shell, strings),
-            ListFilesTool(terminal.shell, strings),
+            ReadFileTool(shell, strings),
+            ListFilesTool(shell, strings),
         )
-        if (current.toolAllowWrites) tools += WriteFileTool(terminal.shell, strings)
+        if (current.toolAllowWrites) tools += WriteFileTool(shell, strings)
         // Only offered once there is something to read. A tool that always
         // answers "no documents" teaches the model to stop trying it.
         if (pdfLibrary.documents.value.isNotEmpty()) {
@@ -763,7 +786,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             tools += WebSearchTool(webSearch, { settingsStore.settings.value.voiceLanguageTag }, strings)
         }
         if (current.toolShellEnabled) {
-            tools += ShellTool(terminal, strings) { risk ->
+            tools += ShellTool(shell, strings) { risk ->
                 when (risk) {
                     CommandRisk.READ_ONLY -> true
                     CommandRisk.WRITES -> current.toolAllowWrites
@@ -956,18 +979,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         return CloudOcrRecognizer(current.ocrApiKey)
     }
-
-    // ------------------------------------------------------------- terminal
-
-    /** Runs a command the user typed. Serialised: one shell, one at a time. */
-    fun runTerminalCommand(command: String) {
-        viewModelScope.launch(Dispatchers.IO) { terminal.submit(command) }
-    }
-
-    fun clearTerminal() = terminal.clear()
-
-    /** Where commands run, shown so the sandbox is not a mystery. */
-    val terminalWorkspace: String get() = terminal.shell.root.path
 
     fun studioToggleView() = studio.toggleView()
     fun studioRun() = studio.run()

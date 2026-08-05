@@ -43,7 +43,6 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
@@ -81,7 +80,6 @@ import com.basel.ai.ui.DeviceScreen
 import com.basel.ai.ui.ModelsScreen
 import com.basel.ai.ui.SettingsScreen
 import com.basel.ai.ui.StudioScreen
-import com.basel.ai.ui.TerminalScreen
 import com.basel.ai.ui.theme.BaselAiTheme
 import com.basel.ai.ui.theme.Layout
 import com.basel.ai.ui.theme.Space
@@ -90,7 +88,6 @@ import com.basel.ai.ui.theme.hairlineColor
 private enum class Destination(val icon: ImageVector) {
     CHAT(Icons.AutoMirrored.Filled.Chat),
     STUDIO(Icons.Filled.Code),
-    TERMINAL(Icons.Filled.Terminal),
     MODELS(Icons.Filled.ViewInAr),
     DEVICE(Icons.Filled.Memory),
     SETTINGS(Icons.Filled.Tune),
@@ -99,7 +96,6 @@ private enum class Destination(val icon: ImageVector) {
     fun title(s: AppStrings): String = when (this) {
         CHAT -> s.navChat
         STUDIO -> s.navStudio
-        TERMINAL -> s.navTerminal
         MODELS -> s.navModels
         DEVICE -> s.navDevice
         SETTINGS -> s.navSettings
@@ -108,7 +104,6 @@ private enum class Destination(val icon: ImageVector) {
     fun subtitle(s: AppStrings): String = when (this) {
         CHAT -> s.chatSubtitle
         STUDIO -> s.studioSubtitle
-        TERMINAL -> s.terminalSubtitle
         MODELS -> s.modelsSubtitle
         DEVICE -> s.deviceSubtitle
         SETTINGS -> s.settingsSubtitle
@@ -210,7 +205,6 @@ private fun AppContent(viewModel: ChatViewModel) {
                         )
 
                         Destination.STUDIO -> StudioScreen(viewModel)
-                        Destination.TERMINAL -> TerminalScreen(viewModel)
                         Destination.MODELS -> ModelsScreen(viewModel)
                         Destination.DEVICE -> DeviceScreen(viewModel)
                         Destination.SETTINGS -> SettingsScreen(viewModel)
@@ -378,8 +372,8 @@ private fun BottomBar(selected: Destination, onSelect: (Destination) -> Unit) {
                     pillPadding = pillPadding,
                     // Equal shares of the row. Five tabs at the padding four
                     // used needed 425dp of a 395dp row and the last one fell
-                    // off the edge; six still clear the touch target because
-                    // the pill padding is computed rather than fixed.
+                    // off the edge, which is why the pill padding is computed
+                    // rather than fixed.
                     modifier = Modifier.weight(1f),
                     onClick = { onSelect(item) },
                 )
