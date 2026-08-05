@@ -6,6 +6,8 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
+import com.basel.ai.llm.RoutingMode
+import com.basel.ai.web.SearchDepth
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.jvm.isAccessible
 
@@ -62,6 +64,35 @@ class StringsTest {
             value.isNotBlank() && value.none { it in arabicRange }
         }
         assertTrue("no Arabic characters in: ${offenders.keys}", offenders.isEmpty())
+    }
+
+    @Test
+    fun `a collapsed section always says something`() {
+        // A closed card whose summary is blank is worse than no summary: it
+        // reads as a section with nothing in it.
+        for (strings in listOf<AppStrings>(EnglishStrings, ArabicStrings)) {
+            assertTrue(strings.summaryReasoning(RoutingMode.AUTO).isNotBlank())
+            assertTrue(strings.summarySearch(false, null).isNotBlank())
+            assertTrue(strings.summarySearch(true, null).isNotBlank())
+            assertTrue(strings.summarySearch(true, SearchDepth.DEEP).isNotBlank())
+            assertTrue(strings.summaryOcr(true, hasKey = false).isNotBlank())
+            assertTrue(strings.summaryTools(true, shell = true, steps = null).isNotBlank())
+            assertTrue(strings.summaryPrompt("").isNotBlank())
+            assertTrue(strings.summaryGuidance(false).isNotBlank())
+        }
+    }
+
+    @Test
+    fun `an off section reads as off, not as its details`() {
+        // The point of the summary is that a closed card states its value.
+        assertEquals(EnglishStrings.summaryOff, EnglishStrings.summarySearch(false, null))
+        assertEquals(ArabicStrings.summaryOff, ArabicStrings.summaryTools(false, true, 3))
+    }
+
+    @Test
+    fun `a long system prompt is cut rather than wrapping the card`() {
+        val long = "x".repeat(500)
+        assertTrue(EnglishStrings.summaryPrompt(long).length < 60)
     }
 
     @Test

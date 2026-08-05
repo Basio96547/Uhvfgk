@@ -541,6 +541,43 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 16 — 2026-07-27 · design: the parts that were actually wrong
+
+88. **Settings was twelve open cards in one scroll, four screens tall.** I
+    built most of that this session, adding Tools, Reading images, Cloud voice
+    and Automatic on top of eight that were already there. Every setting had to
+    be read past to reach the next one.
+
+    Collapsed now, one open at a time — and the important half: **a closed card
+    states its own current value.** "Arabic · ar-SA", "On · reads pages",
+    "Terminal · automatic steps", "Off". A closed row that says what it is set
+    to tells you more at a glance than an open one you have to read down
+    through, so the whole of Settings fits on one screen *and* answers what it
+    is set to without being opened.
+
+89. **The type scale was hurting Arabic, specifically.** Not a matter of taste:
+
+    - `letterSpacing = -0.2sp` on headings. Pulling letters together is an
+      ordinary Latin move and **damaging on a connected script** — it muddies
+      the joins that carry the shape of the word. Zero for Arabic now.
+    - Latin leading. Arabic ascenders reach higher and its marks sit above and
+      below the line, so line heights that look generous in Latin look tight in
+      Arabic and a dot under a ي nearly touches the letter above. 15% more.
+    - Trimmed line boxes. With the default trim the first line loses the room
+      its tallest mark needs, and a همزة over an ألف gets clipped at a
+      container edge. `Trim.None` now.
+
+    The theme picks the scale by language, which meant reading the language
+    *before* the theme rather than inside it.
+
+90. **`AppStrings` was reaching into `AppSettings`.** The first version of the
+    summaries took the settings object, which put the presentation vocabulary
+    downstream of the settings store — and `AppSettings` needs a `Context`, so
+    it also broke the host test harness. They take plain values now, which is
+    both the correct layering and the reason they can be tested at all.
+
+---
+
 ### Session 15 — 2026-07-27 · the app decides for itself
 
 82. **`AutoPolicy`: eight fixed numbers replaced by decisions.** Every one of

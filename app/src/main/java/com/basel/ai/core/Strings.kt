@@ -1,5 +1,7 @@
 package com.basel.ai.core
 
+import com.basel.ai.llm.RoutingMode
+import com.basel.ai.web.SearchDepth
 import java.util.Locale
 
 /** Which language the interface is drawn in. */
@@ -567,6 +569,25 @@ interface AppStrings {
     val autoSubtitle: String
     val autoExplainNote: String
     val autoNothingToShow: String
+
+
+    /**
+     * A section's current value in a few words, for the collapsed card.
+     *
+     * Written per language rather than assembled from fragments: "Arabic ·
+     * automatic" and «العربية · تلقائي» read naturally, and the same sentence
+     * built out of joined pieces reads like neither.
+     */
+    fun summaryLanguage(language: String, voiceTag: String): String
+    fun summaryReasoning(mode: RoutingMode): String
+    fun summarySearch(enabled: Boolean, depth: SearchDepth?): String
+    fun summaryOcr(enabled: Boolean, hasKey: Boolean): String
+    fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?): String
+    fun summarySpeech(engineLabel: String, needsKey: Boolean): String
+    fun summaryGuidance(on: Boolean): String
+    fun summaryPrompt(prompt: String): String
+    val summaryOff: String
+    val summaryOn: String
 
     // -------------------------------------------------------- routing modes
     val modeAuto: String
@@ -1261,6 +1282,37 @@ object EnglishStrings : AppStrings {
         "your choice wins — this only fills in what you left on Automatic."
     override val autoNothingToShow = "Send a message and the decisions for it appear here."
 
+
+    override fun summaryLanguage(language: String, voiceTag: String) = "$language · $voiceTag"
+    override fun summaryReasoning(mode: RoutingMode) = when (mode) {
+        RoutingMode.AUTO -> "Automatic"
+        RoutingMode.ALWAYS -> "Always thinks"
+        RoutingMode.NEVER -> "Never thinks"
+    }
+    override fun summarySearch(enabled: Boolean, depth: SearchDepth?) = when {
+        !enabled -> summaryOff
+        depth == null -> "On · automatic depth"
+        depth == SearchDepth.DEEP -> "On · reads pages"
+        else -> "On · snippets"
+    }
+    override fun summaryOcr(enabled: Boolean, hasKey: Boolean) = when {
+        !enabled -> summaryOff
+        !hasKey -> "On, but no key yet"
+        else -> summaryOn
+    }
+    override fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?) = when {
+        !enabled -> summaryOff
+        else -> (if (shell) "Terminal" else "No terminal") +
+            " · " + (steps?.let { "$it steps" } ?: "automatic steps")
+    }
+    override fun summarySpeech(engineLabel: String, needsKey: Boolean) =
+        if (needsKey) "$engineLabel — no key yet" else engineLabel
+    override fun summaryGuidance(on: Boolean) = if (on) summaryOn else summaryOff
+    override fun summaryPrompt(prompt: String) =
+        if (prompt.isBlank()) "None" else prompt.take(48)
+    override val summaryOff = "Off"
+    override val summaryOn = "On"
+
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
     override val modeNever = "Never"
@@ -1952,6 +2004,37 @@ object ArabicStrings : AppStrings {
     override val autoExplainNote = "هذه تتبع حال الجهاز. واضبط أيًّا منها بنفسك فيغلب اختيارك — " +
         "التلقائي لا يملأ إلا ما تركته له."
     override val autoNothingToShow = "أرسل رسالة وستظهر هنا القرارات المتخذة لها."
+
+
+    override fun summaryLanguage(language: String, voiceTag: String) = "$language · $voiceTag"
+    override fun summaryReasoning(mode: RoutingMode) = when (mode) {
+        RoutingMode.AUTO -> "تلقائي"
+        RoutingMode.ALWAYS -> "يفكّر دائمًا"
+        RoutingMode.NEVER -> "لا يفكّر"
+    }
+    override fun summarySearch(enabled: Boolean, depth: SearchDepth?) = when {
+        !enabled -> summaryOff
+        depth == null -> "مُشغَّل · عمق تلقائي"
+        depth == SearchDepth.DEEP -> "مُشغَّل · يقرأ الصفحات"
+        else -> "مُشغَّل · مقتطفات"
+    }
+    override fun summaryOcr(enabled: Boolean, hasKey: Boolean) = when {
+        !enabled -> summaryOff
+        !hasKey -> "مُشغَّل، وبلا مفتاح بعد"
+        else -> summaryOn
+    }
+    override fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?) = when {
+        !enabled -> summaryOff
+        else -> (if (shell) "طرفية" else "بلا طرفية") +
+            " · " + (steps?.let { "$it خطوات" } ?: "خطوات تلقائية")
+    }
+    override fun summarySpeech(engineLabel: String, needsKey: Boolean) =
+        if (needsKey) "$engineLabel — بلا مفتاح بعد" else engineLabel
+    override fun summaryGuidance(on: Boolean) = if (on) summaryOn else summaryOff
+    override fun summaryPrompt(prompt: String) =
+        if (prompt.isBlank()) "بلا" else prompt.take(48)
+    override val summaryOff = "مُطفأ"
+    override val summaryOn = "مُشغَّل"
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

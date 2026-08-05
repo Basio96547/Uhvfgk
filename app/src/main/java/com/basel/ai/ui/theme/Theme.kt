@@ -114,6 +114,8 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun BaselAiTheme(
+    /** Arabic gets more leading and no negative tracking. See [ArabicTypography]. */
+    arabic: Boolean = false,
     darkTheme: Boolean = isSystemInDarkTheme(),
     /** Material You wallpaper colors on Android 12+. */
     dynamicColor: Boolean = true,
@@ -142,7 +144,7 @@ fun BaselAiTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = if (arabic) ArabicTypography else Typography,
         shapes = Shapes,
         content = content,
     )

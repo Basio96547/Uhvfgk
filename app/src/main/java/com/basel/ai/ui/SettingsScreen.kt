@@ -69,6 +69,16 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val ttsModel = viewModel.registry.selectedTtsModel
 
+    // One section open at a time, and none to begin with.
+    //
+    // Twelve open cards in one scroll meant every setting had to be read past
+    // to reach the next, and the screen was four times taller than the phone.
+    // Closed, each card states its own current value, so the whole of Settings
+    // fits on one screen and says what it is set to without being opened.
+    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    fun section(key: String) = open == key
+    fun toggle(key: String): () -> Unit = { open = if (open == key) null else key }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -81,6 +91,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Translate,
             title = s.language,
+            expanded = section("language"),
+            onToggle = toggle("language"),
+            summary = s.summaryLanguage(settings.language.label, settings.voiceLanguageTag),
             subtitle = s.languageSubtitle,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -114,6 +127,8 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.AutoAwesome,
             title = s.autoTitle,
+            expanded = section("auto"),
+            onToggle = toggle("auto"),
             subtitle = s.autoSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -145,6 +160,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Psychology,
             title = s.reasoningTitle,
+            expanded = section("reasoning"),
+            onToggle = toggle("reasoning"),
+            summary = s.summaryReasoning(settings.thinkingMode),
             subtitle = s.reasoningSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -178,6 +196,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Language,
             title = s.webSearch,
+            expanded = section("search"),
+            onToggle = toggle("search"),
+            summary = s.summarySearch(settings.webSearchEnabled, settings.searchDepth),
             subtitle = s.webSearchSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -251,6 +272,8 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Thermostat,
             title = s.performance,
+            expanded = section("perf"),
+            onToggle = toggle("perf"),
             subtitle = s.performanceSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -266,6 +289,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Description,
             title = s.ocrTitle,
+            expanded = section("ocr"),
+            onToggle = toggle("ocr"),
+            summary = s.summaryOcr(settings.ocrEnabled, settings.ocrApiKey.isNotBlank()),
             subtitle = s.ocrSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -319,6 +345,13 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Terminal,
             title = s.toolsTitle,
+            expanded = section("tools"),
+            onToggle = toggle("tools"),
+            summary = s.summaryTools(
+                settings.toolsEnabled,
+                settings.toolShellEnabled,
+                settings.toolMaxSteps,
+            ),
             subtitle = s.toolsSettingsSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -391,6 +424,13 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.RecordVoiceOver,
             title = s.speechOutput,
+            expanded = section("speech"),
+            onToggle = toggle("speech"),
+            summary = s.summarySpeech(
+                settings.ttsEngine.label(s),
+                needsKey = settings.ttsEngine == TtsEngine.CLOUD &&
+                    settings.cloudApiKey.isBlank(),
+            ),
             subtitle = s.speechOutputSubtitle,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -554,6 +594,8 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Mic,
             title = s.voiceInputTitle,
+            expanded = section("mic"),
+            onToggle = toggle("mic"),
             subtitle = s.voiceInputSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -570,6 +612,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Translate,
             title = s.voiceLanguage,
+            expanded = section("voicelang"),
+            onToggle = toggle("voicelang"),
+            summary = settings.voiceLanguageTag,
             subtitle = s.voiceLanguageSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -604,6 +649,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Rule,
             title = s.guidanceTitle,
+            expanded = section("guidance"),
+            onToggle = toggle("guidance"),
+            summary = s.summaryGuidance(settings.guidanceEnabled),
             subtitle = s.guidanceDescription,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -639,6 +687,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Tune,
             title = s.systemPrompt,
+            expanded = section("prompt"),
+            onToggle = toggle("prompt"),
+            summary = s.summaryPrompt(settings.systemPrompt),
             subtitle = s.systemPromptSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {

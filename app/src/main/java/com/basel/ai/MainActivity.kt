@@ -142,10 +142,14 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun App() {
-    BaselAiTheme {
-        val viewModel: ChatViewModel = viewModel()
-        val settings by viewModel.settings.collectAsStateWithLifecycle()
+    // Read before the theme, because the theme needs to know the language:
+    // Arabic and Latin want different leading and different tracking, and
+    // treating one as a translation of the other is how Arabic ends up looking
+    // cramped in an app that is otherwise fine.
+    val viewModel: ChatViewModel = viewModel()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
+    BaselAiTheme(arabic = settings.language.resolve().isRtl) {
         // Wraps everything: the language switch has to change layout direction
         // too, not just the words, or Arabic ends up inside an English shell.
         ProvideLocalization(settings.language) { AppContent(viewModel) }
