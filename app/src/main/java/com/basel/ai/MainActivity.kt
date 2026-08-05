@@ -167,7 +167,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
 /** Something another app sent here. */
 sealed interface Shared {
     data class Text(val text: String) : Shared

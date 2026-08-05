@@ -5,7 +5,8 @@
 #
 #   1. every named argument passed to a function declared here is a parameter
 #      that function actually has;
-#   2. every `import com.basel.ai....` names something that exists.
+#   2. every `import com.basel.ai....` names something that exists;
+#   3. no `@Composable` sits on a declaration that cannot be composable.
 #
 # Why this exists: the settings page called SectionCard with expanded=,
 # onToggle= and summary= at thirteen sites. SectionCard had none of them. The
@@ -20,9 +21,14 @@
 # ChatScreen kept importing com.basel.ai.ChatMessage. A stale import parses
 # perfectly and the harness never compiles that file, so it too reached CI.
 #
-# Both are deliberately narrow. Neither type-checks, and anything not declared
-# in this repository is ignored — guessing about Compose's overloads or
-# androidx's package layout would produce noise rather than findings.
+# The third is narrower still, and it is here because it happened: a stray
+# `@Composable` ended up above `sealed interface Shared`, which the parser is
+# perfectly happy with and which dies as "This annotation is not applicable to
+# target 'interface'".
+#
+# All three are deliberately narrow. None type-checks, and anything not
+# declared in this repository is ignored — guessing about Compose's overloads
+# or androidx's package layout would produce noise rather than findings.
 #
 # Usage:  tools/check-refs.sh
 # Needs:  python3. No JDK, no network, no Android SDK.
@@ -137,6 +143,35 @@ for path, text in sources.items():
                      sorted(declared[fn]))
                 )
 
+# ---- @Composable on something that cannot be composable ------------------
+# Only annotations alone on their own line: in a type position — `content:
+# @Composable () -> Unit` — the same annotation is correct and common.
+NOT_COMPOSABLE = ("class", "interface", "object", "enum", "typealias", "annotation")
+bad_annotations = []
+for path, text in sources.items():
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.strip() != "@Composable":
+            continue
+        for follower in lines[i + 1:]:
+            token = follower.strip()
+            if not token or token.startswith("@") or token.startswith("*"):
+                continue          # blank, another annotation, or a blanked comment
+            words = [w for w in re.split(r"[\s(]+", token) if w]
+            # Skip modifiers to reach the declaration keyword itself.
+            keyword = next(
+                (w for w in words if w not in (
+                    "public", "private", "internal", "protected", "sealed", "abstract",
+                    "open", "final", "data", "value", "inline", "expect", "actual",
+                )),
+                "",
+            )
+            if keyword in NOT_COMPOSABLE:
+                bad_annotations.append(
+                    (path.relative_to(root), i + 1, keyword, token[:60])
+                )
+            break
+
 # ---- what this project imports -------------------------------------------
 # Every name declared in each package, nested ones included, so that an import
 # of an enum entry or a nested interface resolves like any other.
@@ -193,13 +228,17 @@ for path, text in sources.items():
         bad_imports.append((path.relative_to(root), line, fqn, reason))
 
 print(f"==> checking named arguments against {len(declared)} declarations "
-      f"in {len(files)} files, and every {OWN} import")
+      f"in {len(files)} files, every {OWN} import, and every @Composable")
 
 for rel, line, fqn, reason in bad_imports:
     print(f"{rel}:{line}: import {fqn} — {reason}")
 
-if not problems and not bad_imports:
-    print(">>> EVERY NAMED ARGUMENT AND IMPORT RESOLVES")
+for rel, line, keyword, snippet in bad_annotations:
+    print(f"{rel}:{line}: @Composable is not applicable to a {keyword}")
+    print(f"    it sits above: {snippet}")
+
+if not problems and not bad_imports and not bad_annotations:
+    print(">>> ARGUMENTS, IMPORTS AND ANNOTATIONS ALL RESOLVE")
     sys.exit(0)
 
 seen = set()
@@ -210,6 +249,9 @@ for rel, line, fn, arg, params in problems:
     seen.add(key)
     print(f"{rel}:{line}: {fn} has no parameter '{arg}'")
     print(f"    it takes: {', '.join(params) or '(nothing)'}")
-print(f">>> {len(seen)} bad argument name(s), {len(bad_imports)} bad import(s)")
+print(
+    f">>> {len(seen)} bad argument name(s), {len(bad_imports)} bad import(s), "
+    f"{len(bad_annotations)} misplaced annotation(s)"
+)
 sys.exit(1)
 PY

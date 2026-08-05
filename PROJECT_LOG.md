@@ -582,13 +582,23 @@ layouts should be tuned for that screen.
      findings. Verified against the bug itself: with the old `SectionCard`
      restored it names `SettingsScreen.kt:96`, `:97` and `:98`.
 
-     It grew a second check the moment a second build failed the same way.
+     It grew two more checks as two more builds failed the same way.
      `ChatMessage` and `Author` moved to `com.basel.ai.chat` so the pure
      harness could reach them, and `ChatScreen.kt` went on importing
      `com.basel.ai.ChatMessage` — a stale import that parses perfectly and
      lives in a file the harness never compiles. Every `com.basel.ai` import
      is now checked against what the repository actually declares, and the
      report says where the symbol really is.
+
+     Then a stray `@Composable` above `sealed interface Shared` — which the
+     parser is perfectly happy with — died as "This annotation is not
+     applicable to target 'interface'". So it also checks that a `@Composable`
+     alone on its line sits above something that can actually be composable.
+     Only alone on its line: in a type position, `content: @Composable () ->
+     Unit`, the same annotation is correct and everywhere.
+
+     Three builds, three checks, and each one was verified by putting the bug
+     back and watching it get named.
 
 110. **R8 turned on, with `-dontobfuscate`.** 55 MB stopped being an
      abstraction the day it failed to download twice. Almost all of it is code
