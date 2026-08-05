@@ -75,6 +75,7 @@ import com.basel.ai.core.ErrorLog
 import com.basel.ai.ui.ChatScreen
 import com.basel.ai.ui.LocalStrings
 import com.basel.ai.ui.ProvideLocalization
+import com.basel.ai.ui.ConversationsDialog
 import com.basel.ai.ui.DiagnosticsDialog
 import com.basel.ai.ui.DeviceScreen
 import com.basel.ai.ui.ModelsScreen
@@ -157,6 +158,7 @@ private fun AppContent(viewModel: ChatViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf(Destination.CHAT) }
     var showDiagnostics by remember { mutableStateOf(false) }
+    var showConversations by remember { mutableStateOf(false) }
     val unseenProblems by ErrorLog.unseenCount.collectAsStateWithLifecycle()
 
     Surface(
@@ -188,6 +190,7 @@ private fun AppContent(viewModel: ChatViewModel) {
                     ErrorLog.markSeen()
                     showDiagnostics = true
                 },
+                onOpenConversations = { showConversations = true },
             )
 
             Box(Modifier.weight(1f)) {
@@ -228,6 +231,17 @@ private fun AppContent(viewModel: ChatViewModel) {
     if (showDiagnostics) {
         DiagnosticsDialog(onDismiss = { showDiagnostics = false })
     }
+
+    if (showConversations) {
+        ConversationsDialog(
+            viewModel = viewModel,
+            onOpened = {
+                showConversations = false
+                destination = Destination.CHAT
+            },
+            onDismiss = { showConversations = false },
+        )
+    }
 }
 
 /** True while the soft keyboard is showing. */
@@ -246,6 +260,7 @@ private fun AppHeader(
     onStopGenerating: () -> Unit,
     onReset: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenConversations: () -> Unit,
 ) {
     val strings = LocalStrings.current
     Row(
@@ -307,6 +322,13 @@ private fun AppHeader(
 
         if (destination == Destination.CHAT) {
             Spacer(Modifier.width(Space.xs))
+            // Saved chats first: it is the one you reach for when you want
+            // something back, and "new" is a click away inside it too.
+            HeaderButton(
+                Icons.AutoMirrored.Filled.Chat,
+                strings.conversationsTitle,
+                onOpenConversations,
+            )
             HeaderButton(Icons.Filled.RestartAlt, strings.newChat, onReset, enabled = canReset)
         }
     }

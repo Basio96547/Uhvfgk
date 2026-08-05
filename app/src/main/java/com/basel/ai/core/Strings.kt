@@ -530,6 +530,17 @@ interface AppStrings {
 
 
     // ---------------------------------------------------------- automatic
+    val untitledChat: String
+    val exportYou: String
+    val exportAssistant: String
+    val conversationsTitle: String
+    val conversationsSubtitle: String
+    val conversationsEmpty: String
+    val conversationsSearch: String
+    val conversationNew: String
+    val conversationDelete: String
+    val conversationShare: String
+    fun conversationMessages(count: Int): String
     val autoLabel: String
     fun autoContextReason(tokens: Int, freeGb: Double): String
     fun autoThreadsReason(threads: Int, cores: Int, why: String): String
@@ -1236,6 +1247,18 @@ object EnglishStrings : AppStrings {
     override fun toolNoPageMatch(phrase: String) = "No page mentions \"$phrase\"."
 
 
+    override val untitledChat = "New chat"
+    override val exportYou = "You"
+    override val exportAssistant = "باسل Ai"
+    override val conversationsTitle = "Chats"
+    override val conversationsSubtitle = "Everything you have asked, kept"
+    override val conversationsEmpty = "Nothing saved yet. Conversations appear here once they " +
+        "have something in them."
+    override val conversationsSearch = "Search"
+    override val conversationNew = "New chat"
+    override val conversationDelete = "Delete"
+    override val conversationShare = "Share"
+    override fun conversationMessages(count: Int) = "$count messages"
     override val autoLabel = "Automatic"
     override fun autoContextReason(tokens: Int, freeGb: Double) =
         "Memory for %,d tokens of conversation (%.1f GB free).".format(tokens, freeGb)
@@ -1956,6 +1979,17 @@ object ArabicStrings : AppStrings {
     override fun toolNoPageMatch(phrase: String) = "لا صفحة تذكر «$phrase»."
 
 
+    override val untitledChat = "محادثة جديدة"
+    override val exportYou = "أنت"
+    override val exportAssistant = "باسل Ai"
+    override val conversationsTitle = "المحادثات"
+    override val conversationsSubtitle = "كل ما سألت عنه، محفوظ"
+    override val conversationsEmpty = "لا شيء محفوظ بعد. تظهر المحادثات هنا متى صار فيها شيء."
+    override val conversationsSearch = "بحث"
+    override val conversationNew = "محادثة جديدة"
+    override val conversationDelete = "حذف"
+    override val conversationShare = "مشاركة"
+    override fun conversationMessages(count: Int) = "$count رسالة"
     override val autoLabel = "تلقائي"
     override fun autoContextReason(tokens: Int, freeGb: Double) =
         "ذاكرة تكفي %,d رمزًا من المحادثة (%.1f جيجابايت متاحة).".format(tokens, freeGb)

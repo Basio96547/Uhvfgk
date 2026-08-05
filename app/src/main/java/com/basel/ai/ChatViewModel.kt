@@ -33,6 +33,11 @@ import com.basel.ai.audio.SpeechText
 import com.basel.ai.audio.SynthesisResult
 import com.basel.ai.audio.SystemTtsSynthesizer
 import com.basel.ai.audio.WavWriter
+import com.basel.ai.chat.Author
+import com.basel.ai.chat.ChatMessage
+import com.basel.ai.chat.Conversation
+import com.basel.ai.chat.ConversationIndex
+import com.basel.ai.chat.ConversationStore
 import com.basel.ai.core.AppSettings
 import com.basel.ai.core.AutoPolicy
 import com.basel.ai.core.Connection
@@ -83,26 +88,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class Author { USER, MODEL }
-
-data class ChatMessage(
-    val id: Long,
-    val author: Author,
-    val text: String,
-    val thinking: String = "",
-    val isGenerating: Boolean = false,
-    val thinkingExpanded: Boolean = false,
-    /** Pages the answer was grounded in, when web search ran. */
-    val sources: List<SearchSource> = emptyList(),
-    /**
-     * How this reply was routed. Kept as the decision rather than a sentence
-     * so the UI can word it in the reader's language.
-     */
-    val routing: RoutingDecision? = null,
-    /** Tools the model ran to produce this reply, in order. */
-    val toolRuns: List<ToolRun> = emptyList(),
-)
-
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
 
 data class ImportState(val fileName: String, val fraction: Float)
@@ -147,6 +132,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * actually look for it.
      */
     private val shell = Shell(java.io.File(app.filesDir, "workspace"))
+
+    /**
+     * Saved conversations.
+     *
+     * Everything said used to live in one StateFlow and die with the process.
+     * The current one is written after each completed turn — not per token,
+     * which would be a file write per character.
+     */
+    private val conversationStore = ConversationStore(app)
+    val conversations: StateFlow<List<Conversation>> = conversationStore.conversations
+    private var conversationId: String = conversationStore.newId()
+    private var conversationTitle: String? = null
 
     private val pdfLibrary = PdfLibrary(app)
     private val pdfIngestor = PdfIngestor(app, pdfLibrary)
@@ -696,6 +693,75 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Writes the current conversation. Called when a turn ends, not per token. */
+    private fun persistConversation() {
+        val messages = _uiState.value.messages.filter { it.text.isNotBlank() }
+        if (messages.isEmpty()) return
+        val first = messages.firstOrNull { it.author == Author.USER }?.text.orEmpty()
+        val title = conversationTitle
+            ?: ConversationIndex.titleFor(first, Localization.strings.untitledChat)
+        conversationTitle = title
+        conversationStore.save(
+            Conversation(
+                id = conversationId,
+                title = title,
+                updatedAt = System.currentTimeMillis(),
+                messages = messages,
+            )
+        )
+    }
+
+    // -------------------------------------------------------- conversations
+
+    /** Starts a fresh conversation, keeping the one being left. */
+    fun newConversation() {
+        if (_uiState.value.isBusy) return
+        persistConversation()
+        replyGeneration++
+        engine?.resetSession()
+        activeSystemPrompt = null
+        conversationId = conversationStore.newId()
+        conversationTitle = null
+        _uiState.update { it.copy(messages = emptyList(), attachedDocumentId = null) }
+    }
+
+    fun openConversation(id: String) {
+        if (_uiState.value.isBusy) return
+        val conversation = conversationStore.find(id) ?: return
+        persistConversation()
+        // The engine holds the old conversation in its KV cache; carrying it
+        // into a different one is how a reply answers the wrong question.
+        replyGeneration++
+        engine?.resetSession()
+        activeSystemPrompt = null
+        conversationId = conversation.id
+        conversationTitle = conversation.title
+        nextId = (conversation.messages.maxOfOrNull { it.id } ?: 0L) + 1
+        _uiState.update { it.copy(messages = conversation.messages) }
+    }
+
+    fun deleteConversation(id: String) {
+        conversationStore.delete(id)
+        if (id == conversationId) newConversation()
+    }
+
+    fun renameConversation(id: String, title: String) = conversationStore.rename(id, title)
+
+    /** The current conversation as Markdown, for sharing. */
+    fun exportConversation(): String {
+        val s = Localization.strings
+        return ConversationIndex.toMarkdown(
+            Conversation(
+                id = conversationId,
+                title = conversationTitle ?: s.untitledChat,
+                updatedAt = System.currentTimeMillis(),
+                messages = _uiState.value.messages,
+            ),
+            youLabel = s.exportYou,
+            modelLabel = s.exportAssistant,
+        )
+    }
+
     /** Appends a tool call to the reply it was made for. */
     private fun recordToolRun(id: Long, run: ToolRun) {
         _uiState.update { state ->
@@ -748,6 +814,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         refreshMemory()
+        persistConversation()
         if (settingsStore.settings.value.autoSpeakReplies) {
             val reply = _uiState.value.messages.firstOrNull { it.id == replyId }
             if (reply != null && reply.text.isNotBlank()) speak(replyId, reply.text)
@@ -855,13 +922,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun clearConversation() {
-        if (_uiState.value.isBusy) return
-        replyGeneration++
-        engine?.resetSession()
-        activeSystemPrompt = null
-        _uiState.update { it.copy(messages = emptyList()) }
-    }
+    /** "New chat" — the one being left is saved rather than discarded. */
+    fun clearConversation() = newConversation()
 
     // ---------------------------------------------------------------- studio
 

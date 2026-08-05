@@ -541,6 +541,39 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 19 — 2026-07-27 · conversations survive the app closing
+
+98. **Nothing was ever saved.** The whole history lived in one `StateFlow` and
+    died with the process — close the app and everything said was gone. For a
+    chat app that is not a missing feature so much as a missing floor, and it
+    is the first item of the Tier 1 list.
+
+    `ConversationStore` writes **one file per conversation**, not one file for
+    all of them: saving after every turn would otherwise rewrite the entire
+    archive each time, which grows without bound and eventually stalls a turn.
+    Saved when a turn ends, never per token.
+
+99. **Thinking is deliberately not saved.** It is working rather than answer,
+    it is routinely longer than the reply, and reopening a chat to find pages
+    of discarded reasoning above every answer is worse than not having it.
+
+100. **`ConversationIndex` is the part that goes wrong quietly**, so it is pure
+     and tested: a title cut mid-word, a search that cannot find an Arabic word
+     because it was written with a different alef, a list that reorders itself.
+     Titles cut at a word boundary; search goes through the same normaliser as
+     the router and the document index; newest first, always.
+
+101. **Export as Markdown.** It is what the model wrote in the first place and
+     it survives being pasted anywhere. Thinking is left out of that too —
+     sending it to someone else would be quoting a draft.
+
+102. **`ChatMessage` moved out of `ChatViewModel`.** Same separation as the
+     device state: the message model is plain data, and leaving it inside an
+     `AndroidViewModel` file meant no conversation logic could be tested at
+     all. 16 new tests.
+
+---
+
 ### Session 18 — 2026-07-27 · the conversation, and an Arabic typeface
 
 94. **The chat was printing raw Markdown.** A model writes `**مهم**`, `- بند`
@@ -1072,7 +1105,6 @@ design choices):
 - The terminal has never run a command on a device — there is no Android here.
 - The cloud voice has never sent a request — no key exists in the sandbox.
 - GGUF runs CPU-only; no GPU backend compiled into llama.cpp.
-- No conversation persistence — history dies with the process.
 - No multimodal input despite `ModelKind.MULTIMODAL` existing.
 - `main` is still the old HTML; nothing merged.
 - Repo/branch names (`Uhvfgk`, `delete-everything-…`) don't describe the project.

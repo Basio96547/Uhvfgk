@@ -33,6 +33,9 @@ class StringsTest {
     private val sharedByDesign = setOf(
         "ramPlus", "vulkan", "openCl", "nnapi", "topK", "defaultVoiceTag",
         "cloudAzure", "cloudElevenLabs",
+        // The app's own name, which is already Arabic and is not translated
+        // into English any more than it is out of it.
+        "exportAssistant",
     )
 
     /** Every string property on [AppStrings], read off an instance. */
