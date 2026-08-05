@@ -541,6 +541,36 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 20 — 2026-07-27 · a token stops invalidating the screen
+
+103. **Streaming had been rebuilding the whole UI state per token — and my
+     first description of why was wrong.** I said it copied the message list;
+     `map` returns unchanged messages as they are, so that part was overstated.
+     The real cost is worse and less obvious: `_uiState.update` builds a new
+     `ChatUiState` on every token, Compose hands *one* `State` object to every
+     reader, so the header, the composer and the model chip were all
+     invalidated twenty times a second while reading fields that had not
+     changed.
+
+     The reply being written now lives in its own flow and joins the list once,
+     when it is finished. Only the bubble recomposes while it streams.
+
+104. **Nothing looked at the user's text size.** Seven places computed from
+     screen width in dp; zero read `fontScale`. Turn the system font up — the
+     first thing many Arabic readers do — and a label under a 65 dp tab becomes
+     "الإع…". An ellipsised label is worse than none: it takes the room and
+     says nothing. Above the threshold the bar shows icons only, which also
+     gives each tab a taller target.
+
+105. **Share into the app.** A PDF or a passage of text now arrives from
+     wherever it was found — a browser, mail, a file manager — without opening
+     this app first and going to look for it. `singleTask` so a share lands in
+     the running conversation rather than a second copy of it, and shared text
+     goes into the composer rather than being sent: it is a starting point, not
+     a question, and the user usually wants to add something before it goes.
+
+---
+
 ### Session 19 — 2026-07-27 · conversations survive the app closing
 
 98. **Nothing was ever saved.** The whole history lived in one `StateFlow` and

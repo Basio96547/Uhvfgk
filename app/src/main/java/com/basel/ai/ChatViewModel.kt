@@ -181,6 +181,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * cannot be asked "why did you do that" is just an opaque one, and this
      * app's whole posture is that the user can always find out.
      */
+    /**
+     * The reply being written, kept out of [uiState] on purpose.
+     *
+     * It used to live in `uiState.messages`, so every token rebuilt the whole
+     * `ChatUiState`. Compose hands one `State` object to every reader, so the
+     * header, the composer and the model chip were all invalidated twenty
+     * times a second while reading fields that had not changed. Streaming into
+     * its own flow means only the bubble recomposes.
+     */
+    private val _streaming = MutableStateFlow<ChatMessage?>(null)
+    val streaming: StateFlow<ChatMessage?> = _streaming.asStateFlow()
+
     private val _autoNotes = MutableStateFlow<List<String>>(emptyList())
     val autoNotes: StateFlow<List<String>> = _autoNotes.asStateFlow()
 
@@ -465,12 +477,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             routing = decision,
         )
 
+        _streaming.value = placeholder
         _uiState.update {
-            it.copy(
-                messages = it.messages + userMessage + placeholder,
-                isBusy = true,
-                voiceDraft = "",
-            )
+            it.copy(messages = it.messages + userMessage, isBusy = true, voiceDraft = "")
         }
 
         val epoch = ++replyGeneration
@@ -518,14 +527,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 grounding = SearchQuery.buildContext(prompt, outcome?.results.orEmpty())
                 val sources = SearchQuery.toSources(outcome?.results.orEmpty())
+                _streaming.update { if (it?.id == replyId) it.copy(sources = sources) else it }
                 _uiState.update { state ->
-                    state.copy(
-                        searchStatus = null,
-                        notice = outcome?.problem ?: state.notice,
-                        messages = state.messages.map {
-                            if (it.id == replyId) it.copy(sources = sources) else it
-                        },
-                    )
+                    state.copy(searchStatus = null, notice = outcome?.problem ?: state.notice)
                 }
             }
 
@@ -722,6 +726,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         activeSystemPrompt = null
         conversationId = conversationStore.newId()
         conversationTitle = null
+        _streaming.value = null
         _uiState.update { it.copy(messages = emptyList(), attachedDocumentId = null) }
     }
 
@@ -736,6 +741,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         activeSystemPrompt = null
         conversationId = conversation.id
         conversationTitle = conversation.title
+        _streaming.value = null
         nextId = (conversation.messages.maxOfOrNull { it.id } ?: 0L) + 1
         _uiState.update { it.copy(messages = conversation.messages) }
     }
@@ -764,18 +770,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Appends a tool call to the reply it was made for. */
     private fun recordToolRun(id: Long, run: ToolRun) {
-        _uiState.update { state ->
-            state.copy(
-                messages = state.messages.map {
-                    if (it.id == id) it.copy(toolRuns = it.toolRuns + run) else it
-                }
-            )
-        }
+        _streaming.update { if (it?.id == id) it.copy(toolRuns = it.toolRuns + run) else it }
     }
 
     /** The reply's text as it currently stands. */
     private fun textOf(id: Long): String =
-        _uiState.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
+        _streaming.value?.takeIf { it.id == id }?.text.orEmpty()
 
     /** Joins two parts of one answer without stacking blank lines. */
     private fun join(before: String, after: String): String = when {
@@ -794,23 +794,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Replaces a reply's text wholesale — used to take a tool call back out. */
     private fun replaceText(id: Long, text: String) {
-        _uiState.update { state ->
-            state.copy(
-                messages = state.messages.map {
-                    if (it.id == id) it.copy(text = text) else it
-                }
-            )
-        }
+        _streaming.update { if (it?.id == id) it.copy(text = text) else it }
     }
 
     private fun finishTurn(replyId: Long, epoch: Int) {
         if (epoch != replyGeneration) return
+        // The reply joins the list exactly once, when it is done. Until then
+        // it lives in its own flow so a token does not invalidate the screen.
+        val settled = _streaming.value?.takeIf { it.id == replyId }?.copy(isGenerating = false)
+        _streaming.value = null
         _uiState.update { state ->
             state.copy(
                 isBusy = false,
-                messages = state.messages.map {
-                    if (it.id == replyId) it.copy(isGenerating = false) else it
-                },
+                messages = if (settled != null) state.messages + settled else state.messages,
             )
         }
         refreshMemory()
@@ -876,43 +872,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // fought at every call site.
         if (epoch != replyGeneration) return
         val budget = _uiState.value.activeModel?.thinkingBudgetChars ?: 0
-        _uiState.update { state ->
-            val messages = state.messages.map { message ->
-                if (message.id != id) return@map message
-                val newThinking = if (thinking.isEmpty()) {
-                    message.thinking
-                } else {
-                    val combined = message.thinking + thinking
-                    if (budget > 0 && combined.length > budget) combined.take(budget) else combined
-                }
-                message.copy(
-                    thinking = newThinking,
-                    text = message.text + answer,
-                    isGenerating = !done,
-                )
+        _streaming.update { message ->
+            if (message == null || message.id != id) return@update message
+            val newThinking = if (thinking.isEmpty()) {
+                message.thinking
+            } else {
+                val combined = message.thinking + thinking
+                if (budget > 0 && combined.length > budget) combined.take(budget) else combined
             }
-            state.copy(messages = messages)
+            message.copy(
+                thinking = newThinking,
+                text = message.text + answer,
+                isGenerating = !done,
+            )
         }
     }
 
     /** Interrupts the reply being generated and keeps whatever arrived so far. */
     fun stopGeneration() {
         if (!_uiState.value.isBusy) return
+        // Whatever arrived so far is kept, so it settles into the list too.
+        val partial = _streaming.value?.copy(isGenerating = false)
+        _streaming.value = null
+        if (partial != null && partial.text.isNotBlank()) {
+            _uiState.update { it.copy(messages = it.messages + partial) }
+        }
         // Before stop(), not after: whatever the engine emits from here on is
         // no longer this reply's, whether or not stop() could do anything.
         replyGeneration++
         engine?.stop()
-        _uiState.update { state ->
-            state.copy(
-                isBusy = false,
-                messages = state.messages.map {
-                    if (it.isGenerating) it.copy(isGenerating = false) else it
-                },
-            )
-        }
+        _uiState.update { it.copy(isBusy = false) }
+        persistConversation()
     }
 
     fun toggleThinkingExpanded(id: Long) {
+        _streaming.update { if (it?.id == id) it.copy(thinkingExpanded = !it.thinkingExpanded) else it }
         _uiState.update { state ->
             state.copy(
                 messages = state.messages.map {
@@ -1019,6 +1013,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * Puts text into the composer without sending it.
+     *
+     * Used by the share target: shared text is a starting point, not a
+     * question — the user usually wants to add "translate this" before it
+     * goes.
+     */
+    fun setVoiceDraft(text: String) = _uiState.update { it.copy(voiceDraft = text) }
 
     fun attachDocument(id: String?) = _uiState.update { it.copy(attachedDocumentId = id) }
 

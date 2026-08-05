@@ -117,14 +117,19 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val documents by viewModel.documents.collectAsStateWithLifecycle()
+    // Collected separately from uiState: the reply being written changes
+    // twenty times a second, and everything else on this screen does not.
+    val streaming by viewModel.streaming.collectAsStateWithLifecycle()
     val documentProgress by viewModel.documentProgress.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var showDocuments by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
-        }
+    val rendered = remember(state.messages, streaming) {
+        if (streaming != null) state.messages + streaming!! else state.messages
+    }
+
+    LaunchedEffect(rendered.size, streaming?.text?.length) {
+        if (rendered.isNotEmpty()) listState.animateScrollToItem(rendered.lastIndex)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -200,7 +205,7 @@ fun ChatScreen(
                     action = s.browseModels to onOpenModels,
                 )
 
-                ModelStatus.READY -> if (state.messages.isEmpty()) {
+                ModelStatus.READY -> if (rendered.isEmpty()) {
                     EmptyState(
                         icon = Icons.Filled.AutoAwesome,
                         title = s.readyWhenYouAre,
@@ -218,7 +223,7 @@ fun ChatScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(Space.md),
                     ) {
-                        items(state.messages, key = { it.id }) { message ->
+                        items(rendered, key = { it.id }) { message ->
                             MessageRow(
                                 message = message,
                                 showThinking = settings.showThinking,

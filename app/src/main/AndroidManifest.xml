@@ -31,11 +31,28 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:label="@string/app_name"
             android:theme="@style/Theme.BaselAi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                Sharing into the app.
+
+                A PDF or a passage of text arrives from wherever the user found
+                it — a browser, a mail client, a file manager — without them
+                having to open this app first and go looking for it. singleTask
+                above means a share lands in the running instance rather than a
+                second copy of the conversation.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/pdf" />
             </intent-filter>
         </activity>
     </application>

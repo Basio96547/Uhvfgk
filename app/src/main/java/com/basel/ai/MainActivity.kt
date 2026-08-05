@@ -1,7 +1,9 @@
 package com.basel.ai
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.net.Uri
 import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -69,7 +72,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.basel.ai.core.AppStrings
 import com.basel.ai.core.ErrorLog
 import com.basel.ai.ui.ChatScreen
@@ -112,11 +117,37 @@ private enum class Destination(val icon: ImageVector) {
 }
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * What was shared into the app, if anything.
+     *
+     * A flow rather than a field because a share can arrive while the app is
+     * already open — `singleTask` delivers it to [onNewIntent] on the running
+     * instance, and the composition has to hear about it.
+     */
+    private val shared = MutableStateFlow<Shared?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         enableSustainedPerformance()
-        setContent { App() }
+        shared.value = readShare(intent)
+        setContent { App(shared) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        shared.value = readShare(intent)
+    }
+
+    /** A PDF or a passage of text sent from another app. */
+    private fun readShare(intent: Intent?): Shared? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+        if (uri != null) return Shared.Document(uri)
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+        return text?.takeIf { it.isNotEmpty() }?.let(Shared::Text)
     }
 
     /**
@@ -137,7 +168,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun App() {
+/** Something another app sent here. */
+sealed interface Shared {
+    data class Text(val text: String) : Shared
+    data class Document(val uri: Uri) : Shared
+}
+
+@Composable
+fun App(shared: MutableStateFlow<Shared?> = MutableStateFlow(null)) {
     // Read before the theme, because the theme needs to know the language:
     // Arabic and Latin want different leading and different tracking, and
     // treating one as a translation of the other is how Arabic ends up looking
@@ -148,6 +186,18 @@ fun App() {
     BaselAiTheme(arabic = settings.language.resolve().isRtl) {
         // Wraps everything: the language switch has to change layout direction
         // too, not just the words, or Arabic ends up inside an English shell.
+        // Acted on once, then cleared, so rotating the screen does not import
+        // the same document again.
+        val incoming by shared.collectAsStateWithLifecycle()
+        LaunchedEffect(incoming) {
+            when (val item = incoming) {
+                is Shared.Document -> viewModel.importDocument(item.uri)
+                is Shared.Text -> viewModel.setVoiceDraft(item.text)
+                null -> Unit
+            }
+            if (incoming != null) shared.value = null
+        }
+
         ProvideLocalization(settings.language) { AppContent(viewModel) }
     }
 }
@@ -387,11 +437,18 @@ private fun BottomBar(selected: Destination, onSelect: (Destination) -> Unit) {
         ) {
             val widthDp = LocalConfiguration.current.screenWidthDp
             val pillPadding = Layout.navPillPadding(widthDp, Destination.entries.size).dp
+            // The user's text size, which nothing here used to look at.
+            val showLabels = Layout.showNavLabels(
+                widthDp = widthDp,
+                tabs = Destination.entries.size,
+                fontScale = LocalDensity.current.fontScale,
+            )
             Destination.entries.forEach { item ->
                 NavItem(
                     item = item,
                     isSelected = item == selected,
                     pillPadding = pillPadding,
+                    showLabel = showLabels,
                     // Equal shares of the row. Five tabs at the padding four
                     // used needed 425dp of a 395dp row and the last one fell
                     // off the edge, which is why the pill padding is computed
@@ -409,6 +466,7 @@ private fun NavItem(
     item: Destination,
     isSelected: Boolean,
     pillPadding: androidx.compose.ui.unit.Dp,
+    showLabel: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -459,14 +517,16 @@ private fun NavItem(
                 modifier = Modifier.size(Layout.NAV_ICON_DP.dp).scale(iconScale),
             )
         }
-        Spacer(Modifier.height(3.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = tint,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (showLabel) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
