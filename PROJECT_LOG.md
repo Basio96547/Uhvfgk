@@ -541,6 +541,50 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 18 — 2026-07-27 · the conversation, and an Arabic typeface
+
+94. **The chat was printing raw Markdown.** A model writes `**مهم**`, `- بند`
+    and fenced code because that is what it was trained to write, and the
+    bubble showed the asterisks and the dashes. Long replies looked broken, and
+    emphasis — whose whole job is to say which part matters — was doing the
+    opposite.
+
+    `Markdown` parses it: emphasis, inline code, fenced blocks, bullets,
+    numbered lists, headings, rules. Deliberately no tables, images or HTML —
+    each would be more parser than it is worth, and a half-working table is
+    worse than a visible pipe.
+
+    Two rules, both tested. **An unclosed marker stays literal**, because a
+    truncated reply ends on a dangling `**` and swallowing the rest into bold
+    turns a cut-off answer into an unreadable one. And **nothing is ever
+    dropped** — a parser that quietly eats what it did not understand is worse
+    than one that shows the marker.
+
+95. **Code scrolls sideways rather than wrapping.** Wrapping is how a snippet
+    stops being copy-pasteable: the line breaks become part of it. Forced
+    left-to-right too, along with inline code, because a mirrored command is
+    unreadable — while prose keeps `TextDirection.Content`, so an Arabic reply
+    reads right-to-left with the interface in English.
+
+96. **The user's own text is never re-styled.** Markdown rendering applies to
+    replies only. Styling someone's own asterisks would be the app editing what
+    they typed.
+
+97. **A real Arabic typeface, bundled.** `FontFamily.Default` meant Roboto for
+    Latin and whatever the phone happened to ship for Arabic — a vendor naskh,
+    never chosen by this app. In a conversation that mixes the two constantly
+    (a model name, a command, "Android 16" inside an Arabic sentence) that is
+    two unrelated typefaces meeting mid-line, and it reads as a bug to someone
+    who could not name it.
+
+    IBM Plex Sans Arabic now: one family with real Arabic letterforms *and* a
+    Latin drawn alongside them, so mixed text is one voice. Three static
+    weights rather than the variable file, because variable instancing needs
+    API 26 and this app runs from 24. SIL Open Font License, shipped beside the
+    files.
+
+---
+
 ### Session 17 — 2026-07-27 · the terminal is the model's, not a page
 
 91. **Deleted the Terminal tab.** It was built as a screen you open and type

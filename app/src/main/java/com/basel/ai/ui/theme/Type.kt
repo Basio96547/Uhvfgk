@@ -5,10 +5,12 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.basel.ai.R
 
 /**
  * The type scale, in two versions.
@@ -31,6 +33,29 @@ import androidx.compose.ui.unit.sp
  *
  * So the same scale is generated twice and the theme picks by language.
  */
+/**
+ * IBM Plex Sans Arabic, bundled.
+ *
+ * `FontFamily.Default` gave Roboto for Latin and whatever the phone happened
+ * to ship for Arabic — usually a naskh chosen by the vendor, never chosen by
+ * this app. In a conversation that mixes the two constantly (a model name, a
+ * command, "Android 16" inside an Arabic sentence) that is two unrelated
+ * typefaces meeting mid-line, and it reads as a bug even to someone who could
+ * not name it.
+ *
+ * Plex Sans Arabic is one family with real Arabic letterforms *and* a matching
+ * Latin, drawn together, so mixed text looks like one voice. Three static
+ * weights rather than the variable file: variable-font instancing needs API 26
+ * and this app runs from 24.
+ *
+ * SIL Open Font License; the licence ships beside the files.
+ */
+private val Plex = FontFamily(
+    Font(R.font.plex_arabic_regular, FontWeight.Normal),
+    Font(R.font.plex_arabic_medium, FontWeight.Medium),
+    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
+)
+
 private fun scale(arabic: Boolean): Typography {
     // Arabic gets roughly 15% more leading, and never negative tracking.
     val lead = if (arabic) 1.15f else 1.0f
@@ -50,7 +75,7 @@ private fun scale(arabic: Boolean): Typography {
         weight: FontWeight,
         track: Double = 0.0,
     ) = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Plex,
         fontWeight = weight,
         fontSize = size.sp,
         lineHeight = leading(line),

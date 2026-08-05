@@ -74,12 +74,17 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -89,6 +94,9 @@ import com.basel.ai.ChatMessage
 import com.basel.ai.ChatViewModel
 import com.basel.ai.ModelStatus
 import com.basel.ai.agent.ToolRun
+import com.basel.ai.chat.Block
+import com.basel.ai.chat.Markdown
+import com.basel.ai.chat.Span
 import com.basel.ai.core.AppStrings
 import com.basel.ai.core.ThermalLevel
 import com.basel.ai.llm.QueryKind
@@ -584,6 +592,141 @@ private fun routingLine(decision: RoutingDecision, s: AppStrings): String {
  * transparency. Collapsed to one line each, because most of the time knowing
  * *that* it ran `ls` is enough; tap to see what came back.
  */
+/**
+ * A reply, laid out.
+ *
+ * The bubble printed the model's Markdown verbatim: `**مهم**` came out with
+ * the asterisks, `- بند` with the dash, a code block as a wall of text. Long
+ * replies looked broken, and emphasis — whose entire job is to say which part
+ * matters — was doing the opposite.
+ *
+ * Direction comes from the text rather than the interface throughout, so an
+ * Arabic reply reads right-to-left with the app in English; code goes the
+ * other way regardless, because a mirrored command is unreadable.
+ */
+@Composable
+private fun MarkdownBody(
+    text: String,
+    color: Color,
+    asMarkdown: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val body = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content)
+
+    if (!asMarkdown) {
+        Text(text = text, modifier = modifier, style = body, color = color)
+        return
+    }
+
+    val blocks = remember(text) { Markdown.parse(text) }
+    if (blocks.isEmpty()) {
+        Text(text = text, modifier = modifier, style = body, color = color)
+        return
+    }
+
+    Column(modifier) {
+        blocks.forEachIndexed { index, block ->
+            if (index > 0) Spacer(Modifier.height(Space.sm))
+            when (block) {
+                is Block.Paragraph ->
+                    Text(annotate(block.spans), style = body, color = color)
+
+                is Block.Heading -> Text(
+                    annotate(block.spans),
+                    style = when (block.level) {
+                        1 -> MaterialTheme.typography.titleMedium
+                        2 -> MaterialTheme.typography.titleSmall
+                        else -> MaterialTheme.typography.labelLarge
+                    }.copy(textDirection = TextDirection.Content),
+                    color = color,
+                )
+
+                is Block.Bullet -> ListLine("•", annotate(block.spans), body, color)
+                is Block.Numbered ->
+                    ListLine("${block.number}.", annotate(block.spans), body, color)
+
+                is Block.Code -> CodeBlock(block.code, color)
+
+                Block.Rule -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = Space.xs)
+                        .height(1.dp)
+                        .background(color.copy(alpha = 0.20f))
+                )
+            }
+        }
+    }
+}
+
+/** A marker and its text, with the marker on the reading side. */
+@Composable
+private fun ListLine(
+    marker: String,
+    text: AnnotatedString,
+    style: TextStyle,
+    color: Color,
+) {
+    Row(Modifier.padding(start = Space.xs)) {
+        Text(
+            marker,
+            style = style,
+            color = color.copy(alpha = 0.62f),
+            // Fixed width so wrapped lines align under the text, not the dot.
+            modifier = Modifier.width(22.dp),
+        )
+        Text(text, style = style, color = color, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * A fenced block: monospaced, left-to-right, and scrolled rather than wrapped.
+ *
+ * Wrapping code is how a snippet stops being copy-pasteable — the line breaks
+ * become part of it — so it scrolls sideways instead.
+ */
+@Composable
+private fun CodeBlock(code: String, color: Color) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(color.copy(alpha = 0.07f))
+                .padding(Space.md)
+        ) {
+            Text(
+                code,
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = color,
+                softWrap = false,
+            )
+        }
+    }
+}
+
+/** Spans to an AnnotatedString. */
+@Composable
+private fun annotate(spans: List<Span>): AnnotatedString = buildAnnotatedString {
+    val codeBackground = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    for (span in spans) {
+        val style = when {
+            span.code -> SpanStyle(
+                fontFamily = FontFamily.Monospace,
+                background = codeBackground,
+            )
+            span.bold && span.italic ->
+                SpanStyle(fontWeight = FontWeight.SemiBold, fontStyle = FontStyle.Italic)
+            span.bold -> SpanStyle(fontWeight = FontWeight.SemiBold)
+            span.italic -> SpanStyle(fontStyle = FontStyle.Italic)
+            else -> null
+        }
+        if (style == null) append(span.text) else withStyle(style) { append(span.text) }
+    }
+}
+
 @Composable
 private fun ToolRunList(runs: List<ToolRun>) {
     Column(Modifier.fillMaxWidth()) {
@@ -726,21 +869,17 @@ private fun Bubble(message: ChatMessage, isUser: Boolean) {
                 TypingIndicator()
             }
         } else {
-            Text(
+            MarkdownBody(
                 text = message.text,
-                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    // Direction from the text itself, not from the interface:
-                    // an Arabic reply reads right-to-left even when the app is
-                    // in English, and a code block or a Latin quotation inside
-                    // an Arabic chat still reads left-to-right.
-                    textDirection = TextDirection.Content,
-                ),
                 color = if (isUser) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
+                // What the user typed is what they typed. Styling their own
+                // asterisks would be the app editing them.
+                asMarkdown = !isUser,
+                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
             )
         }
     }
