@@ -89,6 +89,15 @@ fun IconTile(
 /**
  * The app's standard content block: icon tile, title, optional subtitle, then
  * body content. Every screen is built from these so pages feel like one system.
+ *
+ * It collapses when given an [onToggle]. That is what Settings needs and what
+ * Device does not: twelve permanently open cards made the settings page four
+ * screens tall, so each one closes down to a line. The closed line is
+ * [summary] — the setting's *current value*, not a description of it, so the
+ * page can be read without opening anything.
+ *
+ * Without [onToggle] the card is exactly what it was: always open, no chevron,
+ * nothing to press.
  */
 @Composable
 fun SectionCard(
@@ -98,9 +107,26 @@ fun SectionCard(
     subtitle: String? = null,
     tint: Color = MaterialTheme.colorScheme.primary,
     trailing: (@Composable () -> Unit)? = null,
+    expanded: Boolean = true,
+    onToggle: (() -> Unit)? = null,
+    summary: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = modifier.fillMaxWidth().panel().padding(Space.lg)) {
+    val collapsible = onToggle != null
+    // Down when closed, up when open — the arrow says which way pressing goes.
+    val chevron by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(180),
+        label = "chevron",
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .panel()
+            .then(if (collapsible) Modifier.clickable { onToggle?.invoke() } else Modifier)
+            .padding(Space.lg)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconTile(icon, tint)
             Spacer(Modifier.width(Space.md))
@@ -110,18 +136,36 @@ fun SectionCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
-                subtitle?.let {
+                // Closed, the value. Open, the explanation — once the controls
+                // are visible, restating what they are is noise.
+                val second = if (collapsible && !expanded) summary ?: subtitle else subtitle
+                second?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
             trailing?.invoke()
+            if (collapsible) {
+                Spacer(Modifier.width(Space.sm))
+                Icon(
+                    Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp).rotate(chevron),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Spacer(Modifier.height(Space.lg))
-        content()
+        AnimatedVisibility(visible = expanded) {
+            Column {
+                Spacer(Modifier.height(Space.lg))
+                content()
+            }
+        }
     }
 }
 
