@@ -43,7 +43,9 @@ import com.basel.ai.core.AutoPolicy
 import com.basel.ai.core.Connection
 import com.basel.ai.core.NetworkState
 import com.basel.ai.core.PowerState
+import com.basel.ai.core.MetricsSummary
 import com.basel.ai.core.Situation
+import com.basel.ai.core.TurnMetrics
 import com.basel.ai.core.DeviceCapabilities
 import com.basel.ai.core.ErrorLog
 import com.basel.ai.core.Localization
@@ -192,6 +194,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _streaming = MutableStateFlow<ChatMessage?>(null)
     val streaming: StateFlow<ChatMessage?> = _streaming.asStateFlow()
+
+    /**
+     * What each turn cost, newest last.
+     *
+     * Every performance claim here has been hedged with "never measured on a
+     * device", and that is only honest while measuring is impossible. The app
+     * is present whenever a model runs, so it counts.
+     */
+    private val _metrics = MutableStateFlow<List<TurnMetrics>>(emptyList())
+    val metrics: StateFlow<List<TurnMetrics>> = _metrics.asStateFlow()
 
     private val _autoNotes = MutableStateFlow<List<String>>(emptyList())
     val autoNotes: StateFlow<List<String>> = _autoNotes.asStateFlow()
@@ -622,6 +634,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         var turnPrompt = firstPrompt
         var step = 0
 
+        var tokens = 0
+        var firstTokenAt = 0L
+        var lastTokenAt = 0L
+        var callsSeen = 0
+        var callsParsed = 0
+        var callsOk = 0
+        val turnStart = System.currentTimeMillis()
+        val freeBefore = DeviceCapabilities.readMemory(getApplication()).effectiveAvailableBytes
+
         while (true) {
             // What the bubble already holds from earlier steps. Rewriting it
             // below has to keep this: the tool call being removed belongs to
@@ -637,6 +658,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 maxTokens = maxTokens,
             ) { thinking, answer, _ ->
                 collected.append(answer)
+                // One callback per token for both engines, which is the only
+                // token count available without reaching into the tokenizer.
+                tokens++
+                val now = System.currentTimeMillis()
+                if (firstTokenAt == 0L) firstTokenAt = now
+                lastTokenAt = now
                 // Never final here: a turn can span several generations, and
                 // finishTurn is what ends it.
                 appendDelta(replyId, thinking, answer, done = false, epoch = epoch)
@@ -645,7 +672,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (epoch != replyGeneration) return
 
             val reply = collected.toString()
+            // Counted whether or not there are steps left, because "the model
+            // tried and we would not let it" is a different fact from "the
+            // model never tried" — and only the second one says tools are
+            // beyond it.
+            val looksLikeCall = ToolCallParser.looksLikeCall(reply)
+            if (looksLikeCall) callsSeen++
             val call = if (step < maxSteps) ToolCallParser.parse(reply) else null
+            if (call != null) callsParsed++
             if (call == null) {
                 // No tool wanted, or no steps left. Close the turn.
                 if (step >= maxSteps && ToolCallParser.looksLikeCall(reply)) {
@@ -657,6 +691,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             Localization.strings.toolStepLimitReached,
                     )
                 }
+                recordMetrics(
+                    TurnMetrics(
+                        tokens = tokens,
+                        decodeMs = (lastTokenAt - firstTokenAt).coerceAtLeast(0),
+                        totalMs = System.currentTimeMillis() - turnStart,
+                        freeBytesBefore = freeBefore,
+                        freeBytesAfter = DeviceCapabilities
+                            .readMemory(getApplication()).effectiveAvailableBytes,
+                        thermalAtEnd = thermalGuard.level.value,
+                        onGpu = gpuLayers > 0,
+                        toolCallsSeen = callsSeen,
+                        toolCallsParsed = callsParsed,
+                        toolCallsSucceeded = callsOk,
+                    )
+                )
                 finishTurn(replyId, epoch)
                 return
             }
@@ -678,6 +727,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
+            if (result.ok) callsOk++
             _uiState.update { it.copy(searchStatus = null) }
             recordToolRun(
                 replyId,
@@ -695,6 +745,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             turnPrompt = ToolPrompt.observation(call, result, Localization.strings)
             step++
         }
+    }
+
+    private fun recordMetrics(turn: TurnMetrics) {
+        _metrics.update { (it + turn).takeLast(MetricsSummary.HISTORY) }
     }
 
     /** Writes the current conversation. Called when a turn ends, not per token. */

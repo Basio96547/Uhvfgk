@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -53,6 +54,7 @@ import com.basel.ai.audio.VoicePicker
 import com.basel.ai.core.AppLanguage
 import com.basel.ai.core.AppSettings
 import com.basel.ai.core.AppStrings
+import com.basel.ai.core.MetricsSummary
 import com.basel.ai.core.TtsEngine
 import com.basel.ai.llm.RoutingMode
 import com.basel.ai.web.SearchDepth
@@ -124,6 +126,61 @@ fun SettingsScreen(
         // message, in its own words. An automatic system nobody can interrogate
         // is just an opaque one, and every other part of this app is built on
         // being able to find out why.
+        // Measured, not claimed. Every performance sentence in this project has
+        // carried "never measured on a device"; this is what retires it.
+        SectionCard(
+            icon = Icons.Filled.Bolt,
+            title = s.metricsTitle,
+            subtitle = s.performanceSubtitle,
+            tint = MaterialTheme.colorScheme.primary,
+            expanded = section("speed"),
+            onToggle = toggle("speed"),
+            summary = viewModel.metrics.collectAsStateWithLifecycle().value
+                .let { turns ->
+                    MetricsSummary.medianTokensPerSecond(turns)
+                        ?.let { s.metricsRate(String.format("%.1f", it), MetricsSummary.totalTokens(turns)) }
+                        ?: s.metricsNoRate
+                },
+        ) {
+            val turns by viewModel.metrics.collectAsStateWithLifecycle()
+            if (turns.isEmpty()) {
+                Caption(s.metricsEmpty)
+            } else {
+                MetricsSummary.medianTokensPerSecond(turns)?.let { median ->
+                    Text(
+                        s.metricsMedian(String.format("%.1f", median), turns.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(Space.sm))
+                }
+
+                // The number that says whether tools are a feature or
+                // infrastructure with no user.
+                val seen = turns.sumOf { it.toolCallsSeen }
+                Caption(
+                    if (seen == 0) {
+                        s.metricsToolsNone
+                    } else {
+                        s.metricsToolSummary(
+                            ((MetricsSummary.toolParseRate(turns) ?: 0.0) * 100).toInt(),
+                            seen,
+                        )
+                    }
+                )
+
+                SoftDivider()
+                turns.asReversed().take(8).forEach { turn ->
+                    Text(
+                        MetricsSummary.format(turn, s),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(Space.xs))
+                }
+            }
+        }
+
         SectionCard(
             icon = Icons.Filled.AutoAwesome,
             title = s.autoTitle,

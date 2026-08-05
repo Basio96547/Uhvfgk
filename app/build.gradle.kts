@@ -37,11 +37,22 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // The debug APK was 55 MB and that stopped being an abstraction the
+            // day it failed to download twice on a real connection. Almost all
+            // of it is code nobody calls: material-icons-extended ships two
+            // thousand icons and this app draws forty-five.
+            //
+            // Shrinking only — see proguard-rules.pro for why renaming is off.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Signed with the debug key so it installs from a browser like the
+            // debug build did. This is a shrunk development build, not a
+            // distributable release.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

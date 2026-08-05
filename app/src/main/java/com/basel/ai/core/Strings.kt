@@ -530,6 +530,17 @@ interface AppStrings {
 
 
     // ---------------------------------------------------------- automatic
+    fun metricsRate(rate: String, tokens: Int): String
+    val metricsNoRate: String
+    val metricsOnGpu: String
+    val metricsOnCpu: String
+    fun metricsMemory(size: String): String
+    fun metricsTools(ok: Int, parsed: Int, seen: Int): String
+    val metricsTitle: String
+    val metricsEmpty: String
+    fun metricsMedian(rate: String, turns: Int): String
+    fun metricsToolSummary(parsePercent: Int, seen: Int): String
+    val metricsToolsNone: String
     val untitledChat: String
     val exportYou: String
     val exportAssistant: String
@@ -1247,6 +1258,20 @@ object EnglishStrings : AppStrings {
     override fun toolNoPageMatch(phrase: String) = "No page mentions \"$phrase\"."
 
 
+    override fun metricsRate(rate: String, tokens: Int) = "$rate tok/s over $tokens tokens"
+    override val metricsNoRate = "no tokens"
+    override val metricsOnGpu = "GPU"
+    override val metricsOnCpu = "CPU"
+    override fun metricsMemory(size: String) = "$size used"
+    override fun metricsTools(ok: Int, parsed: Int, seen: Int) =
+        "tools $ok/$parsed of $seen tried"
+    override val metricsTitle = "Speed"
+    override val metricsEmpty = "Nothing measured yet. Send a message."
+    override fun metricsMedian(rate: String, turns: Int) =
+        "Median $rate tok/s across $turns turns."
+    override fun metricsToolSummary(parsePercent: Int, seen: Int) =
+        "The model tried to call a tool $seen times; $parsePercent% were readable."
+    override val metricsToolsNone = "The model has not tried to call a tool yet."
     override val untitledChat = "New chat"
     override val exportYou = "You"
     override val exportAssistant = "باسل Ai"
@@ -1979,6 +2004,20 @@ object ArabicStrings : AppStrings {
     override fun toolNoPageMatch(phrase: String) = "لا صفحة تذكر «$phrase»."
 
 
+    override fun metricsRate(rate: String, tokens: Int) = "$rate رمز/ث على $tokens رمزًا"
+    override val metricsNoRate = "بلا رموز"
+    override val metricsOnGpu = "كرت الرسوميات"
+    override val metricsOnCpu = "المعالج"
+    override fun metricsMemory(size: String) = "استُهلك $size"
+    override fun metricsTools(ok: Int, parsed: Int, seen: Int) =
+        "أدوات $ok/$parsed من $seen محاولة"
+    override val metricsTitle = "السرعة"
+    override val metricsEmpty = "لم يُقس شيء بعد. أرسل رسالة."
+    override fun metricsMedian(rate: String, turns: Int) =
+        "الوسيط $rate رمز/ث عبر $turns دورًا."
+    override fun metricsToolSummary(parsePercent: Int, seen: Int) =
+        "حاول النموذج نداء أداة $seen مرة، وكان $parsePercent٪ منها مقروءًا."
+    override val metricsToolsNone = "لم يحاول النموذج نداء أي أداة بعد."
     override val untitledChat = "محادثة جديدة"
     override val exportYou = "أنت"
     override val exportAssistant = "باسل Ai"

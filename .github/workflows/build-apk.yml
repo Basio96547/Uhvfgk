@@ -41,8 +41,11 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build APK
+        # Release rather than debug: it is the same code with the unused nine
+        # tenths of the libraries removed, and the size is what decides whether
+        # anyone can actually download it.
+        run: ./gradlew assembleRelease --stacktrace
 
       - name: Rename APK
         run: |
@@ -54,7 +57,7 @@ jobs:
           # it 404'd — including for a documentation commit that changed no
           # code. The commit is recorded in the release notes instead, where
           # being stale costs nothing.
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/BaselAI-latest.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/BaselAI-latest.apk"
           ls -lh dist
 
       # Downloadable from the workflow run page (as a zip).
