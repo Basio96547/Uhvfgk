@@ -117,8 +117,8 @@ app/src/main/
 ├── cpp/                        Native: llama.cpp + JNI bridge (CMake FetchContent)
 │   ├── CMakeLists.txt          Builds llama.cpp from source, CPU only
 │   └── llama_bridge.cpp        Load / generate / stop / reset / set-threads
-├── java/com/example/ondevicellm/
-│   ├── OnDeviceLlmApp.kt       Application; arms ErrorLog + crash handler
+├── java/com/basel/ai/
+│   ├── BaselAiApp.kt       Application; arms ErrorLog + crash handler
 │   ├── MainActivity.kt         Shell: header, crossfaded screens, bottom bar
 │   ├── ChatViewModel.kt        All app state
 │   ├── core/
@@ -221,7 +221,7 @@ platform APIs, so grounding can't conflict with the inference runtimes.
    compiling, not by reading. Added a brace-balance check.
 10. **Thermal + web search**: `ThermalGuard`, live `llama_set_n_threads`,
     sustained performance mode; DuckDuckGo + Wikipedia grounding with citations.
-11. **Diagnostics**: `ErrorLog`, crash handler, `OnDeviceLlmApp`, diagnostics
+11. **Diagnostics**: `ErrorLog`, crash handler, `BaselAiApp`, diagnostics
     dialog, header badge; replaced silent catches. Added a **stop-generation**
     control that was missing entirely.
 12. **This log.**
@@ -516,7 +516,7 @@ layouts should be tuned for that screen.
 
 42. **Swept the whole tree by analysis, not by memory.** 1426 declarations
     checked for references; the two that came back unreferenced (`MainActivity`,
-    `OnDeviceLlmApp`) are named in the manifest, so nothing top-level was dead.
+    `BaselAiApp`) are named in the manifest, so nothing top-level was dead.
     The rot was in the categories a name-scan misses — fields, config, and one
     C++ struct member. **Every candidate was verified before deletion, and three
     were false positives:** `hexagonStubs` is read by `hexagonVersion`,
@@ -540,6 +540,37 @@ layouts should be tuned for that screen.
     itself, so an Arabic reply reads right-to-left even with the interface in
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
+
+### Session 14 — 2026-07-27 · the app has a name
+
+79. **Renamed to باسل Ai, all the way down.** Not only the label under the
+    icon: the package, the `applicationId`, the directory tree, the Compose and
+    XML themes, the Application class, the Gradle project, the CI artifact and
+    the APK file name. 110 files rewritten, longest identifier first so a short
+    form could never eat part of a long one.
+
+    The part that would have failed silently: **JNI symbol names are derived
+    from the package.** `Java_com_example_ondevicellm_llm_LlamaBridge_*` had to
+    become `Java_com_basel_ai_llm_LlamaBridge_*`, in the C++ and in the
+    verifier's own declarations, or every native call would resolve to nothing
+    at runtime with a build that compiled perfectly. `tools/verify-native.sh`
+    links and calls them, so it catches exactly this — and it passed.
+
+    Moved with `git mv` rather than copy-and-delete, so the history of every
+    file survives the rename.
+
+80. **The APK file name changed with it**, to `BaselAI-latest.apk`. That is the
+    one and only time it changes: the name is stable by design now, and the
+    reason it is stable is that it stopped carrying anything that varies.
+
+81. **The README's first paragraph was no longer true.** It said "no internet,
+    no API keys, no data leaving the phone", and since then web search, the
+    hosted voice and cloud OCR have all arrived. They are opt-in and off by
+    default, which is a fair thing to say — but "no data leaving the phone" as
+    an unqualified claim on the front page is not, so it now names the three
+    exceptions instead.
+
+---
 
 ### Session 13 — 2026-07-27 · the GPU, and six bugs found by review
 

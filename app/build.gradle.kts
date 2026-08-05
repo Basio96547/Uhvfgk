@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ondevicellm"
+    namespace = "com.basel.ai"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.ondevicellm"
+        applicationId = "com.basel.ai"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

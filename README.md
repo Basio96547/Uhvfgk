@@ -1,7 +1,14 @@
-# On-Device LLM Chat (Android)
+# باسل Ai
 
-An Android app that runs language models **fully on-device** — no internet, no
-API keys, no data leaving the phone. Built around Google's
+An Android app that runs language models **on the phone itself** — the model,
+the weights and the conversation never leave it.
+
+Three features are the exception, and they are opt-in, off by default, and say
+so where they are switched on: web search, the hosted voice, and reading text
+out of scanned pages. Each needs the user's own key or a connection, and each
+states exactly what it sends. Everything else works with the aeroplane mode on.
+
+Built around Google's
 [MediaPipe LLM Inference API](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android),
 with a model manager, hardware-aware backend selection, reasoning ("thinking")
 support, and both voice input and voice output.
@@ -85,7 +92,7 @@ SDK and a different model artifact, neither publicly available on Maven. The
 integration point is already stubbed out for you:
 
 ```
-app/src/main/java/com/example/ondevicellm/llm/BackendResolver.kt  →  object NpuRuntime
+app/src/main/java/com/basel/ai/llm/BackendResolver.kt  →  object NpuRuntime
 ```
 
 Wiring steps are documented in that file's KDoc.
@@ -242,7 +249,7 @@ platform API with no dependency at all.
 ## Project structure
 
 ```
-app/src/main/java/com/example/ondevicellm/
+app/src/main/java/com/basel/ai/
 ├── MainActivity.kt           Bottom-nav shell (Chat / Studio / Terminal / Models / Device / Settings)
 ├── ChatViewModel.kt          App state: models, chat, voice, memory
 ├── core/

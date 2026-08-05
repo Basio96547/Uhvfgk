@@ -98,16 +98,16 @@ cat > probe.cpp <<'PROBE'
 namespace llamabridge { size_t utf8_complete_prefix(const std::string &); }
 
 extern "C" {
-JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeInit(JNIEnv*, jobject);
-JNIEXPORT jstring JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv*, jobject);
-JNIEXPORT jlong   JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(JNIEnv*, jobject, jstring, jint, jint, jint);
-JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeFree(JNIEnv*, jobject, jlong);
-JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(JNIEnv*, jobject, jlong, jint);
-JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeStop(JNIEnv*, jobject, jlong);
-JNIEXPORT void    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(JNIEnv*, jobject, jlong);
-JNIEXPORT jstring JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv*, jobject);
-JNIEXPORT jstring JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeBackends(JNIEnv*, jobject);
-JNIEXPORT jint    JNICALL Java_com_example_ondevicellm_llm_LlamaBridge_nativeGpuLayersUsed(JNIEnv*, jobject);
+JNIEXPORT void    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeInit(JNIEnv*, jobject);
+JNIEXPORT jstring JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeLastError(JNIEnv*, jobject);
+JNIEXPORT jlong   JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel(JNIEnv*, jobject, jstring, jint, jint, jint);
+JNIEXPORT void    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeFree(JNIEnv*, jobject, jlong);
+JNIEXPORT void    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeSetThreads(JNIEnv*, jobject, jlong, jint);
+JNIEXPORT void    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeStop(JNIEnv*, jobject, jlong);
+JNIEXPORT void    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeResetContext(JNIEnv*, jobject, jlong);
+JNIEXPORT jstring JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeCpuFeatures(JNIEnv*, jobject);
+JNIEXPORT jstring JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeBackends(JNIEnv*, jobject);
+JNIEXPORT jint    JNICALL Java_com_basel_ai_llm_LlamaBridge_nativeGpuLayersUsed(JNIEnv*, jobject);
 }
 static int failures = 0;
 static void check(const char* n, bool ok) { printf("%s  %s\n", ok?"PASS ":"FAIL ", n); if(!ok) failures++; }
@@ -116,20 +116,20 @@ int main() {
     JavaVMInitArgs a{}; a.version=JNI_VERSION_1_8; a.nOptions=0; a.ignoreUnrecognized=JNI_TRUE;
     if (JNI_CreateJavaVM(&vm,(void**)&env,&a)!=JNI_OK) { printf("no JVM\n"); return 1; }
 
-    Java_com_example_ondevicellm_llm_LlamaBridge_nativeInit(env,nullptr);
+    Java_com_basel_ai_llm_LlamaBridge_nativeInit(env,nullptr);
     check("nativeInit runs", true);
 
-    Java_com_example_ondevicellm_llm_LlamaBridge_nativeFree(env,nullptr,0);
-    Java_com_example_ondevicellm_llm_LlamaBridge_nativeStop(env,nullptr,0);
-    Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(env,nullptr,0);
-    Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(env,nullptr,0,4);
+    Java_com_basel_ai_llm_LlamaBridge_nativeFree(env,nullptr,0);
+    Java_com_basel_ai_llm_LlamaBridge_nativeStop(env,nullptr,0);
+    Java_com_basel_ai_llm_LlamaBridge_nativeResetContext(env,nullptr,0);
+    Java_com_basel_ai_llm_LlamaBridge_nativeSetThreads(env,nullptr,0,4);
     check("null-handle calls are guarded", true);
 
     jstring bad = env->NewStringUTF("/definitely/not/a/model.gguf");
     check("missing model returns null handle",
-          Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(env,nullptr,bad,2048,4,0)==0);
+          Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel(env,nullptr,bad,2048,4,0)==0);
 
-    jstring e = Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(env,nullptr);
+    jstring e = Java_com_basel_ai_llm_LlamaBridge_nativeLastError(env,nullptr);
     const char* m = env->GetStringUTFChars(e,nullptr);
     check("failure sets a user-facing message", m && strlen(m)>0);
     printf("       reported: \"%s\"\n", m?m:"(null)");
@@ -137,23 +137,23 @@ int main() {
 
     jstring empty = env->NewStringUTF("");
     check("empty path returns null handle",
-          Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(env,nullptr,empty,512,2,0)==0);
+          Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel(env,nullptr,empty,512,2,0)==0);
 
     // Asking for GPU layers on a file that does not exist must still come back
     // null rather than hanging or crashing in the fallback path.
     check("a GPU request on a missing model falls back and still fails cleanly",
-          Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(env,nullptr,bad,2048,4,99)==0);
+          Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel(env,nullptr,bad,2048,4,99)==0);
 
-    jstring devs = Java_com_example_ondevicellm_llm_LlamaBridge_nativeBackends(env,nullptr);
+    jstring devs = Java_com_basel_ai_llm_LlamaBridge_nativeBackends(env,nullptr);
     const char* devs_c = env->GetStringUTFChars(devs,nullptr);
     check("the backend registry is readable", devs_c != nullptr);
     printf("       devices: \"%s\"\n", devs_c ? devs_c : "");
     if (devs_c) env->ReleaseStringUTFChars(devs,devs_c);
 
     check("no layers are on the GPU after a failed load",
-          Java_com_example_ondevicellm_llm_LlamaBridge_nativeGpuLayersUsed(env,nullptr)==0);
+          Java_com_basel_ai_llm_LlamaBridge_nativeGpuLayersUsed(env,nullptr)==0);
 
-    jstring feats = Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(env,nullptr);
+    jstring feats = Java_com_basel_ai_llm_LlamaBridge_nativeCpuFeatures(env,nullptr);
     const char* fs = env->GetStringUTFChars(feats,nullptr);
     check("CPU features are reported", fs != nullptr);
     printf("       host kernels: \"%s\"\n", fs?fs:"(none)");

@@ -54,14 +54,14 @@ jobs:
           # it 404'd — including for a documentation commit that changed no
           # code. The commit is recorded in the release notes instead, where
           # being stale costs nothing.
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/OnDeviceLLM-latest.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/BaselAI-latest.apk"
           ls -lh dist
 
       # Downloadable from the workflow run page (as a zip).
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OnDeviceLLM-debug-apk
+          name: BaselAI-debug-apk
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -90,7 +90,7 @@ jobs:
               --prerelease \
               --target "${GITHUB_SHA}"
 
-          gh release upload latest-debug dist/OnDeviceLLM-latest.apk --clobber
+          gh release upload latest-debug dist/BaselAI-latest.apk --clobber
 
           gh release edit latest-debug \
             --title "Latest debug build" \
@@ -98,7 +98,7 @@ jobs:
             --notes "Debug APK from ${GITHUB_SHA::7} on \`${GITHUB_REF_NAME}\`.
 
           Download (this link never changes):
-          https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-debug/OnDeviceLLM-latest.apk
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-debug/BaselAI-latest.apk
 
           Install: download the .apk on your phone and allow installing from
           your browser when prompted. Debug builds are signed with the standard

@@ -2,5 +2,5 @@
 <resources>
     <!-- Base theme; Compose drives the real colors. This keeps a splash-safe
          Material 3 parent so the app has a valid theme before Compose starts. -->
-    <style name="Theme.OnDeviceLLM" parent="Theme.Material3.DayNight.NoActionBar" />
+    <style name="Theme.BaselAi" parent="Theme.Material3.DayNight.NoActionBar" />
 </resources>

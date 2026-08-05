@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OnDeviceLLM"
+rootProject.name = "BaselAi"
 include(":app")

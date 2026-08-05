@@ -178,7 +178,7 @@ std::string apply_chat_template(
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeInit(JNIEnv *, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeInit(JNIEnv *, jobject) {
     static std::atomic<bool> initialised{false};
     bool expected = false;
     if (initialised.compare_exchange_strong(expected, true)) {
@@ -191,7 +191,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeInit(JNIEnv *, jobject) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv *env, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeLastError(JNIEnv *env, jobject) {
     return env->NewStringUTF(g_last_error.c_str());
 }
 
@@ -202,7 +202,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastError(JNIEnv *env, jobjec
 /// really running on, not what the phone could theoretically do.
 /// 0 = the model finished its turn, 1 = cut off by the token cap, 2 = stopped.
 JNIEXPORT jint JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastStopReason(JNIEnv *, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeLastStopReason(JNIEnv *, jobject) {
     return static_cast<jint>(g_stop_reason.load());
 }
 
@@ -213,7 +213,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLastStopReason(JNIEnv *, jobj
 /// that driver enumerated a device, which is the question the Settings screen
 /// has been guessing at.
 JNIEXPORT jstring JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeBackends(JNIEnv *env, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeBackends(JNIEnv *env, jobject) {
     std::string names;
     const size_t count = ggml_backend_dev_count();
     for (size_t i = 0; i < count; i++) {
@@ -229,12 +229,12 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeBackends(JNIEnv *env, jobject
 
 /// Layers that ended up on the GPU for the model currently loaded. 0 = all CPU.
 JNIEXPORT jint JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeGpuLayersUsed(JNIEnv *, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeGpuLayersUsed(JNIEnv *, jobject) {
     return static_cast<jint>(g_gpu_layers_used.load());
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobject) {
+Java_com_basel_ai_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobject) {
     std::string features;
     const auto add = [&features](const char *name, int enabled) {
         if (!enabled) return;
@@ -251,7 +251,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeCpuFeatures(JNIEnv *env, jobj
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
+Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel(
     JNIEnv *env, jobject, jstring path_, jint n_ctx, jint n_threads, jint n_gpu_layers) {
 
     g_last_error.clear();
@@ -311,7 +311,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeLoadModel(
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeFree(JNIEnv *, jobject, jlong handle) {
+Java_com_basel_ai_llm_LlamaBridge_nativeFree(JNIEnv *, jobject, jlong handle) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session == nullptr) return;
     if (session->ctx) llama_free(session->ctx);
@@ -322,7 +322,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeFree(JNIEnv *, jobject, jlong
 /// Retunes the thread count on a live context so the app can back off as the
 /// device heats up, without unloading the model.
 JNIEXPORT void JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(
+Java_com_basel_ai_llm_LlamaBridge_nativeSetThreads(
     JNIEnv *, jobject, jlong handle, jint n_threads) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session == nullptr || session->ctx == nullptr) return;
@@ -331,14 +331,14 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeSetThreads(
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeStop(JNIEnv *, jobject, jlong handle) {
+Java_com_basel_ai_llm_LlamaBridge_nativeStop(JNIEnv *, jobject, jlong handle) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session) session->stop.store(true);
 }
 
 /// Drops the conversation history so the next turn starts fresh.
 JNIEXPORT void JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(JNIEnv *, jobject, jlong handle) {
+Java_com_basel_ai_llm_LlamaBridge_nativeResetContext(JNIEnv *, jobject, jlong handle) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session == nullptr || session->ctx == nullptr) return;
     llama_memory_clear(llama_get_memory(session->ctx), /*data=*/true);
@@ -351,7 +351,7 @@ Java_com_example_ondevicellm_llm_LlamaBridge_nativeResetContext(JNIEnv *, jobjec
  * The callback returns false to request an early stop.
  */
 JNIEXPORT jboolean JNICALL
-Java_com_example_ondevicellm_llm_LlamaBridge_nativeGenerate(
+Java_com_basel_ai_llm_LlamaBridge_nativeGenerate(
     JNIEnv *env, jobject, jlong handle,
     jstring prompt_, jstring system_,
     jint max_tokens, jfloat temperature, jint top_k, jfloat top_p, jint seed,
