@@ -535,6 +535,39 @@ interface AppStrings {
     fun toolNoSuchDocument(name: String): String
     fun toolNoPageMatch(phrase: String): String
 
+
+    // ---------------------------------------------------------- automatic
+    val autoLabel: String
+    fun autoContextReason(tokens: Int, freeGb: Double): String
+    fun autoThreadsReason(threads: Int, cores: Int, why: String): String
+    val autoThreadsFull: String
+    val autoThreadsGpu: String
+    val autoThreadsSaving: String
+    val autoThreadsCritical: String
+    val autoDepthOffline: String
+    val autoDepthMetered: String
+    val autoDepthSaving: String
+    val autoDepthDeep: String
+    val autoStepsHot: String
+    val autoStepsConstrained: String
+    val autoStepsGpu: String
+    val autoStepsNormal: String
+    val autoTokensHot: String
+    val autoTokensConstrained: String
+    val autoTokensFull: String
+    val autoOcrOffline: String
+    val autoOcrMetered: String
+    val autoOcrBattery: String
+    val autoOcrReady: String
+    val autoGpuAbsent: String
+    val autoGpuHot: String
+    val autoGpuMemory: String
+    val autoGpuReady: String
+    val autoTitle: String
+    val autoSubtitle: String
+    val autoExplainNote: String
+    val autoNothingToShow: String
+
     // -------------------------------------------------------- routing modes
     val modeAuto: String
     val modeAlways: String
@@ -1193,6 +1226,41 @@ object EnglishStrings : AppStrings {
     override fun toolNoSuchDocument(name: String) = "No document matches \"$name\"."
     override fun toolNoPageMatch(phrase: String) = "No page mentions \"$phrase\"."
 
+
+    override val autoLabel = "Automatic"
+    override fun autoContextReason(tokens: Int, freeGb: Double) =
+        "Memory for %,d tokens of conversation (%.1f GB free).".format(tokens, freeGb)
+    override fun autoThreadsReason(threads: Int, cores: Int, why: String) =
+        "$threads of $cores cores — $why."
+    override val autoThreadsFull = "cool and charged"
+    override val autoThreadsGpu = "the GPU is doing the work"
+    override val autoThreadsSaving = "saving battery"
+    override val autoThreadsCritical = "battery is nearly out"
+    override val autoDepthOffline = "No connection, so snippets only."
+    override val autoDepthMetered = "On mobile data — snippets only, to spare your allowance."
+    override val autoDepthSaving = "Saving battery, so snippets only."
+    override val autoDepthDeep = "On Wi-Fi, so the top pages are read in full."
+    override val autoStepsHot = "One step: the phone is hot or nearly flat."
+    override val autoStepsConstrained = "Two steps, to keep this short."
+    override val autoStepsGpu = "Four steps: the GPU makes each one cheap."
+    override val autoStepsNormal = "Three steps."
+    override val autoTokensHot = "Shorter answers while the phone cools down."
+    override val autoTokensConstrained = "Slightly shorter answers to save power."
+    override val autoTokensFull = "Full length."
+    override val autoOcrOffline = "No connection, so scanned pages stay unread."
+    override val autoOcrMetered = "On mobile data — a page image per page is not sent without Wi-Fi."
+    override val autoOcrBattery = "Battery is nearly out, so scanned pages are left for later."
+    override val autoOcrReady = "On Wi-Fi, so scanned pages can be read."
+    override val autoGpuAbsent = "No GPU device answered."
+    override val autoGpuHot = "The phone is hot; the GPU would only add to it."
+    override val autoGpuMemory = "Not enough free memory to hold the model on the GPU."
+    override val autoGpuReady = "Enough room and cool enough for the GPU."
+    override val autoTitle = "Automatic"
+    override val autoSubtitle = "What the app decided, and why"
+    override val autoExplainNote = "These follow the phone's state. Set any of them yourself and " +
+        "your choice wins — this only fills in what you left on Automatic."
+    override val autoNothingToShow = "Send a message and the decisions for it appear here."
+
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
     override val modeNever = "Never"
@@ -1849,6 +1917,41 @@ object ArabicStrings : AppStrings {
     override val toolNoDocuments = "لم تُضف أي مستندات."
     override fun toolNoSuchDocument(name: String) = "لا مستند يطابق «$name»."
     override fun toolNoPageMatch(phrase: String) = "لا صفحة تذكر «$phrase»."
+
+
+    override val autoLabel = "تلقائي"
+    override fun autoContextReason(tokens: Int, freeGb: Double) =
+        "ذاكرة تكفي %,d رمزًا من المحادثة (%.1f جيجابايت متاحة).".format(tokens, freeGb)
+    override fun autoThreadsReason(threads: Int, cores: Int, why: String) =
+        "$threads من $cores نواة — $why."
+    override val autoThreadsFull = "بارد ومشحون"
+    override val autoThreadsGpu = "كرت الرسوميات يقوم بالعمل"
+    override val autoThreadsSaving = "توفير البطارية"
+    override val autoThreadsCritical = "البطارية أوشكت على النفاد"
+    override val autoDepthOffline = "لا اتصال، فمقتطفات فقط."
+    override val autoDepthMetered = "على بيانات الجوّال — مقتطفات فقط حفاظًا على باقتك."
+    override val autoDepthSaving = "توفير البطارية، فمقتطفات فقط."
+    override val autoDepthDeep = "على واي فاي، فتُقرأ الصفحات الأولى كاملة."
+    override val autoStepsHot = "خطوة واحدة: الجهاز حارّ أو شبه فارغ."
+    override val autoStepsConstrained = "خطوتان، لتبقى الإجابة سريعة."
+    override val autoStepsGpu = "أربع خطوات: كرت الرسوميات يجعل كلًّا منها رخيصة."
+    override val autoStepsNormal = "ثلاث خطوات."
+    override val autoTokensHot = "إجابات أقصر حتى يبرد الجهاز."
+    override val autoTokensConstrained = "إجابات أقصر قليلًا لتوفير الطاقة."
+    override val autoTokensFull = "بالطول الكامل."
+    override val autoOcrOffline = "لا اتصال، فالصفحات الممسوحة تبقى غير مقروءة."
+    override val autoOcrMetered = "على بيانات الجوّال — لا تُرسَل صورة لكل صفحة إلا على واي فاي."
+    override val autoOcrBattery = "البطارية أوشكت على النفاد، فتُؤجَّل الصفحات الممسوحة."
+    override val autoOcrReady = "على واي فاي، فيمكن قراءة الصفحات الممسوحة."
+    override val autoGpuAbsent = "لم يستجب أي جهاز رسوميات."
+    override val autoGpuHot = "الجهاز حارّ، وكرت الرسوميات سيزيده حرارة."
+    override val autoGpuMemory = "الذاكرة المتاحة لا تكفي لوضع النموذج على كرت الرسوميات."
+    override val autoGpuReady = "المساحة كافية والحرارة مناسبة لكرت الرسوميات."
+    override val autoTitle = "تلقائي"
+    override val autoSubtitle = "ما قرّره التطبيق، ولماذا"
+    override val autoExplainNote = "هذه تتبع حال الجهاز. واضبط أيًّا منها بنفسك فيغلب اختيارك — " +
+        "التلقائي لا يملأ إلا ما تركته له."
+    override val autoNothingToShow = "أرسل رسالة وستظهر هنا القرارات المتخذة لها."
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"

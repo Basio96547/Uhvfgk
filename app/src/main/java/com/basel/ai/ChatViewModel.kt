@@ -33,6 +33,11 @@ import com.basel.ai.audio.SynthesisResult
 import com.basel.ai.audio.SystemTtsSynthesizer
 import com.basel.ai.audio.WavWriter
 import com.basel.ai.core.AppSettings
+import com.basel.ai.core.AutoPolicy
+import com.basel.ai.core.Connection
+import com.basel.ai.core.NetworkState
+import com.basel.ai.core.PowerState
+import com.basel.ai.core.Situation
 import com.basel.ai.core.DeviceCapabilities
 import com.basel.ai.core.ErrorLog
 import com.basel.ai.core.Localization
@@ -171,6 +176,38 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _memory = MutableStateFlow(DeviceCapabilities.readMemory(app))
     val memory: StateFlow<MemorySnapshot> = _memory.asStateFlow()
 
+    /**
+     * The decisions taken for the last turn, each with its reason.
+     *
+     * Kept and shown rather than made silently. An automatic system that
+     * cannot be asked "why did you do that" is just an opaque one, and this
+     * app's whole posture is that the user can always find out.
+     */
+    private val _autoNotes = MutableStateFlow<List<String>>(emptyList())
+    val autoNotes: StateFlow<List<String>> = _autoNotes.asStateFlow()
+
+    /** Layers the loaded model has on the GPU. Feeds the thread and step budgets. */
+    private var gpuLayers = 0
+
+    /**
+     * The phone as it is right now.
+     *
+     * Read per turn rather than cached: thermal, charge and connection all
+     * change between one message and the next, and a decision made from a
+     * stale picture is worse than no decision at all.
+     */
+    private fun situation(): Situation {
+        val app = getApplication<Application>()
+        return Situation(
+            thermal = thermalGuard.level.value,
+            power = PowerState.read(app),
+            connection = NetworkState.read(app),
+            availableBytes = DeviceCapabilities.readMemory(app).effectiveAvailableBytes,
+            cpuCores = Runtime.getRuntime().availableProcessors(),
+            gpuLayers = gpuLayers,
+        )
+    }
+
     private var engine: TextEngine? = null
     private var loadJob: Job? = null
     /** Bumped per load request; a load that finishes stale discards itself. */
@@ -267,6 +304,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 engine = loaded
+                // Feeds the thread and step budgets: work on the GPU is
+                // cheaper per step and needs fewer CPU threads behind it.
+                gpuLayers = (loaded as? LlamaCppEngine)?.gpuLayers ?: 0
                 registry.select(spec)
                 _uiState.update {
                     it.copy(
@@ -438,14 +478,33 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val epoch = ++replyGeneration
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Match decode threads to the current thermal state before starting.
-            (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
+            val s = Localization.strings
+            val here = situation()
+            val notes = mutableListOf<String>()
+
+            // Threads follow heat *and* charge now. A flat phone deserves the
+            // same restraint as a hot one, and on the GPU the CPU is only
+            // feeding the pipeline.
+            val threads = AutoPolicy.threads(here, s)
+            notes += threads.reason
+            (active as? LlamaCppEngine)?.applyThreadBudget(threads.value)
+
+            // An explicit setting always wins; automatic only fills the gaps.
+            val depth = current.searchDepth
+                ?: AutoPolicy.searchDepth(here, s).also { notes += it.reason }.value
+            val steps = current.toolMaxSteps
+                ?: AutoPolicy.toolSteps(here, s).also { notes += it.reason }.value
+            val tokens = AutoPolicy.maxTokens(decision.maxTokens, here, s)
+            if (tokens.value != decision.maxTokens) notes += tokens.reason
 
             var grounding = ""
-            if (decision.search) {
+            if (decision.search && !AutoPolicy.networkUsable(here)) {
+                _uiState.update { it.copy(notice = s.autoDepthOffline) }
+            }
+            if (decision.search && AutoPolicy.networkUsable(here)) {
                 _uiState.update {
                     it.copy(
-                        searchStatus = if (current.searchDepth == SearchDepth.DEEP) {
+                        searchStatus = if (depth == SearchDepth.DEEP) {
                             Localization.strings.searchingAndReading
                         } else {
                             Localization.strings.searchingWeb
@@ -453,7 +512,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 val outcome = try {
-                    webSearch.search(prompt, current.voiceLanguageTag, current.searchDepth)
+                    webSearch.search(prompt, current.voiceLanguageTag, depth)
                 } catch (e: Throwable) {
                     ErrorLog.report("Web search", "Search failed", e)
                     null
@@ -515,8 +574,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     decision = decision,
                     replyId = replyId,
                     epoch = epoch,
-                    maxSteps = if (registry.isEmpty) 0 else current.toolMaxSteps.coerceIn(0, 6),
+                    maxSteps = if (registry.isEmpty) 0 else steps.coerceIn(0, 6),
+                    maxTokens = tokens.value,
                 )
+                _autoNotes.value = notes
             } catch (e: Throwable) {
                 ErrorLog.report("Generation", "Generation failed", e)
                 appendDelta(replyId, "", "\n[error: ${e.message}]", done = true, epoch = epoch)
@@ -554,6 +615,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         replyId: Long,
         epoch: Int,
         maxSteps: Int,
+        maxTokens: Int,
     ) {
         var turnPrompt = firstPrompt
         var step = 0
@@ -570,7 +632,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 prompt = turnPrompt,
                 systemPrompt = systemPrompt,
                 thinkingEnabled = decision.think,
-                maxTokens = decision.maxTokens,
+                maxTokens = maxTokens,
             ) { thinking, answer, _ ->
                 collected.append(answer)
                 // Never final here: a turn can span several generations, and
@@ -883,12 +945,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Null when reading images is off or unconfigured — the ingestor then skips it. */
-    private fun ocrRecognizer(current: AppSettings): TextRecognizer? =
-        if (current.ocrEnabled && current.ocrApiKey.isNotBlank()) {
-            CloudOcrRecognizer(current.ocrApiKey)
-        } else {
-            null
+    private fun ocrRecognizer(current: AppSettings): TextRecognizer? {
+        if (!current.ocrEnabled || current.ocrApiKey.isBlank()) return null
+        // One upload per unreadable page. Forty of those on a mobile plan
+        // without asking is the kind of helpfulness nobody wants twice.
+        val allowed = AutoPolicy.mayUploadImages(situation(), Localization.strings)
+        if (!allowed.value) {
+            _uiState.update { it.copy(notice = allowed.reason) }
+            return null
         }
+        return CloudOcrRecognizer(current.ocrApiKey)
+    }
 
     // ------------------------------------------------------------- terminal
 

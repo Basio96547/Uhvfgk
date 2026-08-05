@@ -82,8 +82,14 @@ data class AppSettings(
     val webSearchEnabled: Boolean = false,
     /** When search runs, once enabled. AUTO searches only when the question needs it. */
     val searchMode: RoutingMode = RoutingMode.AUTO,
-    /** Snippets only, or open the top pages and read them. */
-    val searchDepth: SearchDepth = SearchDepth.QUICK,
+    /**
+     * Snippets only, or open the top pages and read them.
+     *
+     * Null means automatic: decided per search from the connection and the
+     * battery, because reading three full pages is a fair trade on Wi-Fi and a
+     * poor one on a mobile plan. A value set here always wins.
+     */
+    val searchDepth: SearchDepth? = null,
     // ---- Tools ----
     /**
      * Whether the model may act rather than only answer.
@@ -99,8 +105,14 @@ data class AppSettings(
     val toolAllowWrites: Boolean = false,
     /** `pm`, `settings`, recursive delete. Almost all of it needs root and fails. */
     val toolAllowDangerous: Boolean = false,
-    /** Tool calls allowed before the model has to answer. Each one is a full generation. */
-    val toolMaxSteps: Int = 3,
+    /**
+     * Tool calls allowed before the model has to answer.
+     *
+     * Null means automatic. Each step is a whole generation, so this is what
+     * stands between an answer in seconds and one in minutes — and the cost
+     * lands on a battery and a thermal budget that may not have room.
+     */
+    val toolMaxSteps: Int? = null,
     // ---- Reading images ----
     /**
      * Read text out of pages that have none of their own.
@@ -155,12 +167,13 @@ class SettingsStore(context: Context) {
         toolShellEnabled = prefs.getBoolean(KEY_TOOL_SHELL, true),
         toolAllowWrites = prefs.getBoolean(KEY_TOOL_WRITES, false),
         toolAllowDangerous = prefs.getBoolean(KEY_TOOL_DANGEROUS, false),
-        toolMaxSteps = prefs.getInt(KEY_TOOL_STEPS, 3),
+        // -1 is the stored form of "automatic": SharedPreferences has no null.
+        toolMaxSteps = prefs.getInt(KEY_TOOL_STEPS, -1).takeIf { it > 0 },
         ocrEnabled = prefs.getBoolean(KEY_OCR_ENABLED, false),
         ocrApiKey = prefs.getString(KEY_OCR_KEY, "").orEmpty(),
+        // Absent means automatic; a stored name means the user chose it.
         searchDepth = SearchDepth.entries
-            .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) }
-            ?: SearchDepth.QUICK,
+            .firstOrNull { it.name == prefs.getString(KEY_SEARCH_DEPTH, null) },
     )
 
     fun update(transform: (AppSettings) -> AppSettings) {
@@ -187,7 +200,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_TOOL_SHELL, updated.toolShellEnabled)
             .putBoolean(KEY_TOOL_WRITES, updated.toolAllowWrites)
             .putBoolean(KEY_TOOL_DANGEROUS, updated.toolAllowDangerous)
-            .putInt(KEY_TOOL_STEPS, updated.toolMaxSteps)
+            .putInt(KEY_TOOL_STEPS, updated.toolMaxSteps ?: -1)
             .putBoolean(KEY_OCR_ENABLED, updated.ocrEnabled)
             .putString(KEY_OCR_KEY, updated.ocrApiKey)
             .putBoolean(KEY_AUTO_SPEAK, updated.autoSpeakReplies)
@@ -195,7 +208,7 @@ class SettingsStore(context: Context) {
             .putFloat(KEY_PITCH, updated.pitch)
             .putBoolean(KEY_WEB_SEARCH, updated.webSearchEnabled)
             .putString(KEY_SEARCH_MODE, updated.searchMode.name)
-            .putString(KEY_SEARCH_DEPTH, updated.searchDepth.name)
+            .putString(KEY_SEARCH_DEPTH, updated.searchDepth?.name)
             .apply()
     }
 

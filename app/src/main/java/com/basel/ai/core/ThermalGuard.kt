@@ -8,35 +8,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * How hot the device is, normalised across API levels.
- *
- * Android's own thermal ladder has seven rungs; the bottom four are what an app
- * can meaningfully react to, so they're collapsed into something the UI can
- * show and the inference loop can act on.
- */
-enum class ThermalLevel {
-    /** Nothing to do. Full speed. */
-    NORMAL,
-
-    /** Warm. Back off a little before the system starts throttling for us. */
-    WARM,
-
-    /** Hot. Run on the minimum useful number of threads. */
-    HOT,
-
-    /** Too hot to keep generating — the system is actively throttling. */
-    CRITICAL,
-    ;
-
-    fun label(s: AppStrings): String = when (this) {
-        NORMAL -> s.thermalNormal
-        WARM -> s.thermalWarm
-        HOT -> s.thermalHot
-        CRITICAL -> s.thermalCritical
-    }
-}
-
-/**
  * Watches the platform thermal signal so long generations don't cook the phone.
  *
  * Sustained LLM decode is one of the few things a phone can do that pegs every
@@ -104,27 +75,10 @@ class ThermalGuard(context: Context) {
     companion object {
         private const val HEADROOM_FORECAST_SECONDS = 10
 
-        /**
-         * Threads to use for token generation.
-         *
-         * Decode is memory-bandwidth bound, not compute bound: past roughly four
-         * threads the extra cores mostly add heat rather than tokens per second.
-         * Snapdragon 8 Elite has no efficiency cores — every core is a big one —
-         * so loading all eight heats the device unusually fast. Hence a ceiling
-         * well below the core count even when cool.
-         */
-        fun threadBudget(coreCount: Int, level: ThermalLevel): Int {
-            val ceiling = when (level) {
-                ThermalLevel.NORMAL -> 6
-                ThermalLevel.WARM -> 4
-                ThermalLevel.HOT -> 2
-                ThermalLevel.CRITICAL -> 2
-            }
-            // Always leave headroom for the UI thread and audio.
-            return minOf(ceiling, (coreCount - 2).coerceAtLeast(1))
-        }
+        /** Delegated: the arithmetic is pure and lives in [ThermalPolicy]. */
+        fun threadBudget(coreCount: Int, level: ThermalLevel): Int =
+            ThermalPolicy.threadBudget(coreCount, level)
 
-        /** True when generation should not be started or continued. */
-        fun shouldPause(level: ThermalLevel): Boolean = level == ThermalLevel.CRITICAL
+        fun shouldPause(level: ThermalLevel): Boolean = ThermalPolicy.shouldPause(level)
     }
 }

@@ -1,6 +1,7 @@
 package com.basel.ai.llm
 
 import android.content.Context
+import com.basel.ai.core.AutoPolicy
 import com.basel.ai.core.DeviceCapabilities
 import com.basel.ai.core.DeviceSnapshot
 import com.basel.ai.core.Localization
@@ -102,17 +103,33 @@ class LlamaCppEngine private constructor(
     /** Threads currently configured, so we only cross JNI when it changes. */
     private var activeThreads = 0
 
+    /** Layers actually placed on the GPU. 0 means everything is on the CPU. */
+    var gpuLayers: Int = 0
+        internal set
+
     /**
      * Retunes the decode thread count for the current thermal state. Called
      * before each turn and whenever the device heats up mid-generation.
      */
     fun applyThermalLevel(level: ThermalLevel) {
-        if (closed) return
         val cores = Runtime.getRuntime().availableProcessors()
-        val threads = ThermalGuard.threadBudget(cores, level)
-        if (threads != activeThreads) {
-            bridge.nativeSetThreads(handle, threads)
-            activeThreads = threads
+        applyThreadBudget(ThermalGuard.threadBudget(cores, level))
+    }
+
+    /**
+     * Sets the decode thread count directly.
+     *
+     * Kept separate from [applyThermalLevel] because heat is no longer the
+     * only thing that should shrink it — a nearly flat battery, power-save
+     * mode, and having the GPU do the matmuls all want fewer threads, and
+     * those live in AutoPolicy where they can be tested.
+     */
+    fun applyThreadBudget(threads: Int) {
+        if (closed) return
+        val bounded = threads.coerceAtLeast(1)
+        if (bounded != activeThreads) {
+            bridge.nativeSetThreads(handle, bounded)
+            activeThreads = bounded
         }
     }
 
@@ -243,7 +260,15 @@ class LlamaCppEngine private constructor(
             // Deliberately below the core count: see ThermalGuard.threadBudget.
             val cores = Runtime.getRuntime().availableProcessors()
             val threads = ThermalGuard.threadBudget(cores, ThermalLevel.NORMAL)
-            val contextTokens = maxOf(DEFAULT_CONTEXT_TOKENS, spec.maxTokens * 2)
+            // Sized from free memory rather than a constant chosen once. The
+            // KV cache grows with the window, so 6144 was too small on a phone
+            // with room and a failed load on one without.
+            val context = AutoPolicy.contextTokens(
+                availableBytes = device.memory.effectiveAvailableBytes,
+                modelWants = spec.maxTokens,
+                s = Localization.strings,
+            )
+            val contextTokens = context.value
 
             // Which devices ggml registered — not what the phone could in
             // principle do. The OpenCL backend appears here only when the ICD
@@ -255,7 +280,23 @@ class LlamaCppEngine private constructor(
             // Offload only when the user asked and a device is actually there.
             // AUTO stays on the CPU until the GPU path has been proven on real
             // hardware: a wrong answer fast is worse than a right answer slow.
-            val wantsGpu = spec.backend == BackendPref.GPU
+            // AUTO now means something: the policy weighs heat and free memory
+            // rather than sitting on the CPU by default. An explicit CPU or GPU
+            // choice still wins.
+            val allowed = AutoPolicy.useGpu(
+                situation = com.basel.ai.core.Situation(
+                    availableBytes = device.memory.effectiveAvailableBytes,
+                    cpuCores = cores,
+                ),
+                gpuPresent = gpuPresent,
+                modelBytes = file.length(),
+                s = Localization.strings,
+            )
+            val wantsGpu = when (spec.backend) {
+                BackendPref.GPU -> true
+                BackendPref.AUTO -> allowed.value
+                else -> false
+            }
             val requestedLayers = if (wantsGpu && gpuPresent) ALL_LAYERS else 0
 
             val handle = bridge.nativeLoadModel(spec.path, contextTokens, threads, requestedLayers)
@@ -281,7 +322,8 @@ class LlamaCppEngine private constructor(
                 }
                 append(strings.threadsOfCores(threads, cores))
                 if (features.isNotBlank()) append(" · $features")
-                append(".")
+                append(". ")
+                append(context.reason)
             }
             val backend = ResolvedBackend(
                 actualLabel = when {
@@ -294,7 +336,10 @@ class LlamaCppEngine private constructor(
             )
 
             return LlamaCppEngine(spec, backend, bridge, handle)
-                .also { it.activeThreads = threads }
+                .also {
+                    it.activeThreads = threads
+                    it.gpuLayers = gpuLayers
+                }
         }
 
         /**

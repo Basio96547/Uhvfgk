@@ -541,6 +541,48 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 15 — 2026-07-27 · the app decides for itself
+
+82. **`AutoPolicy`: eight fixed numbers replaced by decisions.** Every one of
+    them had been chosen once, on no evidence, for a phone in no particular
+    state — a 6144-token context whether there is 1 GB free or 8, deep search
+    reading three full pages on a mobile plan, three tool steps (three whole
+    generations) at 8% battery. None were wrong *settings*; they were the wrong
+    kind of thing to settle in advance.
+
+83. **The app was blind to two things it should never have been.** Thermal
+    awareness has been there since early on; **battery and network had no
+    representation at all.** So a thinking turn burned four cores for two
+    minutes at 8%, and a scanned PDF uploaded forty page images over mobile
+    data without asking. `PowerState` and `NetworkState` read them; metered
+    versus unmetered is the distinction that matters, not Wi-Fi versus mobile,
+    because a metered hotspot is a phone sharing its own plan.
+
+84. **Every decision carries its reason, and Settings shows them.** An
+    automatic system that cannot be asked "why did you do that" is just an
+    opaque one, and everything else here is built on being able to find out.
+    The last turn's decisions appear as sentences: "Two of eight cores —
+    saving battery", "On mobile data — snippets only, to spare your allowance".
+
+85. **An explicit choice always wins.** The policy is consulted for AUTO and
+    nothing else. Someone who picks DEEP gets DEEP on mobile data — they said
+    so, and they can see their own signal bar.
+
+86. **AUTO on the backend finally means something.** It sat on the CPU by
+    default; it now weighs whether a GPU device answered, how hot the phone is,
+    and whether there is 20% memory headroom rather than a bare fit — landing
+    exactly on the limit means the *next* allocation fails instead of this one.
+
+87. **State was separated from its readers, and that was the real design fix.**
+    `ThermalLevel`, `PowerSnapshot` and `Connection` lived beside the Android
+    code that reads them, so the policy built on them could not be compiled
+    without an Android runtime, let alone tested. A reading needs a `Context`;
+    the *meaning* of a reading does not — and the meaning is what decides
+    behaviour. `SearchDepth` moved out of the networking file for the same
+    reason. 28 new tests, every threshold pinned rather than believed.
+
+---
+
 ### Session 14 — 2026-07-27 · the app has a name
 
 79. **Renamed to باسل Ai, all the way down.** Not only the label under the

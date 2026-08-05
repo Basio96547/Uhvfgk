@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -106,6 +107,41 @@ fun SettingsScreen(
             Caption(s.languageNote)
         }
 
+        // Right under the language card: what the app decided for the last
+        // message, in its own words. An automatic system nobody can interrogate
+        // is just an opaque one, and every other part of this app is built on
+        // being able to find out why.
+        SectionCard(
+            icon = Icons.Filled.AutoAwesome,
+            title = s.autoTitle,
+            subtitle = s.autoSubtitle,
+            tint = MaterialTheme.colorScheme.tertiary,
+        ) {
+            val notes by viewModel.autoNotes.collectAsStateWithLifecycle()
+            if (notes.isEmpty()) {
+                Caption(s.autoNothingToShow)
+            } else {
+                notes.forEach { note ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            "·",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Spacer(Modifier.width(Space.sm))
+                        Text(
+                            note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(Space.xs))
+                }
+            }
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.autoExplainNote)
+        }
+
         SectionCard(
             icon = Icons.Filled.Psychology,
             title = s.reasoningTitle,
@@ -177,6 +213,13 @@ fun SettingsScreen(
                 SoftDivider()
                 GroupLabel(s.depth)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Automatic first, because it is the default and the one
+                    // most people should leave alone.
+                    FilterChip(
+                        selected = settings.searchDepth == null,
+                        onClick = { viewModel.updateSettings { it.copy(searchDepth = null) } },
+                        label = { Text(s.autoLabel) },
+                    )
                     SearchDepth.entries.forEach { depth ->
                         FilterChip(
                             selected = settings.searchDepth == depth,
@@ -199,6 +242,7 @@ fun SettingsScreen(
                     when (settings.searchDepth) {
                         SearchDepth.QUICK -> s.depthQuick
                         SearchDepth.DEEP -> s.depthDeep
+                        null -> s.autoExplainNote
                     }
                 )
             }
@@ -319,6 +363,11 @@ fun SettingsScreen(
                 SoftDivider()
                 GroupLabel(s.toolsSteps)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = settings.toolMaxSteps == null,
+                        onClick = { viewModel.updateSettings { it.copy(toolMaxSteps = null) } },
+                        label = { Text(s.autoLabel) },
+                    )
                     // Each step is a whole generation, so this is the setting
                     // that decides whether an answer takes seconds or minutes.
                     listOf(1, 2, 3, 4, 5).forEach { steps ->
