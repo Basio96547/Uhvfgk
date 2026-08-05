@@ -541,6 +541,70 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 21 — 2026-08-05 · five builds had been failing, unnoticed
+
+106. **Nothing had compiled since run 42.** Runs 43 through 48 all failed, and
+     I had not looked. Every session since — the design fixes, the terminal
+     deletion, the markdown rendering, the Arabic typeface, the conversation
+     store, the streaming fix, the metrics — was written on top of a build no
+     one had seen succeed. The APK the user can download is still run 42's.
+
+     This is the honest version of "الأمور تمام؟": the code was reviewed, the
+     pure tests passed, and none of it existed as a working app.
+
+107. **Cause one: `SectionCard` never got the parameters its callers pass.**
+     Thirteen call sites in `SettingsScreen.kt` pass `expanded`, `onToggle`
+     and `summary`. The declaration in `Components.kt` had none of them. I had
+     even added the imports a collapsible card would need — `AnimatedVisibility`,
+     `ExpandMore`, `rotate`, `clickable` — and then never wrote the parameters.
+
+     One unresolved call produces far more than one error: Kotlin also loses
+     the `@Composable` context of the trailing lambda, so each site emitted a
+     cascade of "@Composable invocations can only happen from the context of a
+     @Composable function". Forty-odd errors, one cause, in a file that parsed
+     perfectly.
+
+108. **Cause two: the OFL licence was in `res/font/`.** The resource merger
+     accepts only `.ttf`, `.ttc`, `.otf` and `.xml` there. It now lives in
+     `assets/fonts/`, which still ships it — the licence has to travel with
+     the font.
+
+109. **`tools/check-calls.sh`, because the gap was structural.**
+     `check-syntax.sh` only parses, so a wrong parameter name looks perfect to
+     it. `run-tests.sh` compiles for real but cannot touch a file importing
+     `androidx`, which is every file the bug lived in. Between them there was
+     no local check that could see this class of mistake at all.
+
+     So: collect every function this repository declares, find every call to
+     one, check the named arguments against the parameters. Nothing more — no
+     type-checking, and functions it did not find declared here are ignored,
+     because guessing about Compose's overloads would produce noise instead of
+     findings. Verified against the bug itself: with the old `SectionCard`
+     restored it names `SettingsScreen.kt:96`, `:97` and `:98`.
+
+110. **R8 turned on, with `-dontobfuscate`.** 55 MB stopped being an
+     abstraction the day it failed to download twice. Almost all of it is code
+     nobody calls — `material-icons-extended` ships two thousand icons for the
+     forty-five this app draws. But renaming must stay off: JNI binds by
+     runtime class name, and the symbol in `libbasel.so` is literally
+     `Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel`. Let R8 rename that
+     class and the build compiles, installs, and fails every native call at
+     runtime. `-dontobfuscate` is correctness here, not caution.
+
+111. **`TurnMetrics` — the app measures itself now.** Every performance claim
+     in this project has been hedged with "never measured on a device", and
+     that hedge is honest only while measuring is impossible. Tokens, the
+     decode window, memory before and after, which processor ran it.
+
+     The number that matters most is not the token rate but the **tool parse
+     rate**: of the replies that tried to call a tool, how many the parser
+     could read. Zero attempts means the model can't; attempts the parser
+     drops means the parser is broken, and those two must not look alike. A
+     rate is null rather than zero when nothing was measured — "0.0 tok/s"
+     reads as a measurement, and none was taken.
+
+---
+
 ### Session 20 — 2026-07-27 · a token stops invalidating the screen
 
 103. **Streaming had been rebuilding the whole UI state per token — and my
@@ -1147,7 +1211,14 @@ design choices):
 layer against real llama.cpp on the host. Run this before bumping
 `LLAMA_CPP_TAG`; it catches API drift in one step instead of a CI round trip.
 
+**Named arguments** — `tools/check-calls.sh`. Checks every named argument
+passed to a function this repo declares against that function's parameters.
+Catches the mistake that cost five CI builds: a call site using a parameter
+that does not exist, which parses fine and is invisible to every other check.
+
 **Full build** — push; CI runs tests, builds the APK, publishes the release.
+**Watch the run.** Runs 43–48 all failed and nobody looked for a full day of
+work. A push is not a build; a green run is.
 
 **Pure logic without a build** — the sandbox has no Android SDK, but Gradle
 ships a Kotlin compiler that can check Android-free files:

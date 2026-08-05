@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    name: Assemble debug APK
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
@@ -38,14 +38,48 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      # Costs a second and catches the mistake that broke five builds: a call
+      # site passing a parameter the function doesn't have. Runs before Gradle
+      # so the answer arrives in seconds rather than two minutes.
+      - name: Check named arguments
+        run: ./tools/check-calls.sh
+
+      # Every Gradle step below funnels through the same shape: capture the
+      # output, and on failure print *just* the errors as the last thing in the
+      # log.
+      #
+      # Gradle puts compile errors near the top and then buries them under two
+      # hundred lines of its own stack trace, which is a trace of Gradle
+      # executing a task rather than of anything wrong with this code. Reading a
+      # failure meant paging back through all of it. Now the last lines of a
+      # failed job are the errors themselves.
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest 2>&1 | tee /tmp/tests.log && exit 0
+          echo "::error::unit tests failed — errors follow"
+          echo "----------------------------- errors -----------------------------"
+          grep -E "^e: |^\s+> There were failing tests|FAILED$" /tmp/tests.log | head -60
+          # Assertion messages live in the XML, not in the console output.
+          grep -rhoP '(?<=<failure message=")[^"]{0,300}' \
+            app/build/test-results/testDebugUnitTest/*.xml 2>/dev/null | head -20
+          echo "------------------------------------------------------------------"
+          exit 1
 
       - name: Build APK
         # Release rather than debug: it is the same code with the unused nine
         # tenths of the libraries removed, and the size is what decides whether
         # anyone can actually download it.
-        run: ./gradlew assembleRelease --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease 2>&1 | tee /tmp/build.log && exit 0
+          echo "::error::APK build failed — errors follow"
+          echo "----------------------------- errors -----------------------------"
+          grep -E "^e: |^ERROR:|error: |Caused by: |^\s+> " /tmp/build.log | head -60
+          echo "------------------------------------------------------------------"
+          exit 1
 
       - name: Rename APK
         run: |

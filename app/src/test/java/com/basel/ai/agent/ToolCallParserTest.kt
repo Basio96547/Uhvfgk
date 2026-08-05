@@ -2,6 +2,7 @@ package com.basel.ai.agent
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -173,5 +174,38 @@ class ToolCallParserTest {
                <tool_call>{"name": "calc", "arguments": {"expression": "1"}}</tool_call>"""
         )
         assertEquals("now", call?.name)
+    }
+
+    // ------------------------------------------------- trying versus managing
+
+    @Test
+    fun `an attempt the parser cannot read still counts as an attempt`() {
+        // This is the whole reason the two numbers exist separately. A truncated
+        // call parses as nothing; if that also read as "never tried", a parser
+        // dropping every call would report a perfect success rate.
+        val truncated = """<tool_call>{"name": "shell", "argu"""
+        assertNull(ToolCallParser.parse(truncated))
+        assertTrue(ToolCallParser.looksLikeCall(truncated))
+    }
+
+    @Test
+    fun `a call key without a readable object still counts`() {
+        assertNull(ToolCallParser.parse("""I would send "name": "shell" here"""))
+        assertTrue(ToolCallParser.looksLikeCall("""I would send "name": "shell" here"""))
+    }
+
+    @Test
+    fun `ordinary prose is not an attempt`() {
+        assertFalse(ToolCallParser.looksLikeCall("The time is half past four."))
+        assertFalse(ToolCallParser.looksLikeCall("الساعة الرابعة والنصف."))
+        // Prose *about* tools is still prose.
+        assertFalse(ToolCallParser.looksLikeCall("I can run shell commands for you."))
+    }
+
+    @Test
+    fun `a readable call counts as both`() {
+        val good = """<tool_call>{"name": "now", "arguments": {}}</tool_call>"""
+        assertNotNull(ToolCallParser.parse(good))
+        assertTrue(ToolCallParser.looksLikeCall(good))
     }
 }

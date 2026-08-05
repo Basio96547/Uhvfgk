@@ -48,8 +48,29 @@ object ToolCallParser {
         return null
     }
 
-    /** True when [text] contains something that was meant to be a tool call. */
-    fun looksLikeCall(text: String): Boolean = parse(text) != null
+    /**
+     * The unmistakable marks of *trying* to call a tool, whether or not the
+     * attempt is readable: the tag itself, or a key that only appears in a call.
+     */
+    private val INTENT = Regex(
+        """<tool[ _]?call>|"(?:name|tool|tool_name|function|action)"\s*:""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * True when [text] was *meant* to be a tool call, even if it cannot be read.
+     *
+     * This deliberately does not defer to [parse]. It used to be written
+     * `parse(text) != null`, which made "the model tried" and "the parser could
+     * read it" literally the same number — so the parse rate they are divided
+     * into could only ever come out as 1.0, and a parser dropping every call
+     * would have reported perfect health.
+     *
+     * The two facts are different and the difference is the whole point: no
+     * attempts is a limit of the model, attempts that don't parse is a bug here.
+     */
+    fun looksLikeCall(text: String): Boolean =
+        parse(text) != null || INTENT.containsMatchIn(text)
 
     /**
      * [text] with the tool call removed.
