@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,24 +30,25 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -56,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,28 +72,40 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.basel.ai.Author
-import com.basel.ai.ChatMessage
+import com.basel.ai.chat.Author
+import com.basel.ai.chat.ChatMessage
 import com.basel.ai.ChatViewModel
 import com.basel.ai.ModelStatus
+import com.basel.ai.agent.ToolRun
+import com.basel.ai.chat.Block
+import com.basel.ai.chat.Markdown
+import com.basel.ai.chat.Span
 import com.basel.ai.core.AppStrings
 import com.basel.ai.core.ThermalLevel
 import com.basel.ai.llm.QueryKind
 import com.basel.ai.llm.RoutingDecision
-import com.basel.ai.web.SearchSource
 import com.basel.ai.ui.theme.Gradients
 import com.basel.ai.ui.theme.Layout
 import com.basel.ai.ui.theme.Space
 import com.basel.ai.ui.theme.panel
+import com.basel.ai.web.SearchSource
 
 @Composable
 fun ChatScreen(
@@ -102,14 +117,19 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val documents by viewModel.documents.collectAsStateWithLifecycle()
+    // Collected separately from uiState: the reply being written changes
+    // twenty times a second, and everything else on this screen does not.
+    val streaming by viewModel.streaming.collectAsStateWithLifecycle()
     val documentProgress by viewModel.documentProgress.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     var showDocuments by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
-        }
+    val rendered = remember(state.messages, streaming) {
+        if (streaming != null) state.messages + streaming!! else state.messages
+    }
+
+    LaunchedEffect(rendered.size, streaming?.text?.length) {
+        if (rendered.isNotEmpty()) listState.animateScrollToItem(rendered.lastIndex)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -185,7 +205,7 @@ fun ChatScreen(
                     action = s.browseModels to onOpenModels,
                 )
 
-                ModelStatus.READY -> if (state.messages.isEmpty()) {
+                ModelStatus.READY -> if (rendered.isEmpty()) {
                     EmptyState(
                         icon = Icons.Filled.AutoAwesome,
                         title = s.readyWhenYouAre,
@@ -203,7 +223,7 @@ fun ChatScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(Space.md),
                     ) {
-                        items(state.messages, key = { it.id }) { message ->
+                        items(rendered, key = { it.id }) { message ->
                             MessageRow(
                                 message = message,
                                 showThinking = settings.showThinking,
@@ -505,6 +525,13 @@ private fun MessageRow(
                 Spacer(Modifier.height(Space.sm))
             }
 
+            // Above the answer, not below it: these happened first, and the
+            // reply is written from what they returned.
+            if (message.toolRuns.isNotEmpty()) {
+                ToolRunList(message.toolRuns)
+                Spacer(Modifier.height(Space.sm))
+            }
+
             Bubble(message = message, isUser = isUser)
 
             if (message.sources.isNotEmpty()) {
@@ -562,6 +589,227 @@ private fun routingLine(decision: RoutingDecision, s: AppStrings): String {
 }
 
 /** Numbered, tappable citations matching the [1], [2] markers in the answer. */
+/**
+ * What the model did to answer, in the conversation.
+ *
+ * There is no terminal page, deliberately — a command run on this phone is
+ * part of the reply it produced, and a log on a screen nobody opens is not
+ * transparency. Collapsed to one line each, because most of the time knowing
+ * *that* it ran `ls` is enough; tap to see what came back.
+ */
+/**
+ * A reply, laid out.
+ *
+ * The bubble printed the model's Markdown verbatim: `**مهم**` came out with
+ * the asterisks, `- بند` with the dash, a code block as a wall of text. Long
+ * replies looked broken, and emphasis — whose entire job is to say which part
+ * matters — was doing the opposite.
+ *
+ * Direction comes from the text rather than the interface throughout, so an
+ * Arabic reply reads right-to-left with the app in English; code goes the
+ * other way regardless, because a mirrored command is unreadable.
+ */
+@Composable
+private fun MarkdownBody(
+    text: String,
+    color: Color,
+    asMarkdown: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val body = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content)
+
+    if (!asMarkdown) {
+        Text(text = text, modifier = modifier, style = body, color = color)
+        return
+    }
+
+    val blocks = remember(text) { Markdown.parse(text) }
+    if (blocks.isEmpty()) {
+        Text(text = text, modifier = modifier, style = body, color = color)
+        return
+    }
+
+    Column(modifier) {
+        blocks.forEachIndexed { index, block ->
+            if (index > 0) Spacer(Modifier.height(Space.sm))
+            when (block) {
+                is Block.Paragraph ->
+                    Text(annotate(block.spans), style = body, color = color)
+
+                is Block.Heading -> Text(
+                    annotate(block.spans),
+                    style = when (block.level) {
+                        1 -> MaterialTheme.typography.titleMedium
+                        2 -> MaterialTheme.typography.titleSmall
+                        else -> MaterialTheme.typography.labelLarge
+                    }.copy(textDirection = TextDirection.Content),
+                    color = color,
+                )
+
+                is Block.Bullet -> ListLine("•", annotate(block.spans), body, color)
+                is Block.Numbered ->
+                    ListLine("${block.number}.", annotate(block.spans), body, color)
+
+                is Block.Code -> CodeBlock(block.code, color)
+
+                Block.Rule -> Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = Space.xs)
+                        .height(1.dp)
+                        .background(color.copy(alpha = 0.20f))
+                )
+            }
+        }
+    }
+}
+
+/** A marker and its text, with the marker on the reading side. */
+@Composable
+private fun ListLine(
+    marker: String,
+    text: AnnotatedString,
+    style: TextStyle,
+    color: Color,
+) {
+    Row(Modifier.padding(start = Space.xs)) {
+        Text(
+            marker,
+            style = style,
+            color = color.copy(alpha = 0.62f),
+            // Fixed width so wrapped lines align under the text, not the dot.
+            modifier = Modifier.width(22.dp),
+        )
+        Text(text, style = style, color = color, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * A fenced block: monospaced, left-to-right, and scrolled rather than wrapped.
+ *
+ * Wrapping code is how a snippet stops being copy-pasteable — the line breaks
+ * become part of it — so it scrolls sideways instead.
+ */
+@Composable
+private fun CodeBlock(code: String, color: Color) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(color.copy(alpha = 0.07f))
+                .padding(Space.md)
+        ) {
+            Text(
+                code,
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = color,
+                softWrap = false,
+            )
+        }
+    }
+}
+
+/** Spans to an AnnotatedString. */
+@Composable
+private fun annotate(spans: List<Span>): AnnotatedString = buildAnnotatedString {
+    val codeBackground = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    for (span in spans) {
+        val style = when {
+            span.code -> SpanStyle(
+                fontFamily = FontFamily.Monospace,
+                background = codeBackground,
+            )
+            span.bold && span.italic ->
+                SpanStyle(fontWeight = FontWeight.SemiBold, fontStyle = FontStyle.Italic)
+            span.bold -> SpanStyle(fontWeight = FontWeight.SemiBold)
+            span.italic -> SpanStyle(fontStyle = FontStyle.Italic)
+            else -> null
+        }
+        if (style == null) append(span.text) else withStyle(style) { append(span.text) }
+    }
+}
+
+@Composable
+private fun ToolRunList(runs: List<ToolRun>) {
+    Column(Modifier.fillMaxWidth()) {
+        runs.forEach { run ->
+            var open by remember(run) { mutableStateOf(false) }
+            val accent = if (run.ok) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Space.xs)
+                    .panel(
+                        shape = MaterialTheme.shapes.small,
+                        color = accent.copy(alpha = 0.07f),
+                    )
+                    .clickable { open = !open }
+                    .padding(horizontal = Space.md, vertical = Space.sm)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (run.ok) Icons.Filled.Bolt else Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = accent,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        run.tool,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                    )
+                    if (run.detail.isNotBlank()) {
+                        Spacer(Modifier.width(Space.sm))
+                        // Monospace and left-to-right: a command is not prose,
+                        // and mirroring `ls -la` makes it unreadable.
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides LayoutDirection.Ltr
+                        ) {
+                            Text(
+                                run.detail,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+                AnimatedVisibility(visible = open) {
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Ltr
+                    ) {
+                        Text(
+                            run.output.ifBlank { "—" },
+                            modifier = Modifier
+                                .padding(top = Space.sm)
+                                .horizontalScroll(rememberScrollState()),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            softWrap = false,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SourceList(sources: List<SearchSource>) {
     val uriHandler = LocalUriHandler.current
@@ -626,21 +874,17 @@ private fun Bubble(message: ChatMessage, isUser: Boolean) {
                 TypingIndicator()
             }
         } else {
-            Text(
+            MarkdownBody(
                 text = message.text,
-                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    // Direction from the text itself, not from the interface:
-                    // an Arabic reply reads right-to-left even when the app is
-                    // in English, and a code block or a Latin quotation inside
-                    // an Arabic chat still reads left-to-right.
-                    textDirection = TextDirection.Content,
-                ),
                 color = if (isUser) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
+                // What the user typed is what they typed. Styling their own
+                // asterisks would be the app editing them.
+                asMarkdown = !isUser,
+                modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
             )
         }
     }

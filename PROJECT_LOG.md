@@ -24,7 +24,8 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 
 | Area | State |
 |---|---|
-| Kotlin/Compose app | ✅ Compiles, APK built and published |
+| Kotlin/Compose app | ✅ Compiles, APK built and published — **and CI is watched now**: runs 43–48 failed unnoticed for a day |
+| APK size | ✅ **Measured**: 52.3 → 32.1 MiB with R8 shrinking (54,874,191 → 33,671,348 bytes) |
 | Unit tests | ✅ Passing in CI |
 | MediaPipe `.task` path | ✅ Compiles against the real AAR in CI — **never run against a real model** |
 | TTS model path | ⚠️ Tensor handling rewritten for real VITS/Piper layouts — **untested against an actual voice model** |
@@ -38,7 +39,7 @@ Snapdragon 8 Elite) but runs on any arm64 Android 7.0+ device.
 | Answer quality | ✅ Transcript, sampling and budget defects fixed; house rules shipped — **judged only by reading the code, never by reading a reply** |
 | Studio | ✅ Builds and ships; extractor covered by 13 tests — **no page has ever been generated or rendered** |
 | Cloud voice (Azure / ElevenLabs) | ⚠️ Request building covered by 17 tests — **no request has ever been sent; no key exists here** |
-| Terminal | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device** |
+| Terminal (the model's tool) | ⚠️ Real process execution; policy and paths covered by 30 tests — **never run on a device**. No user-facing page: what it ran shows in the chat |
 | Tools / skills | ⚠️ Parser covered by 19 tests against real model output shapes — **no model has ever called one** |
 | PDF reading | ⚠️ Chunking, selection, quality checks and page ranges covered by 52 tests — **no PDF has been opened here** |
 | Arabic OCR | ⚠️ Cloud only, and the UI says so. **No offline option exists** — see PLAN 2f |
@@ -541,6 +542,303 @@ layouts should be tuned for that screen.
     English, and a code block inside an Arabic conversation still reads
     left-to-right.
 
+### Session 21 — 2026-08-05 · five builds had been failing, unnoticed
+
+106. **Nothing had compiled since run 42.** Runs 43 through 48 all failed, and
+     I had not looked. Every session since — the design fixes, the terminal
+     deletion, the markdown rendering, the Arabic typeface, the conversation
+     store, the streaming fix, the metrics — was written on top of a build no
+     one had seen succeed. The APK the user can download is still run 42's.
+
+     This is the honest version of "الأمور تمام؟": the code was reviewed, the
+     pure tests passed, and none of it existed as a working app.
+
+107. **Cause one: `SectionCard` never got the parameters its callers pass.**
+     Thirteen call sites in `SettingsScreen.kt` pass `expanded`, `onToggle`
+     and `summary`. The declaration in `Components.kt` had none of them. I had
+     even added the imports a collapsible card would need — `AnimatedVisibility`,
+     `ExpandMore`, `rotate`, `clickable` — and then never wrote the parameters.
+
+     One unresolved call produces far more than one error: Kotlin also loses
+     the `@Composable` context of the trailing lambda, so each site emitted a
+     cascade of "@Composable invocations can only happen from the context of a
+     @Composable function". Forty-odd errors, one cause, in a file that parsed
+     perfectly.
+
+108. **Cause two: the OFL licence was in `res/font/`.** The resource merger
+     accepts only `.ttf`, `.ttc`, `.otf` and `.xml` there. It now lives in
+     `assets/fonts/`, which still ships it — the licence has to travel with
+     the font.
+
+109. **`tools/check-refs.sh`, because the gap was structural.**
+     `check-syntax.sh` only parses, so a wrong parameter name looks perfect to
+     it. `run-tests.sh` compiles for real but cannot touch a file importing
+     `androidx`, which is every file the bug lived in. Between them there was
+     no local check that could see this class of mistake at all.
+
+     So: collect every function this repository declares, find every call to
+     one, check the named arguments against the parameters. Nothing more — no
+     type-checking, and functions it did not find declared here are ignored,
+     because guessing about Compose's overloads would produce noise instead of
+     findings. Verified against the bug itself: with the old `SectionCard`
+     restored it names `SettingsScreen.kt:96`, `:97` and `:98`.
+
+     It grew two more checks as two more builds failed the same way.
+     `ChatMessage` and `Author` moved to `com.basel.ai.chat` so the pure
+     harness could reach them, and `ChatScreen.kt` went on importing
+     `com.basel.ai.ChatMessage` — a stale import that parses perfectly and
+     lives in a file the harness never compiles. Every `com.basel.ai` import
+     is now checked against what the repository actually declares, and the
+     report says where the symbol really is.
+
+     Then a stray `@Composable` above `sealed interface Shared` — which the
+     parser is perfectly happy with — died as "This annotation is not
+     applicable to target 'interface'". So it also checks that a `@Composable`
+     alone on its line sits above something that can actually be composable.
+     Only alone on its line: in a type position, `content: @Composable () ->
+     Unit`, the same annotation is correct and everywhere.
+
+     Three builds, three checks, and each one was verified by putting the bug
+     back and watching it get named.
+
+110. **R8 turned on, with `-dontobfuscate`.** 55 MB stopped being an
+     abstraction the day it failed to download twice. Almost all of it is code
+     nobody calls — `material-icons-extended` ships two thousand icons for the
+     forty-five this app draws. But renaming must stay off: JNI binds by
+     runtime class name, and the symbol in `libbasel.so` is literally
+     `Java_com_basel_ai_llm_LlamaBridge_nativeLoadModel`. Let R8 rename that
+     class and the build compiles, installs, and fails every native call at
+     runtime. `-dontobfuscate` is correctness here, not caution.
+
+     Measured, once run 53 finally went green: **54,874,191 → 33,671,348
+     bytes**, 52.3 MiB down to 32.1. Thirty-nine per cent, without renaming a
+     single class.
+
+111. **`TurnMetrics` — the app measures itself now.** Every performance claim
+     in this project has been hedged with "never measured on a device", and
+     that hedge is honest only while measuring is impossible. Tokens, the
+     decode window, memory before and after, which processor ran it.
+
+     The number that matters most is not the token rate but the **tool parse
+     rate**: of the replies that tried to call a tool, how many the parser
+     could read. Zero attempts means the model can't; attempts the parser
+     drops means the parser is broken, and those two must not look alike. A
+     rate is null rather than zero when nothing was measured — "0.0 tok/s"
+     reads as a measurement, and none was taken.
+
+---
+
+### Session 20 — 2026-07-27 · a token stops invalidating the screen
+
+103. **Streaming had been rebuilding the whole UI state per token — and my
+     first description of why was wrong.** I said it copied the message list;
+     `map` returns unchanged messages as they are, so that part was overstated.
+     The real cost is worse and less obvious: `_uiState.update` builds a new
+     `ChatUiState` on every token, Compose hands *one* `State` object to every
+     reader, so the header, the composer and the model chip were all
+     invalidated twenty times a second while reading fields that had not
+     changed.
+
+     The reply being written now lives in its own flow and joins the list once,
+     when it is finished. Only the bubble recomposes while it streams.
+
+104. **Nothing looked at the user's text size.** Seven places computed from
+     screen width in dp; zero read `fontScale`. Turn the system font up — the
+     first thing many Arabic readers do — and a label under a 65 dp tab becomes
+     "الإع…". An ellipsised label is worse than none: it takes the room and
+     says nothing. Above the threshold the bar shows icons only, which also
+     gives each tab a taller target.
+
+105. **Share into the app.** A PDF or a passage of text now arrives from
+     wherever it was found — a browser, mail, a file manager — without opening
+     this app first and going to look for it. `singleTask` so a share lands in
+     the running conversation rather than a second copy of it, and shared text
+     goes into the composer rather than being sent: it is a starting point, not
+     a question, and the user usually wants to add something before it goes.
+
+---
+
+### Session 19 — 2026-07-27 · conversations survive the app closing
+
+98. **Nothing was ever saved.** The whole history lived in one `StateFlow` and
+    died with the process — close the app and everything said was gone. For a
+    chat app that is not a missing feature so much as a missing floor, and it
+    is the first item of the Tier 1 list.
+
+    `ConversationStore` writes **one file per conversation**, not one file for
+    all of them: saving after every turn would otherwise rewrite the entire
+    archive each time, which grows without bound and eventually stalls a turn.
+    Saved when a turn ends, never per token.
+
+99. **Thinking is deliberately not saved.** It is working rather than answer,
+    it is routinely longer than the reply, and reopening a chat to find pages
+    of discarded reasoning above every answer is worse than not having it.
+
+100. **`ConversationIndex` is the part that goes wrong quietly**, so it is pure
+     and tested: a title cut mid-word, a search that cannot find an Arabic word
+     because it was written with a different alef, a list that reorders itself.
+     Titles cut at a word boundary; search goes through the same normaliser as
+     the router and the document index; newest first, always.
+
+101. **Export as Markdown.** It is what the model wrote in the first place and
+     it survives being pasted anywhere. Thinking is left out of that too —
+     sending it to someone else would be quoting a draft.
+
+102. **`ChatMessage` moved out of `ChatViewModel`.** Same separation as the
+     device state: the message model is plain data, and leaving it inside an
+     `AndroidViewModel` file meant no conversation logic could be tested at
+     all. 16 new tests.
+
+---
+
+### Session 18 — 2026-07-27 · the conversation, and an Arabic typeface
+
+94. **The chat was printing raw Markdown.** A model writes `**مهم**`, `- بند`
+    and fenced code because that is what it was trained to write, and the
+    bubble showed the asterisks and the dashes. Long replies looked broken, and
+    emphasis — whose whole job is to say which part matters — was doing the
+    opposite.
+
+    `Markdown` parses it: emphasis, inline code, fenced blocks, bullets,
+    numbered lists, headings, rules. Deliberately no tables, images or HTML —
+    each would be more parser than it is worth, and a half-working table is
+    worse than a visible pipe.
+
+    Two rules, both tested. **An unclosed marker stays literal**, because a
+    truncated reply ends on a dangling `**` and swallowing the rest into bold
+    turns a cut-off answer into an unreadable one. And **nothing is ever
+    dropped** — a parser that quietly eats what it did not understand is worse
+    than one that shows the marker.
+
+95. **Code scrolls sideways rather than wrapping.** Wrapping is how a snippet
+    stops being copy-pasteable: the line breaks become part of it. Forced
+    left-to-right too, along with inline code, because a mirrored command is
+    unreadable — while prose keeps `TextDirection.Content`, so an Arabic reply
+    reads right-to-left with the interface in English.
+
+96. **The user's own text is never re-styled.** Markdown rendering applies to
+    replies only. Styling someone's own asterisks would be the app editing what
+    they typed.
+
+97. **A real Arabic typeface, bundled.** `FontFamily.Default` meant Roboto for
+    Latin and whatever the phone happened to ship for Arabic — a vendor naskh,
+    never chosen by this app. In a conversation that mixes the two constantly
+    (a model name, a command, "Android 16" inside an Arabic sentence) that is
+    two unrelated typefaces meeting mid-line, and it reads as a bug to someone
+    who could not name it.
+
+    IBM Plex Sans Arabic now: one family with real Arabic letterforms *and* a
+    Latin drawn alongside them, so mixed text is one voice. Three static
+    weights rather than the variable file, because variable instancing needs
+    API 26 and this app runs from 24. SIL Open Font License, shipped beside the
+    files.
+
+---
+
+### Session 17 — 2026-07-27 · the terminal is the model's, not a page
+
+91. **Deleted the Terminal tab.** It was built as a screen you open and type
+    into, and that was a misreading: the shell is a *tool the model uses*, not
+    a feature anyone wants to operate by hand on a phone. So the page is gone,
+    the sixth navigation tab with it, and `TerminalSession` — which existed
+    only to hold scrollback for that page — with both.
+
+92. **What it ran moved into the conversation, which is where it belongs.** A
+    command run on this phone is part of the reply it produced. Each tool call
+    appears above the answer it fed, collapsed to one line — `shell  ls -la` —
+    and opens to show what came back. Forced left-to-right and monospaced, for
+    the same reason the terminal page was: a mirrored `ls -la` is unreadable.
+
+    This is better than the page it replaces, not merely smaller. A log on a
+    screen nobody opens is not transparency; a line under the answer is.
+
+93. **Nine strings went with it.** `navTerminal`, `terminalHint`,
+    `terminalRun`, `terminalEmpty` and the rest existed only for that page. The
+    ones still doing work — the refusal, the timeout, the truncation notice,
+    the honest note about no root and toybox — stayed, because they belong to
+    the shell rather than to the screen.
+
+---
+
+### Session 16 — 2026-07-27 · design: the parts that were actually wrong
+
+88. **Settings was twelve open cards in one scroll, four screens tall.** I
+    built most of that this session, adding Tools, Reading images, Cloud voice
+    and Automatic on top of eight that were already there. Every setting had to
+    be read past to reach the next one.
+
+    Collapsed now, one open at a time — and the important half: **a closed card
+    states its own current value.** "Arabic · ar-SA", "On · reads pages",
+    "Terminal · automatic steps", "Off". A closed row that says what it is set
+    to tells you more at a glance than an open one you have to read down
+    through, so the whole of Settings fits on one screen *and* answers what it
+    is set to without being opened.
+
+89. **The type scale was hurting Arabic, specifically.** Not a matter of taste:
+
+    - `letterSpacing = -0.2sp` on headings. Pulling letters together is an
+      ordinary Latin move and **damaging on a connected script** — it muddies
+      the joins that carry the shape of the word. Zero for Arabic now.
+    - Latin leading. Arabic ascenders reach higher and its marks sit above and
+      below the line, so line heights that look generous in Latin look tight in
+      Arabic and a dot under a ي nearly touches the letter above. 15% more.
+    - Trimmed line boxes. With the default trim the first line loses the room
+      its tallest mark needs, and a همزة over an ألف gets clipped at a
+      container edge. `Trim.None` now.
+
+    The theme picks the scale by language, which meant reading the language
+    *before* the theme rather than inside it.
+
+90. **`AppStrings` was reaching into `AppSettings`.** The first version of the
+    summaries took the settings object, which put the presentation vocabulary
+    downstream of the settings store — and `AppSettings` needs a `Context`, so
+    it also broke the host test harness. They take plain values now, which is
+    both the correct layering and the reason they can be tested at all.
+
+---
+
+### Session 15 — 2026-07-27 · the app decides for itself
+
+82. **`AutoPolicy`: eight fixed numbers replaced by decisions.** Every one of
+    them had been chosen once, on no evidence, for a phone in no particular
+    state — a 6144-token context whether there is 1 GB free or 8, deep search
+    reading three full pages on a mobile plan, three tool steps (three whole
+    generations) at 8% battery. None were wrong *settings*; they were the wrong
+    kind of thing to settle in advance.
+
+83. **The app was blind to two things it should never have been.** Thermal
+    awareness has been there since early on; **battery and network had no
+    representation at all.** So a thinking turn burned four cores for two
+    minutes at 8%, and a scanned PDF uploaded forty page images over mobile
+    data without asking. `PowerState` and `NetworkState` read them; metered
+    versus unmetered is the distinction that matters, not Wi-Fi versus mobile,
+    because a metered hotspot is a phone sharing its own plan.
+
+84. **Every decision carries its reason, and Settings shows them.** An
+    automatic system that cannot be asked "why did you do that" is just an
+    opaque one, and everything else here is built on being able to find out.
+    The last turn's decisions appear as sentences: "Two of eight cores —
+    saving battery", "On mobile data — snippets only, to spare your allowance".
+
+85. **An explicit choice always wins.** The policy is consulted for AUTO and
+    nothing else. Someone who picks DEEP gets DEEP on mobile data — they said
+    so, and they can see their own signal bar.
+
+86. **AUTO on the backend finally means something.** It sat on the CPU by
+    default; it now weighs whether a GPU device answered, how hot the phone is,
+    and whether there is 20% memory headroom rather than a bare fit — landing
+    exactly on the limit means the *next* allocation fails instead of this one.
+
+87. **State was separated from its readers, and that was the real design fix.**
+    `ThermalLevel`, `PowerSnapshot` and `Connection` lived beside the Android
+    code that reads them, so the policy built on them could not be compiled
+    without an Android runtime, let alone tested. A reading needs a `Context`;
+    the *meaning* of a reading does not — and the meaning is what decides
+    behaviour. `SearchDepth` moved out of the networking file for the same
+    reason. 28 new tests, every threshold pinned rather than believed.
+
+---
+
 ### Session 14 — 2026-07-27 · the app has a name
 
 79. **Renamed to باسل Ai, all the way down.** Not only the label under the
@@ -924,7 +1222,6 @@ design choices):
 - The terminal has never run a command on a device — there is no Android here.
 - The cloud voice has never sent a request — no key exists in the sandbox.
 - GGUF runs CPU-only; no GPU backend compiled into llama.cpp.
-- No conversation persistence — history dies with the process.
 - No multimodal input despite `ModelKind.MULTIMODAL` existing.
 - `main` is still the old HTML; nothing merged.
 - Repo/branch names (`Uhvfgk`, `delete-everything-…`) don't describe the project.
@@ -937,7 +1234,15 @@ design choices):
 layer against real llama.cpp on the host. Run this before bumping
 `LLAMA_CPP_TAG`; it catches API drift in one step instead of a CI round trip.
 
+**References** — `tools/check-refs.sh`. Two checks, no JDK or SDK needed:
+every named argument matches a parameter the function has, and every
+`com.basel.ai` import names something that exists. Between them these are the
+mistakes that cost six CI builds — both parse perfectly, and both are
+invisible to the pure test harness because it never compiles those files.
+
 **Full build** — push; CI runs tests, builds the APK, publishes the release.
+**Watch the run.** Runs 43–48 all failed and nobody looked for a full day of
+work. A push is not a build; a green run is.
 
 **Pure logic without a build** — the sandbox has no Android SDK, but Gradle
 ships a Kotlin compiler that can check Android-free files:

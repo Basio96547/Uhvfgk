@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -52,6 +54,7 @@ import com.basel.ai.audio.VoicePicker
 import com.basel.ai.core.AppLanguage
 import com.basel.ai.core.AppSettings
 import com.basel.ai.core.AppStrings
+import com.basel.ai.core.MetricsSummary
 import com.basel.ai.core.TtsEngine
 import com.basel.ai.llm.RoutingMode
 import com.basel.ai.web.SearchDepth
@@ -68,6 +71,16 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val ttsModel = viewModel.registry.selectedTtsModel
 
+    // One section open at a time, and none to begin with.
+    //
+    // Twelve open cards in one scroll meant every setting had to be read past
+    // to reach the next, and the screen was four times taller than the phone.
+    // Closed, each card states its own current value, so the whole of Settings
+    // fits on one screen and says what it is set to without being opened.
+    var open by rememberSaveable { mutableStateOf<String?>(null) }
+    fun section(key: String) = open == key
+    fun toggle(key: String): () -> Unit = { open = if (open == key) null else key }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -80,6 +93,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Translate,
             title = s.language,
+            expanded = section("language"),
+            onToggle = toggle("language"),
+            summary = s.summaryLanguage(settings.language.label, settings.voiceLanguageTag),
             subtitle = s.languageSubtitle,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -106,9 +122,104 @@ fun SettingsScreen(
             Caption(s.languageNote)
         }
 
+        // Right under the language card: what the app decided for the last
+        // message, in its own words. An automatic system nobody can interrogate
+        // is just an opaque one, and every other part of this app is built on
+        // being able to find out why.
+        // Measured, not claimed. Every performance sentence in this project has
+        // carried "never measured on a device"; this is what retires it.
+        SectionCard(
+            icon = Icons.Filled.Bolt,
+            title = s.metricsTitle,
+            subtitle = s.performanceSubtitle,
+            tint = MaterialTheme.colorScheme.primary,
+            expanded = section("speed"),
+            onToggle = toggle("speed"),
+            summary = viewModel.metrics.collectAsStateWithLifecycle().value
+                .let { turns ->
+                    MetricsSummary.medianTokensPerSecond(turns)
+                        ?.let { s.metricsRate(String.format("%.1f", it), MetricsSummary.totalTokens(turns)) }
+                        ?: s.metricsNoRate
+                },
+        ) {
+            val turns by viewModel.metrics.collectAsStateWithLifecycle()
+            if (turns.isEmpty()) {
+                Caption(s.metricsEmpty)
+            } else {
+                MetricsSummary.medianTokensPerSecond(turns)?.let { median ->
+                    Text(
+                        s.metricsMedian(String.format("%.1f", median), turns.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(Space.sm))
+                }
+
+                // The number that says whether tools are a feature or
+                // infrastructure with no user.
+                val seen = turns.sumOf { it.toolCallsSeen }
+                Caption(
+                    if (seen == 0) {
+                        s.metricsToolsNone
+                    } else {
+                        s.metricsToolSummary(
+                            ((MetricsSummary.toolParseRate(turns) ?: 0.0) * 100).toInt(),
+                            seen,
+                        )
+                    }
+                )
+
+                SoftDivider()
+                turns.asReversed().take(8).forEach { turn ->
+                    Text(
+                        MetricsSummary.format(turn, s),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(Space.xs))
+                }
+            }
+        }
+
+        SectionCard(
+            icon = Icons.Filled.AutoAwesome,
+            title = s.autoTitle,
+            expanded = section("auto"),
+            onToggle = toggle("auto"),
+            subtitle = s.autoSubtitle,
+            tint = MaterialTheme.colorScheme.tertiary,
+        ) {
+            val notes by viewModel.autoNotes.collectAsStateWithLifecycle()
+            if (notes.isEmpty()) {
+                Caption(s.autoNothingToShow)
+            } else {
+                notes.forEach { note ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            "·",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Spacer(Modifier.width(Space.sm))
+                        Text(
+                            note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(Space.xs))
+                }
+            }
+            Spacer(Modifier.height(Space.sm))
+            Caption(s.autoExplainNote)
+        }
+
         SectionCard(
             icon = Icons.Filled.Psychology,
             title = s.reasoningTitle,
+            expanded = section("reasoning"),
+            onToggle = toggle("reasoning"),
+            summary = s.summaryReasoning(settings.thinkingMode),
             subtitle = s.reasoningSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -142,6 +253,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Language,
             title = s.webSearch,
+            expanded = section("search"),
+            onToggle = toggle("search"),
+            summary = s.summarySearch(settings.webSearchEnabled, settings.searchDepth),
             subtitle = s.webSearchSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -177,6 +291,13 @@ fun SettingsScreen(
                 SoftDivider()
                 GroupLabel(s.depth)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Automatic first, because it is the default and the one
+                    // most people should leave alone.
+                    FilterChip(
+                        selected = settings.searchDepth == null,
+                        onClick = { viewModel.updateSettings { it.copy(searchDepth = null) } },
+                        label = { Text(s.autoLabel) },
+                    )
                     SearchDepth.entries.forEach { depth ->
                         FilterChip(
                             selected = settings.searchDepth == depth,
@@ -199,6 +320,7 @@ fun SettingsScreen(
                     when (settings.searchDepth) {
                         SearchDepth.QUICK -> s.depthQuick
                         SearchDepth.DEEP -> s.depthDeep
+                        null -> s.autoExplainNote
                     }
                 )
             }
@@ -207,6 +329,8 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Thermostat,
             title = s.performance,
+            expanded = section("perf"),
+            onToggle = toggle("perf"),
             subtitle = s.performanceSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -222,6 +346,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Description,
             title = s.ocrTitle,
+            expanded = section("ocr"),
+            onToggle = toggle("ocr"),
+            summary = s.summaryOcr(settings.ocrEnabled, settings.ocrApiKey.isNotBlank()),
             subtitle = s.ocrSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -275,6 +402,13 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Terminal,
             title = s.toolsTitle,
+            expanded = section("tools"),
+            onToggle = toggle("tools"),
+            summary = s.summaryTools(
+                settings.toolsEnabled,
+                settings.toolShellEnabled,
+                settings.toolMaxSteps,
+            ),
             subtitle = s.toolsSettingsSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -319,6 +453,11 @@ fun SettingsScreen(
                 SoftDivider()
                 GroupLabel(s.toolsSteps)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = settings.toolMaxSteps == null,
+                        onClick = { viewModel.updateSettings { it.copy(toolMaxSteps = null) } },
+                        label = { Text(s.autoLabel) },
+                    )
                     // Each step is a whole generation, so this is the setting
                     // that decides whether an answer takes seconds or minutes.
                     listOf(1, 2, 3, 4, 5).forEach { steps ->
@@ -342,6 +481,13 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.RecordVoiceOver,
             title = s.speechOutput,
+            expanded = section("speech"),
+            onToggle = toggle("speech"),
+            summary = s.summarySpeech(
+                settings.ttsEngine.label(s),
+                needsKey = settings.ttsEngine == TtsEngine.CLOUD &&
+                    settings.cloudApiKey.isBlank(),
+            ),
             subtitle = s.speechOutputSubtitle,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -505,6 +651,8 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Mic,
             title = s.voiceInputTitle,
+            expanded = section("mic"),
+            onToggle = toggle("mic"),
             subtitle = s.voiceInputSubtitle,
             tint = MaterialTheme.colorScheme.tertiary,
         ) {
@@ -521,6 +669,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Translate,
             title = s.voiceLanguage,
+            expanded = section("voicelang"),
+            onToggle = toggle("voicelang"),
+            summary = settings.voiceLanguageTag,
             subtitle = s.voiceLanguageSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {
@@ -555,6 +706,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Rule,
             title = s.guidanceTitle,
+            expanded = section("guidance"),
+            onToggle = toggle("guidance"),
+            summary = s.summaryGuidance(settings.guidanceEnabled),
             subtitle = s.guidanceDescription,
             tint = MaterialTheme.colorScheme.primary,
         ) {
@@ -590,6 +744,9 @@ fun SettingsScreen(
         SectionCard(
             icon = Icons.Filled.Tune,
             title = s.systemPrompt,
+            expanded = section("prompt"),
+            onToggle = toggle("prompt"),
+            summary = s.summaryPrompt(settings.systemPrompt),
             subtitle = s.systemPromptSubtitle,
             tint = MaterialTheme.colorScheme.secondary,
         ) {

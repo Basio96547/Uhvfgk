@@ -72,6 +72,33 @@ class LayoutTest {
         assertTrue(Layout.navPillPadding(411, 0) > 0)
     }
 
+    @Test
+    fun `nav labels give way when the user's text is large`() {
+        // Everything here was computed against a font scale of 1.0 and nothing
+        // looked at the real one. Turned up, a label under a 65dp tab becomes
+        // "الإع…", and an ellipsised label is worse than none.
+        val (w, _) = s25Ultra
+        assertTrue(Layout.showNavLabels(w, tabs = 5, fontScale = 1.0f))
+        assertFalse(Layout.showNavLabels(w, tabs = 5, fontScale = 1.8f))
+    }
+
+    @Test
+    fun `more tabs give up their labels sooner`() {
+        val (w, _) = s25Ultra
+        val fiveOk = Layout.showNavLabels(w, tabs = 5, fontScale = 1.3f)
+        val eightOk = Layout.showNavLabels(w, tabs = 8, fontScale = 1.3f)
+        assertTrue("five before eight", fiveOk || !eightOk)
+        assertFalse(eightOk)
+    }
+
+    @Test
+    fun `a small phone gives up labels before a large one`() {
+        val scale = 1.4f
+        val small = Layout.showNavLabels(smallPhone.first, 5, scale)
+        val large = Layout.showNavLabels(s25Ultra.first, 5, scale)
+        assertTrue("large keeps them at least as long", large || !small)
+    }
+
     // ---- the composer ------------------------------------------------------
 
     @Test

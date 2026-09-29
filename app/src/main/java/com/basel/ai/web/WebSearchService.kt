@@ -12,15 +12,6 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** How much work a search should do before answering. */
-enum class SearchDepth {
-    /** Snippets only. One request, fastest. */
-    QUICK,
-
-    /** Also opens the top pages and reads them. Slower, much better answers. */
-    DEEP,
-}
-
 /**
  * Web search and retrieval.
  *

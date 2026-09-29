@@ -42,6 +42,12 @@ COMPILER_CP="$(ls "$GRADLE_LIB"/kotlin-*.jar "$GRADLE_LIB"/kotlinx-*.jar \
 # --- sources: everything that doesn't need the Android SDK -------------------
 SOURCES=(
     app/src/main/java/com/basel/ai/core/Strings.kt
+    app/src/main/java/com/basel/ai/core/DeviceState.kt
+    app/src/main/java/com/basel/ai/chat/Markdown.kt
+    app/src/main/java/com/basel/ai/chat/ChatMessage.kt
+    app/src/main/java/com/basel/ai/chat/Conversation.kt
+    app/src/main/java/com/basel/ai/core/AutoPolicy.kt
+    app/src/main/java/com/basel/ai/core/TurnMetrics.kt
     app/src/main/java/com/basel/ai/llm/QueryRouter.kt
     app/src/main/java/com/basel/ai/llm/BackendPlanner.kt
     app/src/main/java/com/basel/ai/llm/ThinkingStreamParser.kt
@@ -67,6 +73,10 @@ SOURCES=(
     app/src/main/java/com/basel/ai/agent/PdfTools.kt
     app/src/main/java/com/basel/ai/ocr/CloudOcr.kt
     app/src/test/java/com/basel/ai/core/StringsTest.kt
+    app/src/test/java/com/basel/ai/core/AutoPolicyTest.kt
+    app/src/test/java/com/basel/ai/core/TurnMetricsTest.kt
+    app/src/test/java/com/basel/ai/chat/MarkdownTest.kt
+    app/src/test/java/com/basel/ai/chat/ConversationIndexTest.kt
     app/src/test/java/com/basel/ai/llm/QueryRouterTest.kt
     app/src/test/java/com/basel/ai/llm/BackendPlannerTest.kt
     app/src/test/java/com/basel/ai/llm/ThinkingStreamParserTest.kt
@@ -92,6 +102,10 @@ SOURCES=(
 )
 CLASSES=(
     com.basel.ai.core.StringsTest
+    com.basel.ai.core.AutoPolicyTest
+    com.basel.ai.core.TurnMetricsTest
+    com.basel.ai.chat.MarkdownTest
+    com.basel.ai.chat.ConversationIndexTest
     com.basel.ai.llm.QueryRouterTest
     com.basel.ai.llm.BackendPlannerTest
     com.basel.ai.llm.ThinkingStreamParserTest

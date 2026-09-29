@@ -60,6 +60,29 @@ object Layout {
         navItemWidth(widthDp, tabs) >= TOUCH_TARGET_DP
 
     /**
+     * Whether the navigation labels still fit under their icons.
+     *
+     * Everything here was computed in dp against a font scale of 1.0, and
+     * nothing looked at the user's actual text size. Turn it up — which many
+     * people do, and which is the first thing an Arabic reader reaches for —
+     * and a five-letter label under a 65dp tab becomes "الإع…". An ellipsised
+     * label is worse than none: it takes the space and tells you nothing.
+     *
+     * Above the threshold the bar shows icons only, which also gives every tab
+     * a taller touch target.
+     */
+    fun showNavLabels(widthDp: Int, tabs: Int, fontScale: Float): Boolean {
+        if (tabs <= 0) return true
+        val perTab = (widthDp - NAV_ROW_PADDING_DP * 2) / tabs
+        // A label is about 5 characters at roughly 6dp each at scale 1.0.
+        val labelWidth = NAV_LABEL_WIDTH_DP * fontScale
+        return labelWidth <= perTab
+    }
+
+    /** Width a navigation label needs at font scale 1.0. */
+    const val NAV_LABEL_WIDTH_DP = 46
+
+    /**
      * Room left for typing when the composer keeps its actions on the same
      * row as the field.
      *

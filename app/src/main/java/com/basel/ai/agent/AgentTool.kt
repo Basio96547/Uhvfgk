@@ -44,6 +44,22 @@ data class ToolCall(
     }
 }
 
+/**
+ * One tool call, as the conversation should show it.
+ *
+ * Kept on the message rather than in a separate log: what the model *did* is
+ * part of what it said, and a record on another screen is one nobody opens.
+ * This is the only place a command run on the phone becomes visible, so it
+ * carries the command verbatim rather than a summary of it.
+ */
+data class ToolRun(
+    val tool: String,
+    /** The argument that matters — the command, the query, the page range. */
+    val detail: String,
+    val output: String,
+    val ok: Boolean,
+)
+
 /** What came back. [ok] is false for a failure the model should react to. */
 data class ToolResult(val ok: Boolean, val output: String) {
     companion object {

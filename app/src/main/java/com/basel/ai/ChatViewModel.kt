@@ -19,6 +19,7 @@ import com.basel.ai.agent.ToolCallParser
 import com.basel.ai.agent.ToolPrompt
 import com.basel.ai.agent.ToolRegistry
 import com.basel.ai.agent.ToolResult
+import com.basel.ai.agent.ToolRun
 import com.basel.ai.agent.WebSearchTool
 import com.basel.ai.agent.WriteFileTool
 import com.basel.ai.audio.AudioPlayer
@@ -32,7 +33,19 @@ import com.basel.ai.audio.SpeechText
 import com.basel.ai.audio.SynthesisResult
 import com.basel.ai.audio.SystemTtsSynthesizer
 import com.basel.ai.audio.WavWriter
+import com.basel.ai.chat.Author
+import com.basel.ai.chat.ChatMessage
+import com.basel.ai.chat.Conversation
+import com.basel.ai.chat.ConversationIndex
+import com.basel.ai.chat.ConversationStore
 import com.basel.ai.core.AppSettings
+import com.basel.ai.core.AutoPolicy
+import com.basel.ai.core.Connection
+import com.basel.ai.core.NetworkState
+import com.basel.ai.core.PowerState
+import com.basel.ai.core.MetricsSummary
+import com.basel.ai.core.Situation
+import com.basel.ai.core.TurnMetrics
 import com.basel.ai.core.DeviceCapabilities
 import com.basel.ai.core.ErrorLog
 import com.basel.ai.core.Localization
@@ -64,8 +77,7 @@ import com.basel.ai.pdf.PdfIngestor
 import com.basel.ai.pdf.PdfLibrary
 import com.basel.ai.pdf.PdfProgress
 import com.basel.ai.studio.StudioUiState
-import com.basel.ai.terminal.TerminalSession
-import com.basel.ai.terminal.TerminalUiState
+import com.basel.ai.terminal.Shell
 import com.basel.ai.web.SearchQuery
 import com.basel.ai.web.SearchSource
 import com.basel.ai.web.SearchDepth
@@ -77,24 +89,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-enum class Author { USER, MODEL }
-
-data class ChatMessage(
-    val id: Long,
-    val author: Author,
-    val text: String,
-    val thinking: String = "",
-    val isGenerating: Boolean = false,
-    val thinkingExpanded: Boolean = false,
-    /** Pages the answer was grounded in, when web search ran. */
-    val sources: List<SearchSource> = emptyList(),
-    /**
-     * How this reply was routed. Kept as the decision rather than a sentence
-     * so the UI can word it in the reader's language.
-     */
-    val routing: RoutingDecision? = null,
-)
 
 enum class ModelStatus { NONE, LOADING, READY, ERROR }
 
@@ -133,14 +127,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val systemTts = SystemTtsSynthesizer(app)
 
     /**
-     * One shell for the whole app.
+     * The shell the model's `shell` tool runs in.
      *
-     * The Terminal page and the model's `shell` tool share it on purpose: if
-     * the model runs `cd logs`, opening the terminal should put you in that
-     * directory, looking at the output it saw.
+     * There is no terminal page. This is a tool the model uses, and what it
+     * ran shows up under the reply it ran it for — which is where anyone would
+     * actually look for it.
      */
-    private val terminal = TerminalSession(java.io.File(app.filesDir, "workspace"))
-    val terminalState: StateFlow<TerminalUiState> = terminal.state
+    private val shell = Shell(java.io.File(app.filesDir, "workspace"))
+
+    /**
+     * Saved conversations.
+     *
+     * Everything said used to live in one StateFlow and die with the process.
+     * The current one is written after each completed turn — not per token,
+     * which would be a file write per character.
+     */
+    private val conversationStore = ConversationStore(app)
+    val conversations: StateFlow<List<Conversation>> = conversationStore.conversations
+    private var conversationId: String = conversationStore.newId()
+    private var conversationTitle: String? = null
 
     private val pdfLibrary = PdfLibrary(app)
     private val pdfIngestor = PdfIngestor(app, pdfLibrary)
@@ -170,6 +175,60 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _memory = MutableStateFlow(DeviceCapabilities.readMemory(app))
     val memory: StateFlow<MemorySnapshot> = _memory.asStateFlow()
+
+    /**
+     * The decisions taken for the last turn, each with its reason.
+     *
+     * Kept and shown rather than made silently. An automatic system that
+     * cannot be asked "why did you do that" is just an opaque one, and this
+     * app's whole posture is that the user can always find out.
+     */
+    /**
+     * The reply being written, kept out of [uiState] on purpose.
+     *
+     * It used to live in `uiState.messages`, so every token rebuilt the whole
+     * `ChatUiState`. Compose hands one `State` object to every reader, so the
+     * header, the composer and the model chip were all invalidated twenty
+     * times a second while reading fields that had not changed. Streaming into
+     * its own flow means only the bubble recomposes.
+     */
+    private val _streaming = MutableStateFlow<ChatMessage?>(null)
+    val streaming: StateFlow<ChatMessage?> = _streaming.asStateFlow()
+
+    /**
+     * What each turn cost, newest last.
+     *
+     * Every performance claim here has been hedged with "never measured on a
+     * device", and that is only honest while measuring is impossible. The app
+     * is present whenever a model runs, so it counts.
+     */
+    private val _metrics = MutableStateFlow<List<TurnMetrics>>(emptyList())
+    val metrics: StateFlow<List<TurnMetrics>> = _metrics.asStateFlow()
+
+    private val _autoNotes = MutableStateFlow<List<String>>(emptyList())
+    val autoNotes: StateFlow<List<String>> = _autoNotes.asStateFlow()
+
+    /** Layers the loaded model has on the GPU. Feeds the thread and step budgets. */
+    private var gpuLayers = 0
+
+    /**
+     * The phone as it is right now.
+     *
+     * Read per turn rather than cached: thermal, charge and connection all
+     * change between one message and the next, and a decision made from a
+     * stale picture is worse than no decision at all.
+     */
+    private fun situation(): Situation {
+        val app = getApplication<Application>()
+        return Situation(
+            thermal = thermalGuard.level.value,
+            power = PowerState.read(app),
+            connection = NetworkState.read(app),
+            availableBytes = DeviceCapabilities.readMemory(app).effectiveAvailableBytes,
+            cpuCores = Runtime.getRuntime().availableProcessors(),
+            gpuLayers = gpuLayers,
+        )
+    }
 
     private var engine: TextEngine? = null
     private var loadJob: Job? = null
@@ -267,6 +326,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 engine = loaded
+                // Feeds the thread and step budgets: work on the GPU is
+                // cheaper per step and needs fewer CPU threads behind it.
+                gpuLayers = (loaded as? LlamaCppEngine)?.gpuLayers ?: 0
                 registry.select(spec)
                 _uiState.update {
                     it.copy(
@@ -427,25 +489,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             routing = decision,
         )
 
+        _streaming.value = placeholder
         _uiState.update {
-            it.copy(
-                messages = it.messages + userMessage + placeholder,
-                isBusy = true,
-                voiceDraft = "",
-            )
+            it.copy(messages = it.messages + userMessage, isBusy = true, voiceDraft = "")
         }
 
         val epoch = ++replyGeneration
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Match decode threads to the current thermal state before starting.
-            (active as? LlamaCppEngine)?.applyThermalLevel(thermalGuard.level.value)
+            val s = Localization.strings
+            val here = situation()
+            val notes = mutableListOf<String>()
+
+            // Threads follow heat *and* charge now. A flat phone deserves the
+            // same restraint as a hot one, and on the GPU the CPU is only
+            // feeding the pipeline.
+            val threads = AutoPolicy.threads(here, s)
+            notes += threads.reason
+            (active as? LlamaCppEngine)?.applyThreadBudget(threads.value)
+
+            // An explicit setting always wins; automatic only fills the gaps.
+            val depth = current.searchDepth
+                ?: AutoPolicy.searchDepth(here, s).also { notes += it.reason }.value
+            val steps = current.toolMaxSteps
+                ?: AutoPolicy.toolSteps(here, s).also { notes += it.reason }.value
+            val tokens = AutoPolicy.maxTokens(decision.maxTokens, here, s)
+            if (tokens.value != decision.maxTokens) notes += tokens.reason
 
             var grounding = ""
-            if (decision.search) {
+            if (decision.search && !AutoPolicy.networkUsable(here)) {
+                _uiState.update { it.copy(notice = s.autoDepthOffline) }
+            }
+            if (decision.search && AutoPolicy.networkUsable(here)) {
                 _uiState.update {
                     it.copy(
-                        searchStatus = if (current.searchDepth == SearchDepth.DEEP) {
+                        searchStatus = if (depth == SearchDepth.DEEP) {
                             Localization.strings.searchingAndReading
                         } else {
                             Localization.strings.searchingWeb
@@ -453,7 +531,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 val outcome = try {
-                    webSearch.search(prompt, current.voiceLanguageTag, current.searchDepth)
+                    webSearch.search(prompt, current.voiceLanguageTag, depth)
                 } catch (e: Throwable) {
                     ErrorLog.report("Web search", "Search failed", e)
                     null
@@ -461,14 +539,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
                 grounding = SearchQuery.buildContext(prompt, outcome?.results.orEmpty())
                 val sources = SearchQuery.toSources(outcome?.results.orEmpty())
+                _streaming.update { if (it?.id == replyId) it.copy(sources = sources) else it }
                 _uiState.update { state ->
-                    state.copy(
-                        searchStatus = null,
-                        notice = outcome?.problem ?: state.notice,
-                        messages = state.messages.map {
-                            if (it.id == replyId) it.copy(sources = sources) else it
-                        },
-                    )
+                    state.copy(searchStatus = null, notice = outcome?.problem ?: state.notice)
                 }
             }
 
@@ -515,8 +588,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     decision = decision,
                     replyId = replyId,
                     epoch = epoch,
-                    maxSteps = if (registry.isEmpty) 0 else current.toolMaxSteps.coerceIn(0, 6),
+                    maxSteps = if (registry.isEmpty) 0 else steps.coerceIn(0, 6),
+                    maxTokens = tokens.value,
                 )
+                _autoNotes.value = notes
             } catch (e: Throwable) {
                 ErrorLog.report("Generation", "Generation failed", e)
                 appendDelta(replyId, "", "\n[error: ${e.message}]", done = true, epoch = epoch)
@@ -554,9 +629,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         replyId: Long,
         epoch: Int,
         maxSteps: Int,
+        maxTokens: Int,
     ) {
         var turnPrompt = firstPrompt
         var step = 0
+
+        var tokens = 0
+        var firstTokenAt = 0L
+        var lastTokenAt = 0L
+        var callsSeen = 0
+        var callsParsed = 0
+        var callsOk = 0
+        val turnStart = System.currentTimeMillis()
+        val freeBefore = DeviceCapabilities.readMemory(getApplication()).effectiveAvailableBytes
 
         while (true) {
             // What the bubble already holds from earlier steps. Rewriting it
@@ -570,9 +655,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 prompt = turnPrompt,
                 systemPrompt = systemPrompt,
                 thinkingEnabled = decision.think,
-                maxTokens = decision.maxTokens,
+                maxTokens = maxTokens,
             ) { thinking, answer, _ ->
                 collected.append(answer)
+                // One callback per token for both engines, which is the only
+                // token count available without reaching into the tokenizer.
+                tokens++
+                val now = System.currentTimeMillis()
+                if (firstTokenAt == 0L) firstTokenAt = now
+                lastTokenAt = now
                 // Never final here: a turn can span several generations, and
                 // finishTurn is what ends it.
                 appendDelta(replyId, thinking, answer, done = false, epoch = epoch)
@@ -581,7 +672,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (epoch != replyGeneration) return
 
             val reply = collected.toString()
+            // Counted whether or not there are steps left, because "the model
+            // tried and we would not let it" is a different fact from "the
+            // model never tried" — and only the second one says tools are
+            // beyond it.
+            val looksLikeCall = ToolCallParser.looksLikeCall(reply)
+            if (looksLikeCall) callsSeen++
             val call = if (step < maxSteps) ToolCallParser.parse(reply) else null
+            if (call != null) callsParsed++
             if (call == null) {
                 // No tool wanted, or no steps left. Close the turn.
                 if (step >= maxSteps && ToolCallParser.looksLikeCall(reply)) {
@@ -593,6 +691,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             Localization.strings.toolStepLimitReached,
                     )
                 }
+                recordMetrics(
+                    TurnMetrics(
+                        tokens = tokens,
+                        decodeMs = (lastTokenAt - firstTokenAt).coerceAtLeast(0),
+                        totalMs = System.currentTimeMillis() - turnStart,
+                        freeBytesBefore = freeBefore,
+                        freeBytesAfter = DeviceCapabilities
+                            .readMemory(getApplication()).effectiveAvailableBytes,
+                        thermalAtEnd = thermalGuard.level.value,
+                        onGpu = gpuLayers > 0,
+                        toolCallsSeen = callsSeen,
+                        toolCallsParsed = callsParsed,
+                        toolCallsSucceeded = callsOk,
+                    )
+                )
                 finishTurn(replyId, epoch)
                 return
             }
@@ -614,7 +727,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
+            if (result.ok) callsOk++
             _uiState.update { it.copy(searchStatus = null) }
+            recordToolRun(
+                replyId,
+                ToolRun(
+                    tool = call.name,
+                    // The command verbatim, because this is the only place a
+                    // command run on the phone becomes visible at all.
+                    detail = call.args.values.firstOrNull().orEmpty(),
+                    output = result.output,
+                    ok = result.ok,
+                ),
+            )
             if (epoch != replyGeneration) return
 
             turnPrompt = ToolPrompt.observation(call, result, Localization.strings)
@@ -622,9 +747,89 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun recordMetrics(turn: TurnMetrics) {
+        _metrics.update { (it + turn).takeLast(MetricsSummary.HISTORY) }
+    }
+
+    /** Writes the current conversation. Called when a turn ends, not per token. */
+    private fun persistConversation() {
+        val messages = _uiState.value.messages.filter { it.text.isNotBlank() }
+        if (messages.isEmpty()) return
+        val first = messages.firstOrNull { it.author == Author.USER }?.text.orEmpty()
+        val title = conversationTitle
+            ?: ConversationIndex.titleFor(first, Localization.strings.untitledChat)
+        conversationTitle = title
+        conversationStore.save(
+            Conversation(
+                id = conversationId,
+                title = title,
+                updatedAt = System.currentTimeMillis(),
+                messages = messages,
+            )
+        )
+    }
+
+    // -------------------------------------------------------- conversations
+
+    /** Starts a fresh conversation, keeping the one being left. */
+    fun newConversation() {
+        if (_uiState.value.isBusy) return
+        persistConversation()
+        replyGeneration++
+        engine?.resetSession()
+        activeSystemPrompt = null
+        conversationId = conversationStore.newId()
+        conversationTitle = null
+        _streaming.value = null
+        _uiState.update { it.copy(messages = emptyList(), attachedDocumentId = null) }
+    }
+
+    fun openConversation(id: String) {
+        if (_uiState.value.isBusy) return
+        val conversation = conversationStore.find(id) ?: return
+        persistConversation()
+        // The engine holds the old conversation in its KV cache; carrying it
+        // into a different one is how a reply answers the wrong question.
+        replyGeneration++
+        engine?.resetSession()
+        activeSystemPrompt = null
+        conversationId = conversation.id
+        conversationTitle = conversation.title
+        _streaming.value = null
+        nextId = (conversation.messages.maxOfOrNull { it.id } ?: 0L) + 1
+        _uiState.update { it.copy(messages = conversation.messages) }
+    }
+
+    fun deleteConversation(id: String) {
+        conversationStore.delete(id)
+        if (id == conversationId) newConversation()
+    }
+
+    fun renameConversation(id: String, title: String) = conversationStore.rename(id, title)
+
+    /** The current conversation as Markdown, for sharing. */
+    fun exportConversation(): String {
+        val s = Localization.strings
+        return ConversationIndex.toMarkdown(
+            Conversation(
+                id = conversationId,
+                title = conversationTitle ?: s.untitledChat,
+                updatedAt = System.currentTimeMillis(),
+                messages = _uiState.value.messages,
+            ),
+            youLabel = s.exportYou,
+            modelLabel = s.exportAssistant,
+        )
+    }
+
+    /** Appends a tool call to the reply it was made for. */
+    private fun recordToolRun(id: Long, run: ToolRun) {
+        _streaming.update { if (it?.id == id) it.copy(toolRuns = it.toolRuns + run) else it }
+    }
+
     /** The reply's text as it currently stands. */
     private fun textOf(id: Long): String =
-        _uiState.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
+        _streaming.value?.takeIf { it.id == id }?.text.orEmpty()
 
     /** Joins two parts of one answer without stacking blank lines. */
     private fun join(before: String, after: String): String = when {
@@ -643,26 +848,23 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Replaces a reply's text wholesale — used to take a tool call back out. */
     private fun replaceText(id: Long, text: String) {
-        _uiState.update { state ->
-            state.copy(
-                messages = state.messages.map {
-                    if (it.id == id) it.copy(text = text) else it
-                }
-            )
-        }
+        _streaming.update { if (it?.id == id) it.copy(text = text) else it }
     }
 
     private fun finishTurn(replyId: Long, epoch: Int) {
         if (epoch != replyGeneration) return
+        // The reply joins the list exactly once, when it is done. Until then
+        // it lives in its own flow so a token does not invalidate the screen.
+        val settled = _streaming.value?.takeIf { it.id == replyId }?.copy(isGenerating = false)
+        _streaming.value = null
         _uiState.update { state ->
             state.copy(
                 isBusy = false,
-                messages = state.messages.map {
-                    if (it.id == replyId) it.copy(isGenerating = false) else it
-                },
+                messages = if (settled != null) state.messages + settled else state.messages,
             )
         }
         refreshMemory()
+        persistConversation()
         if (settingsStore.settings.value.autoSpeakReplies) {
             val reply = _uiState.value.messages.firstOrNull { it.id == replyId }
             if (reply != null && reply.text.isNotBlank()) speak(replyId, reply.text)
@@ -685,10 +887,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ClockTool(strings),
             CalcTool(strings),
             DeviceTool({ _device.value }, strings),
-            ReadFileTool(terminal.shell, strings),
-            ListFilesTool(terminal.shell, strings),
+            ReadFileTool(shell, strings),
+            ListFilesTool(shell, strings),
         )
-        if (current.toolAllowWrites) tools += WriteFileTool(terminal.shell, strings)
+        if (current.toolAllowWrites) tools += WriteFileTool(shell, strings)
         // Only offered once there is something to read. A tool that always
         // answers "no documents" teaches the model to stop trying it.
         if (pdfLibrary.documents.value.isNotEmpty()) {
@@ -701,7 +903,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             tools += WebSearchTool(webSearch, { settingsStore.settings.value.voiceLanguageTag }, strings)
         }
         if (current.toolShellEnabled) {
-            tools += ShellTool(terminal, strings) { risk ->
+            tools += ShellTool(shell, strings) { risk ->
                 when (risk) {
                     CommandRisk.READ_ONLY -> true
                     CommandRisk.WRITES -> current.toolAllowWrites
@@ -724,43 +926,41 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // fought at every call site.
         if (epoch != replyGeneration) return
         val budget = _uiState.value.activeModel?.thinkingBudgetChars ?: 0
-        _uiState.update { state ->
-            val messages = state.messages.map { message ->
-                if (message.id != id) return@map message
-                val newThinking = if (thinking.isEmpty()) {
-                    message.thinking
-                } else {
-                    val combined = message.thinking + thinking
-                    if (budget > 0 && combined.length > budget) combined.take(budget) else combined
-                }
-                message.copy(
-                    thinking = newThinking,
-                    text = message.text + answer,
-                    isGenerating = !done,
-                )
+        _streaming.update { message ->
+            if (message == null || message.id != id) return@update message
+            val newThinking = if (thinking.isEmpty()) {
+                message.thinking
+            } else {
+                val combined = message.thinking + thinking
+                if (budget > 0 && combined.length > budget) combined.take(budget) else combined
             }
-            state.copy(messages = messages)
+            message.copy(
+                thinking = newThinking,
+                text = message.text + answer,
+                isGenerating = !done,
+            )
         }
     }
 
     /** Interrupts the reply being generated and keeps whatever arrived so far. */
     fun stopGeneration() {
         if (!_uiState.value.isBusy) return
+        // Whatever arrived so far is kept, so it settles into the list too.
+        val partial = _streaming.value?.copy(isGenerating = false)
+        _streaming.value = null
+        if (partial != null && partial.text.isNotBlank()) {
+            _uiState.update { it.copy(messages = it.messages + partial) }
+        }
         // Before stop(), not after: whatever the engine emits from here on is
         // no longer this reply's, whether or not stop() could do anything.
         replyGeneration++
         engine?.stop()
-        _uiState.update { state ->
-            state.copy(
-                isBusy = false,
-                messages = state.messages.map {
-                    if (it.isGenerating) it.copy(isGenerating = false) else it
-                },
-            )
-        }
+        _uiState.update { it.copy(isBusy = false) }
+        persistConversation()
     }
 
     fun toggleThinkingExpanded(id: Long) {
+        _streaming.update { if (it?.id == id) it.copy(thinkingExpanded = !it.thinkingExpanded) else it }
         _uiState.update { state ->
             state.copy(
                 messages = state.messages.map {
@@ -770,13 +970,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun clearConversation() {
-        if (_uiState.value.isBusy) return
-        replyGeneration++
-        engine?.resetSession()
-        activeSystemPrompt = null
-        _uiState.update { it.copy(messages = emptyList()) }
-    }
+    /** "New chat" — the one being left is saved rather than discarded. */
+    fun clearConversation() = newConversation()
 
     // ---------------------------------------------------------------- studio
 
@@ -873,6 +1068,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Puts text into the composer without sending it.
+     *
+     * Used by the share target: shared text is a starting point, not a
+     * question — the user usually wants to add "translate this" before it
+     * goes.
+     */
+    fun setVoiceDraft(text: String) = _uiState.update { it.copy(voiceDraft = text) }
+
     fun attachDocument(id: String?) = _uiState.update { it.copy(attachedDocumentId = id) }
 
     fun removeDocument(id: String) {
@@ -883,24 +1087,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Null when reading images is off or unconfigured — the ingestor then skips it. */
-    private fun ocrRecognizer(current: AppSettings): TextRecognizer? =
-        if (current.ocrEnabled && current.ocrApiKey.isNotBlank()) {
-            CloudOcrRecognizer(current.ocrApiKey)
-        } else {
-            null
+    private fun ocrRecognizer(current: AppSettings): TextRecognizer? {
+        if (!current.ocrEnabled || current.ocrApiKey.isBlank()) return null
+        // One upload per unreadable page. Forty of those on a mobile plan
+        // without asking is the kind of helpfulness nobody wants twice.
+        val allowed = AutoPolicy.mayUploadImages(situation(), Localization.strings)
+        if (!allowed.value) {
+            _uiState.update { it.copy(notice = allowed.reason) }
+            return null
         }
-
-    // ------------------------------------------------------------- terminal
-
-    /** Runs a command the user typed. Serialised: one shell, one at a time. */
-    fun runTerminalCommand(command: String) {
-        viewModelScope.launch(Dispatchers.IO) { terminal.submit(command) }
+        return CloudOcrRecognizer(current.ocrApiKey)
     }
-
-    fun clearTerminal() = terminal.clear()
-
-    /** Where commands run, shown so the sandbox is not a mystery. */
-    val terminalWorkspace: String get() = terminal.shell.root.path
 
     fun studioToggleView() = studio.toggleView()
     fun studioRun() = studio.run()

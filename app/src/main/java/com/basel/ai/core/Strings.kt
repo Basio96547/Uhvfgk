@@ -1,5 +1,7 @@
 package com.basel.ai.core
 
+import com.basel.ai.llm.RoutingMode
+import com.basel.ai.web.SearchDepth
 import java.util.Locale
 
 /** Which language the interface is drawn in. */
@@ -406,20 +408,11 @@ interface AppStrings {
 
 
     // ------------------------------------------------------ terminal & tools
-    val navTerminal: String
-    val terminalSubtitle: String
-    val terminalHint: String
-    val terminalClear: String
-    val terminalRun: String
-    val terminalEmpty: String
-    val terminalWorkspaceNote: String
     val terminalLimitsNote: String
     val terminalEmptyCommand: String
     val terminalRefused: String
     val terminalTimedOut: String
     val terminalTruncated: String
-    val terminalCouldNotStart: String
-    fun terminalExitCode(code: Int): String
 
     /** How the model is told to call a tool. Generated from the live registry. */
     val toolsHeader: String
@@ -534,6 +527,80 @@ interface AppStrings {
     val toolNoDocuments: String
     fun toolNoSuchDocument(name: String): String
     fun toolNoPageMatch(phrase: String): String
+
+
+    // ---------------------------------------------------------- automatic
+    fun metricsRate(rate: String, tokens: Int): String
+    val metricsNoRate: String
+    val metricsOnGpu: String
+    val metricsOnCpu: String
+    fun metricsMemory(size: String): String
+    fun metricsTools(ok: Int, parsed: Int, seen: Int): String
+    val metricsTitle: String
+    val metricsEmpty: String
+    fun metricsMedian(rate: String, turns: Int): String
+    fun metricsToolSummary(parsePercent: Int, seen: Int): String
+    val metricsToolsNone: String
+    val untitledChat: String
+    val exportYou: String
+    val exportAssistant: String
+    val conversationsTitle: String
+    val conversationsSubtitle: String
+    val conversationsEmpty: String
+    val conversationsSearch: String
+    val conversationNew: String
+    val conversationDelete: String
+    val conversationShare: String
+    fun conversationMessages(count: Int): String
+    val autoLabel: String
+    fun autoContextReason(tokens: Int, freeGb: Double): String
+    fun autoThreadsReason(threads: Int, cores: Int, why: String): String
+    val autoThreadsFull: String
+    val autoThreadsGpu: String
+    val autoThreadsSaving: String
+    val autoThreadsCritical: String
+    val autoDepthOffline: String
+    val autoDepthMetered: String
+    val autoDepthSaving: String
+    val autoDepthDeep: String
+    val autoStepsHot: String
+    val autoStepsConstrained: String
+    val autoStepsGpu: String
+    val autoStepsNormal: String
+    val autoTokensHot: String
+    val autoTokensConstrained: String
+    val autoTokensFull: String
+    val autoOcrOffline: String
+    val autoOcrMetered: String
+    val autoOcrBattery: String
+    val autoOcrReady: String
+    val autoGpuAbsent: String
+    val autoGpuHot: String
+    val autoGpuMemory: String
+    val autoGpuReady: String
+    val autoTitle: String
+    val autoSubtitle: String
+    val autoExplainNote: String
+    val autoNothingToShow: String
+
+
+    /**
+     * A section's current value in a few words, for the collapsed card.
+     *
+     * Written per language rather than assembled from fragments: "Arabic ·
+     * automatic" and «العربية · تلقائي» read naturally, and the same sentence
+     * built out of joined pieces reads like neither.
+     */
+    fun summaryLanguage(language: String, voiceTag: String): String
+    fun summaryReasoning(mode: RoutingMode): String
+    fun summarySearch(enabled: Boolean, depth: SearchDepth?): String
+    fun summaryOcr(enabled: Boolean, hasKey: Boolean): String
+    fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?): String
+    fun summarySpeech(engineLabel: String, needsKey: Boolean): String
+    fun summaryGuidance(on: Boolean): String
+    fun summaryPrompt(prompt: String): String
+    val summaryOff: String
+    val summaryOn: String
 
     // -------------------------------------------------------- routing modes
     val modeAuto: String
@@ -1033,15 +1100,13 @@ object EnglishStrings : AppStrings {
             "Apply this change and return the whole updated file:\n\n$request"
 
 
-    override val navTerminal = "Terminal"
-    override val terminalSubtitle = "A real shell, and what the model runs in it"
-    override val terminalHint = "Type a command"
-    override val terminalClear = "Clear"
-    override val terminalRun = "Run"
-    override val terminalEmpty = "Nothing has run yet. Try `ls`, `getprop ro.product.model`, " +
-        "or `cat /proc/cpuinfo`."
-    override val terminalWorkspaceNote = "Commands run in this app's private workspace, as this " +
-        "app's user. `cd` is remembered between commands; nothing else is."
+
+
+
+
+
+
+
     override val terminalLimitsNote = "No root, and Android's toybox rather than GNU tools — so " +
         "no bash, python, curl or git unless you installed one, and some flags differ. " +
         "`pm`, `settings` and most of `dumpsys` will answer permission denied. That is Android, " +
@@ -1051,8 +1116,7 @@ object EnglishStrings : AppStrings {
         "with no undo. It is the one short list the terminal will not run."
     override val terminalTimedOut = "Stopped: took too long."
     override val terminalTruncated = "Output was cut — too long to keep."
-    override val terminalCouldNotStart = "Could not start that command."
-    override fun terminalExitCode(code: Int) = "Finished with exit code $code and no output."
+
 
     override val toolsHeader = "You can use tools. When a tool answers better than guessing, " +
         "emit exactly one call, alone, with no other text:"
@@ -1192,6 +1256,98 @@ object EnglishStrings : AppStrings {
     override val toolNoDocuments = "No documents have been added."
     override fun toolNoSuchDocument(name: String) = "No document matches \"$name\"."
     override fun toolNoPageMatch(phrase: String) = "No page mentions \"$phrase\"."
+
+
+    override fun metricsRate(rate: String, tokens: Int) = "$rate tok/s over $tokens tokens"
+    override val metricsNoRate = "no tokens"
+    override val metricsOnGpu = "GPU"
+    override val metricsOnCpu = "CPU"
+    override fun metricsMemory(size: String) = "$size used"
+    override fun metricsTools(ok: Int, parsed: Int, seen: Int) =
+        "tools $ok/$parsed of $seen tried"
+    override val metricsTitle = "Speed"
+    override val metricsEmpty = "Nothing measured yet. Send a message."
+    override fun metricsMedian(rate: String, turns: Int) =
+        "Median $rate tok/s across $turns turns."
+    override fun metricsToolSummary(parsePercent: Int, seen: Int) =
+        "The model tried to call a tool $seen times; $parsePercent% were readable."
+    override val metricsToolsNone = "The model has not tried to call a tool yet."
+    override val untitledChat = "New chat"
+    override val exportYou = "You"
+    override val exportAssistant = "باسل Ai"
+    override val conversationsTitle = "Chats"
+    override val conversationsSubtitle = "Everything you have asked, kept"
+    override val conversationsEmpty = "Nothing saved yet. Conversations appear here once they " +
+        "have something in them."
+    override val conversationsSearch = "Search"
+    override val conversationNew = "New chat"
+    override val conversationDelete = "Delete"
+    override val conversationShare = "Share"
+    override fun conversationMessages(count: Int) = "$count messages"
+    override val autoLabel = "Automatic"
+    override fun autoContextReason(tokens: Int, freeGb: Double) =
+        "Memory for %,d tokens of conversation (%.1f GB free).".format(tokens, freeGb)
+    override fun autoThreadsReason(threads: Int, cores: Int, why: String) =
+        "$threads of $cores cores — $why."
+    override val autoThreadsFull = "cool and charged"
+    override val autoThreadsGpu = "the GPU is doing the work"
+    override val autoThreadsSaving = "saving battery"
+    override val autoThreadsCritical = "battery is nearly out"
+    override val autoDepthOffline = "No connection, so snippets only."
+    override val autoDepthMetered = "On mobile data — snippets only, to spare your allowance."
+    override val autoDepthSaving = "Saving battery, so snippets only."
+    override val autoDepthDeep = "On Wi-Fi, so the top pages are read in full."
+    override val autoStepsHot = "One step: the phone is hot or nearly flat."
+    override val autoStepsConstrained = "Two steps, to keep this short."
+    override val autoStepsGpu = "Four steps: the GPU makes each one cheap."
+    override val autoStepsNormal = "Three steps."
+    override val autoTokensHot = "Shorter answers while the phone cools down."
+    override val autoTokensConstrained = "Slightly shorter answers to save power."
+    override val autoTokensFull = "Full length."
+    override val autoOcrOffline = "No connection, so scanned pages stay unread."
+    override val autoOcrMetered = "On mobile data — a page image per page is not sent without Wi-Fi."
+    override val autoOcrBattery = "Battery is nearly out, so scanned pages are left for later."
+    override val autoOcrReady = "On Wi-Fi, so scanned pages can be read."
+    override val autoGpuAbsent = "No GPU device answered."
+    override val autoGpuHot = "The phone is hot; the GPU would only add to it."
+    override val autoGpuMemory = "Not enough free memory to hold the model on the GPU."
+    override val autoGpuReady = "Enough room and cool enough for the GPU."
+    override val autoTitle = "Automatic"
+    override val autoSubtitle = "What the app decided, and why"
+    override val autoExplainNote = "These follow the phone's state. Set any of them yourself and " +
+        "your choice wins — this only fills in what you left on Automatic."
+    override val autoNothingToShow = "Send a message and the decisions for it appear here."
+
+
+    override fun summaryLanguage(language: String, voiceTag: String) = "$language · $voiceTag"
+    override fun summaryReasoning(mode: RoutingMode) = when (mode) {
+        RoutingMode.AUTO -> "Automatic"
+        RoutingMode.ALWAYS -> "Always thinks"
+        RoutingMode.NEVER -> "Never thinks"
+    }
+    override fun summarySearch(enabled: Boolean, depth: SearchDepth?) = when {
+        !enabled -> summaryOff
+        depth == null -> "On · automatic depth"
+        depth == SearchDepth.DEEP -> "On · reads pages"
+        else -> "On · snippets"
+    }
+    override fun summaryOcr(enabled: Boolean, hasKey: Boolean) = when {
+        !enabled -> summaryOff
+        !hasKey -> "On, but no key yet"
+        else -> summaryOn
+    }
+    override fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?) = when {
+        !enabled -> summaryOff
+        else -> (if (shell) "Terminal" else "No terminal") +
+            " · " + (steps?.let { "$it steps" } ?: "automatic steps")
+    }
+    override fun summarySpeech(engineLabel: String, needsKey: Boolean) =
+        if (needsKey) "$engineLabel — no key yet" else engineLabel
+    override fun summaryGuidance(on: Boolean) = if (on) summaryOn else summaryOff
+    override fun summaryPrompt(prompt: String) =
+        if (prompt.isBlank()) "None" else prompt.take(48)
+    override val summaryOff = "Off"
+    override val summaryOn = "On"
 
     override val modeAuto = "Auto"
     override val modeAlways = "Always"
@@ -1694,15 +1850,13 @@ object ArabicStrings : AppStrings {
             "طبّق هذا التغيير وأعد الملف كاملًا:\n\n$request"
 
 
-    override val navTerminal = "الطرفية"
-    override val terminalSubtitle = "طرفية حقيقية، وما ينفّذه النموذج فيها"
-    override val terminalHint = "اكتب أمرًا"
-    override val terminalClear = "مسح"
-    override val terminalRun = "نفّذ"
-    override val terminalEmpty = "لم يُنفَّذ شيء بعد. جرّب `ls` أو `getprop ro.product.model` " +
-        "أو `cat /proc/cpuinfo`."
-    override val terminalWorkspaceNote = "تُنفَّذ الأوامر في مساحة هذا التطبيق الخاصة، وبصلاحية " +
-        "مستخدمه. الأمر `cd` يُحفظ بين الأوامر، وما عداه لا."
+
+
+
+
+
+
+
     override val terminalLimitsNote = "لا صلاحية جذر، وأدوات أندرويد (toybox) لا أدوات جنو — " +
         "فلا bash ولا python ولا curl ولا git ما لم تُثبّتها، وبعض الخيارات مختلفة. " +
         "و`pm` و`settings` ومعظم `dumpsys` سترد برفض الصلاحية. هذا سلوك أندرويد، لا نقص هنا."
@@ -1711,8 +1865,7 @@ object ArabicStrings : AppStrings {
         "وهي القائمة القصيرة الوحيدة التي لا تنفّذها الطرفية."
     override val terminalTimedOut = "أُوقف: استغرق وقتًا طويلًا."
     override val terminalTruncated = "قُطع الخرج — أطول من أن يُحفظ."
-    override val terminalCouldNotStart = "تعذّر تشغيل هذا الأمر."
-    override fun terminalExitCode(code: Int) = "انتهى برمز خروج $code وبلا خرج."
+
 
     override val toolsHeader = "لديك أدوات. حين تكون الأداة أفضل من التخمين، أصدر نداءً " +
         "واحدًا فقط، وحده، بلا أي نص آخر:"
@@ -1849,6 +2002,97 @@ object ArabicStrings : AppStrings {
     override val toolNoDocuments = "لم تُضف أي مستندات."
     override fun toolNoSuchDocument(name: String) = "لا مستند يطابق «$name»."
     override fun toolNoPageMatch(phrase: String) = "لا صفحة تذكر «$phrase»."
+
+
+    override fun metricsRate(rate: String, tokens: Int) = "$rate رمز/ث على $tokens رمزًا"
+    override val metricsNoRate = "بلا رموز"
+    override val metricsOnGpu = "كرت الرسوميات"
+    override val metricsOnCpu = "المعالج"
+    override fun metricsMemory(size: String) = "استُهلك $size"
+    override fun metricsTools(ok: Int, parsed: Int, seen: Int) =
+        "أدوات $ok/$parsed من $seen محاولة"
+    override val metricsTitle = "السرعة"
+    override val metricsEmpty = "لم يُقس شيء بعد. أرسل رسالة."
+    override fun metricsMedian(rate: String, turns: Int) =
+        "الوسيط $rate رمز/ث عبر $turns دورًا."
+    override fun metricsToolSummary(parsePercent: Int, seen: Int) =
+        "حاول النموذج نداء أداة $seen مرة، وكان $parsePercent٪ منها مقروءًا."
+    override val metricsToolsNone = "لم يحاول النموذج نداء أي أداة بعد."
+    override val untitledChat = "محادثة جديدة"
+    override val exportYou = "أنت"
+    override val exportAssistant = "باسل Ai"
+    override val conversationsTitle = "المحادثات"
+    override val conversationsSubtitle = "كل ما سألت عنه، محفوظ"
+    override val conversationsEmpty = "لا شيء محفوظ بعد. تظهر المحادثات هنا متى صار فيها شيء."
+    override val conversationsSearch = "بحث"
+    override val conversationNew = "محادثة جديدة"
+    override val conversationDelete = "حذف"
+    override val conversationShare = "مشاركة"
+    override fun conversationMessages(count: Int) = "$count رسالة"
+    override val autoLabel = "تلقائي"
+    override fun autoContextReason(tokens: Int, freeGb: Double) =
+        "ذاكرة تكفي %,d رمزًا من المحادثة (%.1f جيجابايت متاحة).".format(tokens, freeGb)
+    override fun autoThreadsReason(threads: Int, cores: Int, why: String) =
+        "$threads من $cores نواة — $why."
+    override val autoThreadsFull = "بارد ومشحون"
+    override val autoThreadsGpu = "كرت الرسوميات يقوم بالعمل"
+    override val autoThreadsSaving = "توفير البطارية"
+    override val autoThreadsCritical = "البطارية أوشكت على النفاد"
+    override val autoDepthOffline = "لا اتصال، فمقتطفات فقط."
+    override val autoDepthMetered = "على بيانات الجوّال — مقتطفات فقط حفاظًا على باقتك."
+    override val autoDepthSaving = "توفير البطارية، فمقتطفات فقط."
+    override val autoDepthDeep = "على واي فاي، فتُقرأ الصفحات الأولى كاملة."
+    override val autoStepsHot = "خطوة واحدة: الجهاز حارّ أو شبه فارغ."
+    override val autoStepsConstrained = "خطوتان، لتبقى الإجابة سريعة."
+    override val autoStepsGpu = "أربع خطوات: كرت الرسوميات يجعل كلًّا منها رخيصة."
+    override val autoStepsNormal = "ثلاث خطوات."
+    override val autoTokensHot = "إجابات أقصر حتى يبرد الجهاز."
+    override val autoTokensConstrained = "إجابات أقصر قليلًا لتوفير الطاقة."
+    override val autoTokensFull = "بالطول الكامل."
+    override val autoOcrOffline = "لا اتصال، فالصفحات الممسوحة تبقى غير مقروءة."
+    override val autoOcrMetered = "على بيانات الجوّال — لا تُرسَل صورة لكل صفحة إلا على واي فاي."
+    override val autoOcrBattery = "البطارية أوشكت على النفاد، فتُؤجَّل الصفحات الممسوحة."
+    override val autoOcrReady = "على واي فاي، فيمكن قراءة الصفحات الممسوحة."
+    override val autoGpuAbsent = "لم يستجب أي جهاز رسوميات."
+    override val autoGpuHot = "الجهاز حارّ، وكرت الرسوميات سيزيده حرارة."
+    override val autoGpuMemory = "الذاكرة المتاحة لا تكفي لوضع النموذج على كرت الرسوميات."
+    override val autoGpuReady = "المساحة كافية والحرارة مناسبة لكرت الرسوميات."
+    override val autoTitle = "تلقائي"
+    override val autoSubtitle = "ما قرّره التطبيق، ولماذا"
+    override val autoExplainNote = "هذه تتبع حال الجهاز. واضبط أيًّا منها بنفسك فيغلب اختيارك — " +
+        "التلقائي لا يملأ إلا ما تركته له."
+    override val autoNothingToShow = "أرسل رسالة وستظهر هنا القرارات المتخذة لها."
+
+
+    override fun summaryLanguage(language: String, voiceTag: String) = "$language · $voiceTag"
+    override fun summaryReasoning(mode: RoutingMode) = when (mode) {
+        RoutingMode.AUTO -> "تلقائي"
+        RoutingMode.ALWAYS -> "يفكّر دائمًا"
+        RoutingMode.NEVER -> "لا يفكّر"
+    }
+    override fun summarySearch(enabled: Boolean, depth: SearchDepth?) = when {
+        !enabled -> summaryOff
+        depth == null -> "مُشغَّل · عمق تلقائي"
+        depth == SearchDepth.DEEP -> "مُشغَّل · يقرأ الصفحات"
+        else -> "مُشغَّل · مقتطفات"
+    }
+    override fun summaryOcr(enabled: Boolean, hasKey: Boolean) = when {
+        !enabled -> summaryOff
+        !hasKey -> "مُشغَّل، وبلا مفتاح بعد"
+        else -> summaryOn
+    }
+    override fun summaryTools(enabled: Boolean, shell: Boolean, steps: Int?) = when {
+        !enabled -> summaryOff
+        else -> (if (shell) "طرفية" else "بلا طرفية") +
+            " · " + (steps?.let { "$it خطوات" } ?: "خطوات تلقائية")
+    }
+    override fun summarySpeech(engineLabel: String, needsKey: Boolean) =
+        if (needsKey) "$engineLabel — بلا مفتاح بعد" else engineLabel
+    override fun summaryGuidance(on: Boolean) = if (on) summaryOn else summaryOff
+    override fun summaryPrompt(prompt: String) =
+        if (prompt.isBlank()) "بلا" else prompt.take(48)
+    override val summaryOff = "مُطفأ"
+    override val summaryOn = "مُشغَّل"
 
     override val modeAuto = "تلقائي"
     override val modeAlways = "دائمًا"
